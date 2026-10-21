@@ -50,7 +50,7 @@ Compose использует отдельный ключ `family-menu-compose-v1
 
 JDK 17, Gradle 8.11.1 (wrapper с SHA-256), Kotlin 2.2.20, Compose Multiplatform 1.9.1,
 Ktor 3.3.0, kotlinx.serialization / kotlinx.datetime (0.7.1 с совместимостью ABI 0.6). Для Android: SDK 35, minSdk 26.
-Для iOS: macOS, Xcode, iOS 15+, XcodeGen. Python/Node не нужны для сборки основных приложений.
+Для iOS: macOS, Xcode 16.4, iOS 15+, XcodeGen. Python/Node не нужны для сборки основных приложений.
 
 Используйте существующий checkout: отдельный Git worktree не требуется.
 
@@ -151,7 +151,8 @@ Cloud / Claude Artifacts не изменяются. Workflows начнут вы�
 ## Браузерная проверка
 
 После production-сборки: `CHROME_BIN=chromium node scripts/web-smoke.mjs`
-(Node.js 24; в GitHub Actions используется установленный `google-chrome`). Проверяется
+(Node.js 24; в GitHub Actions используется установленный `google-chrome`
+с программным рендерингом SwiftShader для headless VM). Проверяется
 путь `/FamilyMenu/`, вводные экраны, демо-меню, покупки, загрузка фото, подтверждение
 альтернативы и перезагрузка. Scanner API подменяется внутри Chrome: реальных
 фотографий и платных запросов в этой проверке нет. Скриншот сохраняется в build/reports.

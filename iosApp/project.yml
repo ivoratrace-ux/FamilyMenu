@@ -1,5 +1,6 @@
 name: FamilyMenu
 options:
+  xcodeVersion: '16.4'
   bundleIdPrefix: com.familymenu
   deploymentTarget:
     iOS: '15.0'

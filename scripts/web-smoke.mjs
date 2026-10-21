@@ -9,6 +9,10 @@ import { tmpdir } from 'node:os';
 const root=resolve(process.argv[2] || 'composeApp/build/dist/wasmJs/productionExecutable');
 const report=resolve('composeApp/build/reports/web-smoke');
 await mkdir(report,{recursive:true});
+const index=await readFile(resolve(root,'index.html'),'utf8');
+assert.ok(index.includes('id="app"'),'Production index.html is missing the Compose viewport');
+const browserLog=[];
+const networkLog=[];
 const mime={'.html':'text/html','.js':'text/javascript','.wasm':'application/wasm','.json':'application/json','.png':'image/png','.ttf':'font/ttf'};
 const server=createServer(async(req,res)=>{
   try {
@@ -24,7 +28,8 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const base=`http://127.0.0.1:${server.address().port}`;
 const profile=await mkdtemp(resolve(tmpdir(),'familymenu-smoke-'));
 const port=9333;
-const chrome=spawn(process.env.CHROME_BIN || 'google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore'});
+const chrome=spawn(process.env.CHROME_BIN || 'google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-proxy-server','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:['ignore','ignore','pipe']});
+chrome.stderr.on('data',chunk=>browserLog.push(chunk.toString()));
 let chromeError;
 chrome.on('error',e=>{chromeError=e});
 let ws,send;
@@ -36,7 +41,7 @@ try {
   let pages;
   for(let i=0;i<100;i++){
     if(chromeError)throw chromeError;
-    try {pages=await(await fetch(`http://127.0.0.1:${port}/json`)).json();if(pages.length)break;}catch{}
+    try {pages=await(await fetch(`http://127.0.0.1:${port}/json`)).json();pages=pages.filter(p=>p.type==='page' && p.url==='about:blank');if(pages.length)break;}catch{}
     await delay(100);
   }
   assert.ok(pages?.length,'Chrome debugger did not start');
@@ -53,6 +58,9 @@ try {
   ws.onmessage=async e=>{
     const m=JSON.parse(e.data);
     if(m.id){pending.get(m.id)?.(m);pending.delete(m.id);return;}
+    if(m.method==='Inspector.targetCrashed')errors.push('Chrome renderer crashed');
+    if(m.method==='Network.loadingFailed')networkLog.push(m.params);
+    if(m.method==='Network.responseReceived')networkLog.push({url:m.params.response.url,status:m.params.response.status});
     if(m.method==='Runtime.exceptionThrown')errors.push(JSON.stringify(m.params.exceptionDetails));
     if(m.method==='Runtime.consoleAPICalled' && m.params.type==='error') errors.push(m.params.args.map(x=>x.value || x.description || '').join(' '));
     if(m.method==='Fetch.requestPaused') {
@@ -72,7 +80,8 @@ try {
       } catch(e) {errors.push(String(e));await send('Fetch.failRequest',{requestId:m.params.requestId,errorReason:'Failed'});}
     }
   };
-  await send('Runtime.enable');await send('Page.enable');
+  await send('Runtime.enable');await send('Page.enable');await send('Network.enable');
+  console.log('Browser:',JSON.stringify(await send('Browser.getVersion')));
   await send('Emulation.setDeviceMetricsOverride',{width:480,height:900,deviceScaleFactor:1,mobile:true});
   await send('Page.setInterceptFileChooserDialog',{enabled:true});
   await send('Fetch.enable',{patterns:[{urlPattern:'https://vibe-coding-sc04.onrender.com/*'}]});
@@ -81,7 +90,7 @@ try {
     if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;
   };
   const wait=async(expression,message)=>{
-    for(let i=0;i<300;i++) {if(errors.length)throw Error(errors.join('\n'));if(await evaluate(expression))return;await delay(100);}
+    for(let i=0;i<600;i++) {if(errors.length)throw Error(errors.join('\n'));if(await evaluate(expression))return;await delay(100);}
     throw Error(message);
   };
   const has=label=>`(()=>{${deep};return all().some(e=>(e.getAttribute('aria-label')||e.textContent||'').includes(${JSON.stringify(label)}))})()`;
@@ -90,7 +99,8 @@ try {
     const clicked=await evaluate(`(()=>{${deep};const matches=all().filter(e=>(e.getAttribute('aria-label')||e.textContent||'').trim()===${JSON.stringify(label)});const e=matches.find(e=>e.getAttribute('role')==='button'||e.tagName==='BUTTON')||matches.at(-1);if(!e)return false;e.click();return true;})()`);
     assert.ok(clicked,`Cannot click ${label}`);await delay(200);
   };
-  await send('Page.navigate',{url:`${base}/FamilyMenu/`});
+  const navigation=await send('Page.navigate',{url:`${base}/FamilyMenu/`});
+  assert.ok(!navigation.errorText,`Browser navigation failed: ${navigation.errorText}`);
   await wait(has('Пропустить'),'Compose failed to render intro');
   await click('Пропустить');await click('Посмотреть без входа (демо-семья)');
   await wait(`JSON.parse(localStorage.getItem('family-menu-compose-v1')||'{}').plan?.days?.length===7`,'Demo did not generate seven days');
@@ -120,6 +130,8 @@ try {
   if(send) {try {const dom=await send('Runtime.evaluate',{expression:`(()=>{${deep};return all().map(e=>({tag:e.tagName,role:e.getAttribute('role'),label:e.getAttribute('aria-label'),text:e.textContent?.slice(0,300)}))})()`,returnByValue:true});await writeFile(resolve(report,'semantics.json'),JSON.stringify(dom.result.value,null,2));const image=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(image.data,'base64'));}catch{}}
   console.error(e);process.exitCode=1;
 } finally {
+  await writeFile(resolve(report,'browser.log'),browserLog.join(''));
+  await writeFile(resolve(report,'network.json'),JSON.stringify(networkLog,null,2));
   ws?.close();chrome.kill();server.close();
   await delay(300);await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});
 }
