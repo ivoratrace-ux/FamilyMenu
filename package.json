@@ -1,0 +1,12 @@
+{
+  "name": "family-menu-api",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env backend/server/start.mjs",
+    "test": "node --test backend/tests/*.test.mjs",
+    "build": "npm test"
+  }
+}

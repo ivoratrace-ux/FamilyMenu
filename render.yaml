@@ -1,0 +1,20 @@
+# Reference configuration. For the existing service, retain its ID/URL and secret values.
+services:
+  - type: web
+    name: vibe-coding-sc04
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm test
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        value: https://ssahtncunusgptkrkxkj.supabase.co
+      - key: SUPABASE_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://ivoratrace-ux.github.io

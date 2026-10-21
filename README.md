@@ -37,6 +37,7 @@ composeApp/src/desktopMain/ # JVM runner для разработки и общи
 composeApp/src/commonTest/  # Политика распознавания, подтверждения, таймеры
 composeApp/src/desktopTest/ # Полный каталог, подбор, ограничения, покупки, сериализация
 iosApp/                    # SwiftUI host, Info.plist, XcodeGen project specification
+backend/                   # Node.js API: сканирование, Auth, health и серверные тесты
 legacy/                    # Исходный HTML/JS FamilyMenu для сравнения и миграции данных
 scripts/                   # Обновление ресурсов и проверка scanner API
 ```
@@ -103,23 +104,23 @@ xcodebuild -project iosApp/FamilyMenu.xcodeproj -scheme FamilyMenu \
 уменьшают примерно до 1600 px и ограничивают размер 4 МБ. Ожидание — до 150 секунд.
 В браузере кнопка камеры зависит от устройства: desktop обычно открывает выбор файла.
 
-Backend, OpenAI и Supabase остаются существующими; сервер здесь не разворачивается
-и ключи в приложение не добавляются. Фото передаётся через Render в OpenAI,
-условия обработки внешними сервисами определяются их настройками.
+Backend теперь находится в этом репозитории, в `backend/`. Существующий сервис
+Render использует FamilyMenu; адрес и серверные ключи OpenAI/Supabase сохраняются.
+Фото передаётся через Render в OpenAI.
+
+Для Render: Root Directory оставить пустым, Node.js 24, Build Command —
+`npm ci && npm test`, Start Command — `npm start`, Health Check Path — `/health`.
+В корне также есть проверенный Dockerfile и справочный `render.yaml`.
+Подробности: [docs/backend.md](docs/backend.md).
+
+Локальный запуск: `npm ci`, затем `npm test` и `npm start`.
+Переменные задаются в `.env` по образцу `.env.example`; ключи в Git не добавлять.
 
 ### CORS для GitHub Pages
 
-Backend из архива разрешает старый origin `https://pobazar.github.io`.
-На существующем сервисе Render нужно **добавить**, сохранив другие origins:
-
-```
-https://ivoratrace-ux.github.io
-```
-
-в переменную `ALLOWED_ORIGINS` (список через запятую) и применить изменение.
-Origin содержит только схему и hostname, без `/FamilyMenu/`.
-Это обязательная настройка для сканирования в браузере; Android/iOS не ограничены CORS.
-Текущие ключи `OPENAI_API_KEY` / `SUPABASE_API_KEY` менять не нужно.
+Origin `https://ivoratrace-ux.github.io` разрешён сервером по умолчанию, включая
+случай, когда в Render осталась старая переменная `ALLOWED_ORIGINS`.
+Дополнительные origins задаются в ней через запятую, без пути `/FamilyMenu/`.
 
 Без платного вызова OpenAI можно проверить route и CORS:
 
@@ -133,7 +134,9 @@ node scripts/check-scan-backend.mjs
 
 ## GitHub Actions
 
-- **Build multiplatform apps**: на push в `main` и pull request запускает общие тесты,
+- **Backend checks**: при изменении API запускает Node.js тесты и проверяет Docker-контейнер,
+  health, CORS и валидацию сканера без вызовов OpenAI.
+- **Build multiplatform apps**: при изменении клиентов на push в `main` и pull request запускает общие тесты,
   собирает и проверяет Android debug APK, production Web и iOS simulator `.app` без подписи.
   Web дополнительно проходит браузерный сценарий с подменённым API сканера.
   Результаты доступны в artifacts. Android debug APK использует публичный ключ

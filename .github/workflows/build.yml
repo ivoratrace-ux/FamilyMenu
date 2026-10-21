@@ -2,7 +2,33 @@ name: Build multiplatform apps
 on:
   push:
     branches: [main]
+    paths:
+      - 'composeApp/**'
+      - 'iosApp/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'kotlin-js-store/**'
+      - 'scripts/web-smoke.mjs'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/pages.yml'
   pull_request:
+    paths:
+      - 'composeApp/**'
+      - 'iosApp/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'kotlin-js-store/**'
+      - 'scripts/web-smoke.mjs'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 permissions:
   contents: read

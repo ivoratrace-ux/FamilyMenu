@@ -1,0 +1,13 @@
+.git
+.gradle
+.kotlin
+**/build
+node_modules
+.env
+.env.*
+composeApp
+iosApp
+legacy
+gradle
+kotlin-js-store
+.github

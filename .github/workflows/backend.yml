@@ -1,0 +1,58 @@
+name: Backend checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'package*.json'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.node-version'
+      - 'render.yaml'
+      - 'scripts/check-scan-backend.mjs'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'package*.json'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.node-version'
+      - 'render.yaml'
+      - 'scripts/check-scan-backend.mjs'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Verify Docker packaging
+        run: docker build -t family-menu-api:ci .
+      - name: Start container
+        run: >-
+          docker run --detach --rm --name family-menu-api
+          -p 127.0.0.1:18000:8000
+          -e OPENAI_API_KEY=test-only-key
+          -e RENDER_GIT_COMMIT=${{ github.sha }}
+          family-menu-api:ci
+      - name: Verify readiness and scanner contract without OpenAI calls
+        env:
+          BACKEND_URL: http://127.0.0.1:18000
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: node scripts/check-scan-backend.mjs
+      - name: Container diagnostics
+        if: failure()
+        run: docker logs family-menu-api || true
+      - name: Stop test container
+        if: always()
+        run: docker rm -f family-menu-api || true
