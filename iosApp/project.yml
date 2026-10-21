@@ -1,0 +1,37 @@
+name: FamilyMenu
+options:
+  bundleIdPrefix: com.familymenu
+  deploymentTarget:
+    iOS: '15.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    FRAMEWORK_SEARCH_PATHS: '$(inherited) $(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)'
+    OTHER_LDFLAGS: '$(inherited) -framework FamilyMenu'
+targets:
+  FamilyMenu:
+    type: application
+    platform: iOS
+    sources:
+      - path: FamilyMenuApp.swift
+    settings:
+      base:
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        PRODUCT_BUNDLE_IDENTIFIER: com.familymenu.app
+        PRODUCT_MODULE_NAME: FamilyMenuIOS
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: '1,2'
+    preBuildScripts:
+      - name: Build shared Compose framework
+        script: |
+          set -eu
+          cd "$SRCROOT/.."
+          ./gradlew :composeApp:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
+schemes:
+  FamilyMenu:
+    build:
+      targets:
+        FamilyMenu: all
