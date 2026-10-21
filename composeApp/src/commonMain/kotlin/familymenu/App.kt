@@ -40,9 +40,14 @@ private val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
 @Composable fun FamilyMenuApp() {
     var catalog by remember { mutableStateOf<Catalog?>(null) }
     var failure by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        runCatching { appJson.decodeFromString<Catalog>(Res.readBytes("files/catalog.json").decodeToString()) }
-            .onSuccess { catalog=it }.onFailure { failure=true }
+    var loadAttempt by remember { mutableStateOf(0) }
+    val catalogService=remember { CatalogService() }
+    DisposableEffect(catalogService) { onDispose { catalogService.close() } }
+    LaunchedEffect(loadAttempt) {
+        failure=false
+        try { catalog=catalogService.load() }
+        catch(e: CancellationException) { throw e }
+        catch(e: Exception) { failure=true }
     }
     val uiFont=FontFamily(Font(Res.font.golos))
     val dishFont=FontFamily(Font(Res.font.literata))
@@ -58,8 +63,9 @@ private val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
             Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background) {
                 Box(Modifier.fillMaxSize(),contentAlignment=Alignment.TopCenter) {
                     if(model==null) Column(Modifier.padding(32.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-                        Text(if(failure) "Не удалось загрузить каталог. Перезапустите приложение." else "Загружаем семейное меню…")
+                        Text(if(failure) "Не удалось загрузить каталог. Проверьте подключение к интернету." else "Загружаем семейное меню…")
                         if(!failure) CircularProgressIndicator()
+                        else Button(onClick={loadAttempt++}) { Text("Повторить") }
                     } else AppContent(model)
                 }
             }
@@ -164,9 +170,13 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
 @Composable internal fun Note(text: String) { Text(text,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
 @Composable internal fun Primary(text: String,enabled: Boolean=true,onClick:()->Unit) { Button(onClick=onClick,enabled=enabled,modifier=Modifier.fillMaxWidth().heightIn(min=46.dp),shape=RoundedCornerShape(12.dp)) { Text(text) } }
 @Composable internal fun Choice(label: String,selected: Boolean,onClick:()->Unit) { FilterChip(selected=selected,onClick=onClick,label={Text(label)},shape=RoundedCornerShape(24.dp)) }
-@Composable internal fun Picture(id: String,modifier: Modifier=Modifier) {
-    var bitmap by remember(id) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(id) { bitmap=runCatching { Res.readBytes("files/art/$id.png").decodeToImageBitmap() }.getOrNull() }
+@Composable internal fun Picture(url: String?,modifier: Modifier=Modifier) {
+    var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(url) {
+        if(url!=null) try { bitmap=loadCatalogImage(url).decodeToImageBitmap() }
+        catch(e: CancellationException) { throw e }
+        catch(e: Exception) { bitmap=null }
+    }
     Box(modifier.clip(RoundedCornerShape(12.dp)).background(Soft),contentAlignment=Alignment.Center) {
         bitmap?.let { Image(it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop) }
     }
@@ -235,7 +245,7 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
     if(r==null) { Note("${mealLabels[slot.meal]}: не нашли подходящее блюдо. Ослабьте ограничения в профиле.");return }
     Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth().clickable {m.selectedSlot=m.recipePosition(di,si)},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            Picture(r.id,Modifier.size(64.dp))
+            Picture(r.imageUrl,Modifier.size(64.dp))
             Column(Modifier.weight(1f)) {
                 Note(mealLabels[slot.meal].orEmpty())
                 Text(r.name,fontFamily=DishFont.current,fontWeight=FontWeight.SemiBold)
@@ -297,7 +307,7 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
         Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.94f),shape=RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically) {Text(if(cooking) "Шаг ${step+1} из ${recipe.steps.size}" else "Рецепт",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.selectedSlot=null}) {Text("Закрыть")} }
-                Picture(if(cooking) "${recipe.id}-step-$step" else recipe.id,Modifier.fillMaxWidth().aspectRatio(400f/260))
+                Picture(if(cooking) recipe.stepImageUrls.getOrNull(step) else recipe.imageUrl,Modifier.fillMaxWidth().aspectRatio(400f/260))
                 Text(recipe.name,fontFamily=DishFont.current,style=MaterialTheme.typography.headlineSmall)
                 val nutrition=m.catalog.nutrition(recipe)
                 Note("${recipe.minutes} мин · ${slot.servings} порц. · ${nutrition[0].roundToInt()} ккал на порцию")
@@ -327,7 +337,7 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
                     TextButton(onClick={cooking=false}) {Text("Все ингредиенты и шаги")}
                 } else {
                     Text("Ингредиенты",style=MaterialTheme.typography.titleMedium)
-                    recipe.ingredients.forEach {q -> val i=m.catalog.byIngredient.getValue(q.id);Text("${i.name} — ${quantity(i,q.quantity*slot.servings/4)}")}
+                    recipe.ingredients.forEach {q -> val i=m.catalog.byIngredient.getValue(q.id);Text("${i.name} — ${quantity(i,q.quantity*slot.servings/recipe.servings)}")}
                     if(recipe.spices.isNotEmpty()) Note("По вкусу: ${recipe.spices.joinToString()}")
                     val allergens=m.catalog.allergens(recipe).mapNotNull {allergies[it]}
                     if(allergens.isNotEmpty()) Note("Аллергены: ${allergens.joinToString()}")
@@ -352,7 +362,7 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
         TextButton(onClick={m.replacement=null}) {Text("Отмена")}
         if(choices.isEmpty()) Note("Подходящих блюд нет. Ослабьте ограничения в настройках.")
         choices.forEach {r -> Row(Modifier.fillMaxWidth().clickable {m.replace(position.first,position.second,r)}.padding(vertical=6.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            Picture(r.id,Modifier.size(60.dp));Column(Modifier.weight(1f)) {Text(r.name,fontFamily=DishFont.current);Note("${r.minutes} мин · ${m.catalog.nutrition(r)[0].roundToInt()} ккал · ≈${money(m.catalog.cost(r,m.state.store,m.state.profile.city))}")}
+            Picture(r.imageUrl,Modifier.size(60.dp));Column(Modifier.weight(1f)) {Text(r.name,fontFamily=DishFont.current);Note("${r.minutes} мин · ${m.catalog.nutrition(r)[0].roundToInt()} ккал · ≈${money(m.catalog.cost(r,m.state.store,m.state.profile.city))}")}
         } }
     } } }
 }

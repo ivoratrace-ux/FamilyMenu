@@ -10,11 +10,12 @@ val appJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
 @Serializable data class Ingredient(val id: String, val name: String, val category: String, val unit: String,
     val price: Double, val allergens: List<String>, val flags: List<String>, val nutrition: List<Double>,
-    val lavkaPrice: Double? = null, val lavkaPath: String? = null)
+    val lavkaPrice: Double? = null, val lavkaPath: String? = null, val description: String = "")
 @Serializable data class Quantity(val id: String, val quantity: Double)
 @Serializable data class Recipe(val id: String, val name: String, val meal: String, val minutes: Int,
     val tags: List<String>, val ingredients: List<Quantity>, val spices: List<String>, val steps: List<String>,
-    val stepSeconds: List<Int> = emptyList(), val stepTips: List<String> = emptyList())
+    val stepSeconds: List<Int> = emptyList(), val stepTips: List<String> = emptyList(),
+    val description: String = "", val imageUrl: String? = null, val stepImageUrls: List<String?> = emptyList(), val servings: Int = 4)
 @Serializable data class Promo(val name: String, val price: Int, val regularPrice: Int, val condition: String, val until: String)
 @Serializable data class Food(val stems: List<String>, val kcal: Double, val piece: Double, val portion: Double)
 @Serializable data class Catalog(val ingredients: List<Ingredient>, val recipes: List<Recipe>, val promos: List<Promo>, val foods: List<Food>) {
@@ -24,9 +25,9 @@ val appJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     fun allergens(r: Recipe) = r.ingredients.flatMap { byIngredient.getValue(it.id).allergens }.toSet()
     fun nutrition(r: Recipe): List<Double> = (0..3).map { n -> r.ingredients.sumOf {
         val i = byIngredient.getValue(it.id)
-        i.nutrition[n] * it.quantity / (if (i.unit in listOf("g", "ml")) 100 else 1) / 4
+        i.nutrition[n] * it.quantity / (if (i.unit in listOf("g", "ml")) 100 else 1) / r.servings
     } }
-    fun cost(r: Recipe, store: String, city: String) = r.ingredients.sumOf { price(byIngredient.getValue(it.id), store, city) * it.quantity } / 4
+    fun cost(r: Recipe, store: String, city: String) = r.ingredients.sumOf { price(byIngredient.getValue(it.id), store, city) * it.quantity } / r.servings
     fun protein(r: Recipe) = r.ingredients.firstOrNull { q -> byIngredient.getValue(q.id).flags.any { it in listOf("meat", "fish", "seafood") } }?.id
     fun parseFood(raw: String): Int? {
         val text = raw.lowercase().replace('ё', 'е').trim()
@@ -119,7 +120,7 @@ class MenuEngine(val catalog: Catalog) {
         if("lowcarb" in p.goals) score += if(n[3]<=25*factor) 3 else if(n[3]>60*factor) -3 else 0
         if("lose" in p.goals) score += if(n[0]<=450*factor) 3 else if(n[0]>650*factor) -3 else 0
         if("mass" in p.goals) score += (if(n[0]>=600*factor) 2 else if(n[0]<400*factor) -2 else 0) + (if(n[1]>=30*factor) 1 else 0)
-        val veg = r.ingredients.filter { catalog.byIngredient.getValue(it.id).category == "Овощи и зелень" && catalog.byIngredient.getValue(it.id).unit == "g" }.sumOf { it.quantity } / 4
+        val veg = r.ingredients.filter { catalog.byIngredient.getValue(it.id).category == "Овощи и зелень" && catalog.byIngredient.getValue(it.id).unit == "g" }.sumOf { it.quantity } / r.servings
         if("pp" in p.goals) score += (if(n[0] in 300*factor..650*factor && n[2]<=25*factor) 1 else 0) + (if(veg>=100) 1 else 0) - (if(n[2]>35) 1 else 0)
         val meals = p.meals.sumOf { when(it) {"l" -> if(p.soupBatch) .5 else 1.0; "s","z" -> .3; "k" -> .2; else -> 1.0} }.coerceAtLeast(1.0)
         val target = p.budget / (7 * meals * p.portions())
@@ -164,7 +165,7 @@ class MenuEngine(val catalog: Catalog) {
         val amounts = mutableMapOf<String,Double>(); val dishes = mutableMapOf<String,MutableSet<String>>()
         state.plan?.days?.flatMap { it.slots }?.filter { !it.leftover }?.forEach { slot ->
             catalog.byRecipe[slot.recipeId]?.let { r -> r.ingredients.forEach { q ->
-                amounts[q.id] = (amounts[q.id] ?: 0.0) + q.quantity * slot.servings / 4
+                amounts[q.id] = (amounts[q.id] ?: 0.0) + q.quantity * slot.servings / r.servings
                 dishes.getOrPut(q.id) { mutableSetOf() }.add(r.name)
             } }
         }

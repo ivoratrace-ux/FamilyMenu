@@ -1,13 +1,12 @@
 package familymenu
 
-import familymenu.resources.Res
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.LocalDate
 import kotlin.random.Random
 import kotlin.test.*
 
 class MenuIntegrationTest {
-    private val catalog = runBlocking {appJson.decodeFromString<Catalog>(Res.readBytes("files/catalog.json").decodeToString())}
+    private val catalog = runBlocking {appJson.decodeFromString<Catalog>(javaClass.getResourceAsStream("/catalog.seed.json")!!.bufferedReader().use { it.readText() })}
     private val engine = MenuEngine(catalog)
     @Test fun originalCatalogIsCompleteAndAllReferencesResolve() {
         assertEquals(144,catalog.recipes.size)
@@ -18,7 +17,7 @@ class MenuIntegrationTest {
             assertEquals(r.steps.size,r.stepTips.size)
             assertTrue(r.ingredients.all {it.id in catalog.byIngredient && it.quantity>0})
             assertTrue(catalog.nutrition(r).all {it>=0 && it.isFinite()})
-            assertTrue(runBlocking {Res.readBytes("files/art/${r.id}.png").size}>100)
+            assertTrue(java.io.File("../backend/public/art/${r.id}.png").length()>100)
         }
     }
     @Test fun weeklyMenuHonorsHardExclusionsAcrossSeeds() {

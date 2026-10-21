@@ -3,10 +3,15 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": { "node": "24.x" },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "start": "node --env-file-if-exists=.env backend/server/start.mjs",
     "test": "node --test backend/tests/*.test.mjs",
-    "build": "npm test"
+    "build": "npm test",
+    "db:plan": "node scripts/supabase-migrate.mjs",
+    "db:migrate": "node scripts/supabase-migrate.mjs --apply",
+    "db:verify": "node scripts/supabase-migrate.mjs --verify"
   }
 }

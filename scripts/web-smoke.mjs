@@ -36,6 +36,11 @@ let ws,send;
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 const errors=[];
 let scanCalls=0;
+let catalogCalls=0;
+let imageCalls=0;
+const catalog=JSON.parse(await readFile(resolve('backend/data/catalog.seed.json'),'utf8'));
+const artBase='https://vibe-coding-sc04.onrender.com/assets/art';
+for(const r of catalog.recipes) {r.imageUrl=`${artBase}/${r.id}.png`;r.stepImageUrls=r.steps.map((_,n)=>`${artBase}/${r.id}-step-${n}.png`);}
 const deep=`function all(root=document){return [...root.querySelectorAll('*')].flatMap(e=>[e,...(e.shadowRoot?all(e.shadowRoot):[])])}`;
 try {
   let pages;
@@ -66,8 +71,24 @@ try {
     if(m.method==='Fetch.requestPaused') {
       try {
         const {request,requestId}=m.params;
-        const headers=[{name:'Access-Control-Allow-Origin',value:base},{name:'Access-Control-Allow-Methods',value:'POST, OPTIONS'},{name:'Access-Control-Allow-Headers',value:'content-type'},{name:'Content-Type',value:'application/json'}];
-        if(request.method==='OPTIONS') await send('Fetch.fulfillRequest',{requestId,responseCode:204,responseHeaders:headers});
+        const headers=[{name:'Access-Control-Allow-Origin',value:base},{name:'Access-Control-Allow-Methods',value:'GET, POST, OPTIONS'},{name:'Access-Control-Allow-Headers',value:'content-type'},{name:'Content-Type',value:'application/json'}];
+        if(new URL(request.url).pathname.includes('/assets/art/')) {
+          imageCalls++;
+          const filename=new URL(request.url).pathname.split('/').at(-1);
+          assert.match(filename,/^[a-z0-9-]+\.png$/);
+          const image=await readFile(resolve('backend/public/art',filename));
+          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:[{name:'Access-Control-Allow-Origin',value:base},{name:'Content-Type',value:'image/png'}],body:image.toString('base64')});
+        }
+        else if(request.method==='OPTIONS') await send('Fetch.fulfillRequest',{requestId,responseCode:204,responseHeaders:headers});
+        else if(new URL(request.url).pathname==='/api/catalog') {
+          catalogCalls++;
+          if(catalogCalls===1) {
+            await send('Fetch.fulfillRequest',{requestId,responseCode:503,responseHeaders:headers,body:Buffer.from('{}').toString('base64')});
+            return;
+          }
+          assert.equal(request.method,'GET');
+          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(catalog)).toString('base64')});
+        }
         else {
           scanCalls++;
           assert.equal(request.method,'POST');
@@ -84,7 +105,7 @@ try {
   console.log('Browser:',JSON.stringify(await send('Browser.getVersion')));
   await send('Emulation.setDeviceMetricsOverride',{width:480,height:900,deviceScaleFactor:1,mobile:true});
   await send('Page.setInterceptFileChooserDialog',{enabled:true});
-  await send('Fetch.enable',{patterns:[{urlPattern:'https://vibe-coding-sc04.onrender.com/*'}]});
+  await send('Fetch.enable',{patterns:[{urlPattern:'https://vibe-coding-sc04.onrender.com/*'},{urlPattern:artBase+'/*'}]});
   const evaluate=async expression=>{
     const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});
     if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;
@@ -101,17 +122,21 @@ try {
   };
   const navigation=await send('Page.navigate',{url:`${base}/FamilyMenu/`});
   assert.ok(!navigation.errorText,`Browser navigation failed: ${navigation.errorText}`);
+  await wait(has('Повторить'),'Catalog error should offer retry');
+  await click('Повторить');
   await wait(has('Пропустить'),'Compose failed to render intro');
+  assert.ok(catalogCalls>0,'App must load recipes from the backend');
   await click('Пропустить');await click('Посмотреть без входа (демо-семья)');
   await wait(`JSON.parse(localStorage.getItem('family-menu-compose-v1')||'{}').plan?.days?.length===7`,'Demo did not generate seven days');
   await click('Покупки');await wait(has('Список на неделю'),'Shopping screen did not render');
+  assert.ok(imageCalls>0,'Dish images must be loaded using database URLs');
   await click('Дома');await wait(has('Мой холодильник'),'Scanner tab did not render');
   const before=await evaluate(`localStorage.getItem('family-menu-compose-v1')`);
   await click('Сканировать');await click('Выбрать фото');
   await wait(`!!document.querySelector('input[type=file]')`,'File picker did not open');
   const doc=await send('DOM.getDocument');
   const {nodeId}=await send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'input[type=file]'});
-  await send('DOM.setFileInputFiles',{nodeId,files:[resolve('composeApp/src/commonMain/composeResources/files/art/b1.png')]});
+  await send('DOM.setFileInputFiles',{nodeId,files:[resolve('backend/public/art/b1.png')]});
   await wait(has('Огурец'),'Scanner alternatives did not render');
   await click('Огурец');
   await wait(`!(${has('Оставить как есть')})`,'Alternative was not confirmed');

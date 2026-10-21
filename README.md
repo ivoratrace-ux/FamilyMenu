@@ -9,7 +9,7 @@ FamilyMenu перенесён с HTML/JavaScript на **Compose Multiplatform**:
 - Вводные экраны, демо-вход и настройка семьи: состав, нормы калорий, вкусы,
   аллергии, диеты, цели, бюджет, город и время приготовления.
 - Четыре вкладки: **Сегодня**, **Меню**, **Покупки**, **Дома**.
-- Локальный подбор недели из оригинальных **144 рецептов**, замены, перемещение
+- Подбор недели на устройстве из **144 рецептов**, загружаемых через backend из Supabase, замены, перемещение
   самостоятельных блюд между слотами, приготовление супа на два дня.
 - Оригинальные иллюстрации блюд и шагов, цвета, шрифты Golos Text / Literata,
   карточки, узкая мобильная колонка, нижняя навигация, светлая и тёмная темы.
@@ -29,7 +29,7 @@ FamilyMenu перенесён с HTML/JavaScript на **Compose Multiplatform**:
 ## Структура
 
 ```
-composeApp/src/commonMain/   # Compose UI, каталог, подбор, покупки, scanner HTTP client
+composeApp/src/commonMain/   # Compose UI, подбор, покупки, catalog/scanner HTTP clients
 composeApp/src/androidMain/ # Android Activity, камера/галерея, сжатие, SharedPreferences
 composeApp/src/iosMain/     # UIKit photo picker, NSUserDefaults, ComposeUIViewController
 composeApp/src/wasmJsMain/  # Browser entrypoint, file/camera picker, localStorage
@@ -37,7 +37,8 @@ composeApp/src/desktopMain/ # JVM runner для разработки и общи
 composeApp/src/commonTest/  # Политика распознавания, подтверждения, таймеры
 composeApp/src/desktopTest/ # Полный каталог, подбор, ограничения, покупки, сериализация
 iosApp/                    # SwiftUI host, Info.plist, XcodeGen project specification
-backend/                   # Node.js API: сканирование, Auth, health и серверные тесты
+backend/                   # Node.js API, исходный снимок каталога, статические PNG и тесты
+supabase/                  # SQL-миграции и проверки прав/целостности базы
 legacy/                    # Исходный HTML/JS FamilyMenu для сравнения и миграции данных
 scripts/                   # Обновление ресурсов и проверка scanner API
 ```
@@ -89,10 +90,14 @@ xcodebuild -project iosApp/FamilyMenu.xcodeproj -scheme FamilyMenu \
 для этой проверки не нужен. Запуск на физическом iPhone и App Store требуют подписи
 и не входят в текущую настройку.
 
-## Существующий backend
+## Backend и Supabase
 
 Адрес: `https://vibe-coding-sc04.onrender.com`.
-Общий клиент отправляет `POST /api/fridge/scan`:
+Каталог загружается через `GET /api/catalog` из таблиц Supabase. При ошибке есть
+повторная попытка; встроенный JSON больше не используется. Схема и команды миграции:
+[docs/database.md](docs/database.md).
+
+Для сканирования общий клиент отправляет `POST /api/fridge/scan`:
 
 ```json
 {"image":"<base64 без data URL prefix>","mimeType":"image/jpeg"}
@@ -157,13 +162,13 @@ Cloud / Claude Artifacts не изменяются. Workflows начнут вы�
 (Node.js 24; в GitHub Actions используется установленный `google-chrome`
 с программным рендерингом SwiftShader для headless VM). Проверяется
 путь `/FamilyMenu/`, вводные экраны, демо-меню, покупки, загрузка фото, подтверждение
-альтернативы и перезагрузка. Scanner API подменяется внутри Chrome: реальных
+альтернативы и перезагрузка. Catalog, image и Scanner API подменяются внутри Chrome: реальных
 фотографий и платных запросов в этой проверке нет. Скриншот сохраняется в build/reports.
 
 ## Ресурсы и границы переноса
 
-Каталог и все 732 иллюстрации экспортированы из исходного FamilyMenu и сохранены в
-`composeApp/src/commonMain/composeResources/files/`. При необходимости обновления:
+Каталог экспортирован в `backend/data/catalog.seed.json` для миграции в Supabase.
+Все 732 иллюстрации находятся в `backend/public/art/` и раздаются Render по URL из базы. При необходимости обновления:
 `node scripts/export-catalog.cjs`, затем `python scripts/rasterize-catalog.py`
 (для этой операции нужен CairoSVG). Лицензии шрифтов находятся в `docs/licenses/`.
 

@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'composeApp/**'
+      - 'backend/data/**'
       - 'iosApp/**'
       - 'gradle/**'
       - 'build.gradle.kts'
@@ -18,6 +19,7 @@ on:
   pull_request:
     paths:
       - 'composeApp/**'
+      - 'backend/data/**'
       - 'iosApp/**'
       - 'gradle/**'
       - 'build.gradle.kts'

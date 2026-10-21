@@ -46,6 +46,7 @@ kotlin {
         }
         iosMain.dependencies { implementation("io.ktor:ktor-client-darwin:3.3.0") }
         wasmJsMain.dependencies { implementation("io.ktor:ktor-client-js:3.3.0") }
+        val desktopTest by getting { resources.srcDir("../backend/data") }
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
