@@ -45,7 +45,7 @@ val appJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 }
 
 val allergies = linkedMapOf("gluten" to "Глютен", "milk" to "Белок молока", "lactose" to "Лактоза", "egg" to "Яйца", "fish" to "Рыба", "crustacean" to "Креветки", "mollusc" to "Моллюски", "peanut" to "Арахис", "nuts" to "Орехи", "soy" to "Соя", "sesame" to "Кунжут", "mustard" to "Горчица", "celery" to "Сельдерей", "citrus" to "Цитрусовые", "honey" to "Мёд")
-val diets = linkedMapOf("all" to "Обычное", "halal" to "Без свинины", "pesc" to "Без мяса", "veg" to "Вегетарианское", "vegan" to "Веганское", "lent" to "Постное")
+val diets = linkedMapOf("all" to "Едим всё", "halal" to "Без свинины", "pesc" to "Без мяса", "veg" to "Вегетарианское", "vegan" to "Веганское", "lent" to "Постное")
 val goals = linkedMapOf("pp" to "Правильное питание", "protein" to "Белковое", "lose" to "Похудение", "mass" to "Набор массы", "lowcarb" to "Меньше углеводов")
 val mealLabels = linkedMapOf("b" to "Завтрак", "l" to "Обед", "s" to "Перекус", "d" to "Ужин", "z" to "Десерт", "k" to "Напиток")
 val cityNames = linkedMapOf("msk" to "Москва", "mo" to "Московская область", "spb" to "Санкт-Петербург", "kgd" to "Калининград", "kzn" to "Казань", "khv" to "Хабаровск", "oms" to "Омск", "sar" to "Саратов", "other" to "Другой город")

@@ -239,7 +239,7 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
         else Note("Распознаем продукты на фото после того, как вы сохраните меню.")
     } else Note("Сфотографируйте холодильник — распознаем продукты сами. Или отметьте вручную ниже.")
     m.inventoryError?.let {Note(it)}
-    val groups=remember {m.catalog.ingredients.filter {it.id !in pantryStaples}.groupBy {it.category}.toSortedMap()}
+    val groups=remember {m.catalog.ingredients.filter {it.id !in pantryStaples}.groupBy {it.category}.entries.sortedBy {it.key}.associate {it.key to it.value}}
     Surface(shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
         Column {
             groups.entries.forEachIndexed {gi,(category,list) ->
