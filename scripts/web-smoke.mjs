@@ -181,10 +181,6 @@ try {
       if(!e)e=exact.at(-1);if(!e)return false;e.click();return true;})()`);
     assert.ok(clicked,`Cannot click ${label}`);await delay(250);
   };
-  const clickUntil=async(label,condition,message)=>{
-    for(let i=0;i<5;i++){await click(label);for(let j=0;j<10;j++){if(await evaluate(condition))return;await delay(100);}}
-    throw Error(message);
-  };
   const clickWhere=async(predicate,name)=>{
     console.log('UI control:',name);
     const expr=`(()=>{${deep};const hit=all().filter(e=>(e.getAttribute('role')==='button'||e.tagName==='BUTTON')&&(t=>${predicate})((e.getAttribute('aria-label')||e.textContent||'').trim()));if(!hit.length)return false;hit[0].click();return true;})()`;
@@ -242,14 +238,14 @@ try {
   assert.ok(imageCalls>0,'Dish images must be loaded using database URLs');
   // Cook the nearest meal
   await click('Готовить');await click('Готовить по шагам с таймером');await wait(has('Шаг 1 из'),'Step-by-step cooking did not open');
-  await clickUntil('Закрыть',`!(${has('Шаг 1 из')})`,'Recipe dialog did not close');
+  await click('Закрыть');await wait(`!(${has('Шаг 1 из')})`,'Recipe screen did not close');
   // Shopping → Premium offer → auto cart
   await click('Покупки');await wait(has('Корзина примерно'),'Shopping list did not render');
   await click('Собрать корзину автоматически ›');await wait(has('Что входит в Premium'),'Premium offer did not open');
   await click('Подключить за 1 990 ₽');await click('Утвердить меню');
   await clickWhere(`t.startsWith('Собрать корзину ·')`,'Collect cart');
   await wait(has('Положила ✓'),'Cart session did not open');await click('Положила ✓');
-  await clickUntil('Закрыть',`!(${has('Положила ✓')})`,'Cart dialog did not close');
+  await click('Закрыть');await wait(`!(${has('Положила ✓')})`,'Cart screen did not close');
   await click('‹ Назад');
   // Home: fridge photos → recognition → replace stock
   await click('Дома');await wait(has('Что есть дома'),'Home tab did not render');

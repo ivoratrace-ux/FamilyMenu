@@ -122,6 +122,12 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
             delay(500)
         }
     }
+    val selectedTarget=m.selectedSlot?.let {pos ->
+        val slot=m.state.plan?.days?.getOrNull(pos.first)?.slots?.getOrNull(pos.second)
+        slot?.let {m.catalog.byRecipe[it.recipeId]?.let {recipe -> CookTarget(recipe,it.servings,pos)}}
+    }
+    if(m.selectedSlot!=null && selectedTarget==null) LaunchedEffect(m.selectedSlot) {m.selectedSlot=null}
+    // Main-scene screens avoid stale Web accessibility nodes left by dismissed dialogs.
     Column(Modifier.widthIn(max=480.dp).fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         if(Account.current!=null && (!m.accountReady || m.loadedAccountId!=accountId)) {
             Page {Heading("Аккаунт","Загружаем ваши данные")
@@ -140,6 +146,18 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
             AuthenticationScreen(m)
         } else if(m.state.stage!="app") {
             LaunchedEffect(Unit) {m.update(m.state.copy(stage=if(m.state.plan!=null) "app" else "quiz"))}
+        } else if(m.cart!=null) {
+            CartScreen(m,m.cart!!,scope)
+        } else if(m.cooking!=null) {
+            CookingScreen(m,scope,m.cooking!!,now)
+        } else if(selectedTarget!=null) {
+            CookingScreen(m,scope,selectedTarget,now)
+        } else if(m.nowRecipe!=null) {
+            NowRecipeScreen(m,m.nowRecipe!!)
+        } else if(m.replacement!=null) {
+            ReplacementScreen(m,m.replacement!!)
+        } else if(m.share) {
+            ShareScreen(m)
         } else if(m.page=="familyview") {
             FamilyViewScreen(m)
         } else {
@@ -194,12 +212,7 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
         }
     }
     if(reminder) AlertDialog(onDismissRequest={reminder=false},title={Text("Проверьте продукты на завтра")},text={Text("Откройте список покупок и подготовьте продукты для следующего дня.")},confirmButton={TextButton(onClick={reminder=false;m.open("shop")}) { Text("Покупки") }},dismissButton={TextButton(onClick={reminder=false}) { Text("Позже") }})
-    m.selectedSlot?.let {pos -> val slot=m.state.plan?.days?.getOrNull(pos.first)?.slots?.getOrNull(pos.second);val r=m.catalog.byRecipe[slot?.recipeId];if(slot!=null && r!=null) {CookDialog(m,scope,CookTarget(r,slot.servings,pos),now)} else {LaunchedEffect(pos) {m.selectedSlot=null}}}
-    m.cooking?.let { CookDialog(m,scope,it,now) }
-    m.replacement?.let { ReplacementDialog(m,it) }
-    m.nowRecipe?.let { NowDialog(m,it) }
-    m.cart?.let { CartDialog(m,it,scope) }
-    if(m.share) ShareDialog(m)
+
 }
 
 private fun kotlinx.datetime.Instant.toLocalTimeString(): String {

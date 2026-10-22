@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -102,12 +101,12 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
         }
     }
 }
-@Composable internal fun NowDialog(m: AppModel,recipe: Recipe) {
+@Composable internal fun NowRecipeScreen(m: AppModel,recipe: Recipe) {
     val servings=m.portionsNow();val have=m.have();val missing=missingIngredients(recipe,have)
     val factor=servings.toDouble()/recipe.servings
     val cost=missing.sumOf {q -> price(m.catalog.byIngredient.getValue(q.id),m.state.store,m.state.profile.city)*q.quantity*factor}
     val inList=missing.isNotEmpty() && missing.all {it.id in m.state.extraBuy}
-    Dialog(onDismissRequest={m.nowRecipe=null}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.94f),shape=RoundedCornerShape(20.dp)) {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment=Alignment.CenterVertically) {Text("Из того, что есть · ${servingsText(servings)}",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=Muted);TextButton(onClick={m.nowRecipe=null}) {Text("Закрыть")}}
             Picture(recipe.imageUrl,Modifier.fillMaxWidth().aspectRatio(400f/260))
@@ -132,11 +131,11 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
             Primary("Готовить по шагам") {m.cooking=CookTarget(recipe,servings);m.nowRecipe=null;m.track("now_cook_started",recipe.id)}
             if(recipe.meal=="c" || recipe.meal=="p") TextButton(onClick={m.nowRecipe=null}) {Text("Выбрать другой гарнир")}
         }
-    }}
+    }
 }
 
 // ---------- Cooking (menu slot or "from what you have") ----------
-@Composable internal fun CookDialog(m: AppModel,scope: CoroutineScope,target: CookTarget,now: Long) {
+@Composable internal fun CookingScreen(m: AppModel,scope: CoroutineScope,target: CookTarget,now: Long) {
     val recipe=target.recipe;val slot=target.slot?.let {m.state.plan?.days?.getOrNull(it.first)?.slots?.getOrNull(it.second)}
     var cooking by remember(recipe.id) {mutableStateOf(target.slot==null)}
     var step by remember(recipe.id) {mutableStateOf(0)}
@@ -144,8 +143,8 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
     var usedUp by remember(recipe.id) {mutableStateOf(false)}
     fun close() {m.selectedSlot=null;m.cooking=null}
     val factor=target.servings.toDouble()/recipe.servings
-    Dialog(onDismissRequest={close()}) {
-        Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.94f),shape=RoundedCornerShape(20.dp)) {
+
+        Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment=Alignment.CenterVertically) {Text(if(finished) "Готово" else if(cooking) "Шаг ${step+1} из ${recipe.steps.size}" else "Рецепт",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={close()}) {Text("Закрыть")}}
                 Picture(if(cooking && !finished) recipe.stepImageUrls.getOrNull(step) else recipe.imageUrl,Modifier.fillMaxWidth().aspectRatio(400f/260))
@@ -211,19 +210,19 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
                 }
             }
         }
-    }
+
 }
-@Composable internal fun ReplacementDialog(m: AppModel,position: Pair<Int,Int>) {
+@Composable internal fun ReplacementScreen(m: AppModel,position: Pair<Int,Int>) {
     val slot=m.state.plan?.days?.getOrNull(position.first)?.slots?.getOrNull(position.second) ?: return
     val choices=m.engine.pool(slot.meal,m.state).sortedByDescending {m.engine.score(it,m.state)}
-    Dialog(onDismissRequest={m.replacement=null}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.9f),shape=RoundedCornerShape(18.dp)) {Page {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(18.dp)) {Page {
         Heading("Замена блюда",mealName(slot.meal))
         TextButton(onClick={m.replacement=null}) {Text("Отмена")}
         if(choices.isEmpty()) Note("Подходящих блюд нет. Ослабьте ограничения в профиле.")
         choices.forEach {r -> Row(Modifier.fillMaxWidth().clickable {m.replace(position.first,position.second,r)}.padding(vertical=6.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Picture(r.imageUrl,Modifier.size(60.dp));Column(Modifier.weight(1f)) {Text(r.name,fontFamily=DishFont.current);Note("${r.minutes} мин"+(if(m.state.kcalVisible()) " · ${m.catalog.nutrition(r)[0].roundToInt()} ккал" else "")+(if(m.state.premiumOn()) " · ≈${money(m.catalog.cost(r,m.state.store,m.state.profile.city))}" else ""))}
         }}
-    }}}
+    }}
 }
 
 // ---------- Shopping ----------
@@ -234,12 +233,12 @@ internal fun shoppingRows(m: AppModel): List<ShoppingRow> = m.engine.shopping(m.
     ShoppingRow(item,buy,stock,buy<=0.0001,buy*price(i,m.state.store,m.state.profile.city))
 }
 internal fun storeUrl(i: Ingredient,store: String)=if(store=="lavka" && i.lavkaPath!=null) "https://lavka.yandex.ru${i.lavkaPath}" else if(store=="lavka") "https://lavka.yandex.ru/search?text=${i.name.encodeURLParameter()}" else "https://vkusvill.ru/search/?q=${i.name.encodeURLParameter()}"
-@Composable internal fun CartDialog(m: AppModel,session: CartSession,scope: CoroutineScope) {
+@Composable internal fun CartScreen(m: AppModel,session: CartSession,scope: CoroutineScope) {
     val uri=LocalUriHandler.current
     val store=m.state.store;val storeName=if(store=="lavka") "Лавке" else "ВкусВилле"
     val rows=shoppingRows(m).associateBy {it.item.ingredient.id}
     val items=session.items.mapNotNull {rows[it]}
-    Dialog(onDismissRequest={m.cart=null}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.9f),shape=RoundedCornerShape(20.dp)) {Page {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {Page {
         Row(verticalAlignment=Alignment.CenterVertically) {Text("Корзина в $storeName",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.cart=null}) {Text("Закрыть")}}
         LinearProgressIndicator(progress={if(items.isEmpty()) 1f else session.index.coerceAtMost(items.size)/items.size.toFloat()},modifier=Modifier.fillMaxWidth())
         val row=items.getOrNull(session.index)
@@ -264,7 +263,7 @@ internal fun storeUrl(i: Ingredient,store: String)=if(store=="lavka" && i.lavkaP
             }
             if(session.index>0) TextButton(onClick={m.cart=session.copy(index=session.index-1)}) {Text("‹ Назад")}
         }
-    }}}
+    }}
 }
 
 // ---------- Family ----------
@@ -276,16 +275,16 @@ internal fun shareText(m: AppModel): String {
     lines+="";lines+="Купить: $left ${plural(left,"продукт","продукта","продуктов")}"
     return lines.joinToString("\n")
 }
-@Composable internal fun ShareDialog(m: AppModel) {
+@Composable internal fun ShareScreen(m: AppModel) {
     val clipboard=LocalClipboardManager.current
-    Dialog(onDismissRequest={m.share=false}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.9f),shape=RoundedCornerShape(20.dp)) {Page {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {Page {
         Row(verticalAlignment=Alignment.CenterVertically) {Text("Меню для семьи",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.share=false}) {Text("Закрыть")}}
         Note("Партнёр посмотрит, что сегодня на ужин, и докупит продукты по общему списку.")
         Panel {Text("Ссылкой",style=MaterialTheme.typography.titleMedium);Note("Откроется страница с меню и списком покупок, отметки «куплено» общие. Ссылки появятся вместе с семейным аккаунтом — пока можно посмотреть, как это будет выглядеть.")
             Secondary("Посмотреть, как увидит семья") {m.share=false;m.open("familyview");m.track("family_view_opened")}}
         Panel {Text("Текстом в мессенджер",style=MaterialTheme.typography.titleMedium);Note(shareText(m))
             Primary("Скопировать") {clipboard.setText(AnnotatedString(shareText(m)));m.track("share_text_copied")}}
-    }}}
+    }}
 }
 @Composable internal fun FamilyViewScreen(m: AppModel) {
     var tab by remember {mutableStateOf("menu")}
