@@ -50,71 +50,55 @@ private data class Slide(val title: String,val text: String,val image: String?,v
     }
 }
 
-/** Sign-in: a 4-digit code from the Telegram or MAX bot, with email and password as a fallback. */
+/** A one-time device challenge is approved inside the Telegram bot. */
 @Composable internal fun AuthenticationScreen(m: AppModel) {
     val scope=rememberCoroutineScope()
-    var mode by remember {mutableStateOf("choose")}
-    var phone by remember {mutableStateOf("")}
-    var code by remember {mutableStateOf("")}
-    var codeSent by remember {mutableStateOf(false)}
-    var email by remember {mutableStateOf("")}
-    var password by remember {mutableStateOf("")}
-    var register by remember {mutableStateOf(true)}
-    var busy by remember {mutableStateOf(false)}
+    val uri=androidx.compose.ui.platform.LocalUriHandler.current
+    var challenge by remember {mutableStateOf<TelegramChallenge?>(null)}
     var error by remember {mutableStateOf<String?>(null)}
-    fun run(action: suspend ()->Unit) {
-        busy=true;error=null
-        scope.launch {
-            try {action()}
+    var busy by remember {mutableStateOf(false)}
+    var remaining by remember {mutableStateOf(0L)}
+    LaunchedEffect(challenge) {
+        val current=challenge ?: return@LaunchedEffect
+        val deadline=kotlinx.datetime.Clock.System.now().epochSeconds+current.expiresIn
+        while(isActive && Account.current==null) {
+            remaining=(deadline-kotlinx.datetime.Clock.System.now().epochSeconds).coerceAtLeast(0)
+            if(remaining==0L) {error="Вход истёк. Начните ещё раз.";challenge=null;break}
+            delay(2000)
+            try {if(Account.pollTelegram(current)) break;error=null}
             catch(e: CancellationException) {throw e}
-            catch(e: Exception) {error=if(e is IllegalStateException) e.message else "Не удалось связаться с сервером. Повторите попытку."}
-            finally {busy=false}
+            catch(e: Exception) {error=e.message ?: "Не удалось проверить вход. Повторим попытку."}
         }
     }
-    fun masked(): String {val d=phone.filter(Char::isDigit).takeLast(10);return if(d.length<10) phone else "+7 ${d.take(3)} ***-**-${d.takeLast(2)}"}
-    val via=if(mode=="max") "MAX" else "Telegram"
     Page {
-        when(mode) {
-            "choose" -> {
-                Heading("Семейное меню","Вход")
-                Note("Аккаунт сохранит семью, меню и подписку. А партнёр увидит тот же список покупок.")
-                Primary("Войти через Telegram",!busy) {mode="telegram";code="";codeSent=false;error=null}
-                Secondary("Войти через MAX",!busy) {mode="max";code="";codeSent=false;error=null}
-                Note("Пришлём 4-значный код в мессенджер от бота «Семейное меню». Рекламу и рассылки без вашего согласия не отправляем.")
-                TextButton(onClick={mode="email";error=null}) {Text("Войти по почте и паролю")}
-            }
-            "telegram","max" -> if(!codeSent) {
-                Heading("Вход через $via","Номер телефона")
-                Note("Номер, на который зарегистрирован ваш $via. Код придёт туда от бота «Семейное меню».")
-                OutlinedTextField(phone,{phone=it.filter {c -> c.isDigit() || c in "+ ()-"}.take(20)},label={Text("Номер телефона")},placeholder={Text("+7 900 000-00-00")},singleLine=true,enabled=!busy,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Phone),modifier=Modifier.fillMaxWidth())
-                Primary("Получить код в $via",!busy && phone.count {it.isDigit()}>=10) {codeSent=true;code=""}
-            } else {
-                CodeStep(code,{code=it},busy,"Бот «Семейное меню» отправил 4 цифры в $via на номер ${masked()}.") {
-                    run {Account.fakeMessengerLogin(mode,masked());code=""}
+        Heading("Семейное меню","Вход через Telegram")
+        Note("Подтвердите вход в боте. При первом входе создадим аккаунт, при следующих загрузим ваши меню, настройки и продукты.")
+        val current=challenge
+        if(current==null) {
+            Primary(if(busy) "Подготавливаем вход…" else "Войти через Telegram",!busy) {
+                busy=true;error=null
+                scope.launch {
+                    try {challenge=Account.startTelegram()}
+                    catch(e: CancellationException) {throw e}
+                    catch(e: Exception) {error=e.message ?: "Не удалось начать вход. Попробуйте ещё раз."}
+                    finally {busy=false}
                 }
-                Note("Тестовый вход: сообщение в мессенджер пока не отправляется, подойдёт любой код из 4 цифр.")
             }
-            else -> {
-                Heading("Вход по почте",if(register) "Создать аккаунт" else "Войти в аккаунт")
-                OutlinedTextField(email,{email=it},label={Text("Электронная почта")},singleLine=true,enabled=!busy,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Email),modifier=Modifier.fillMaxWidth())
-                OutlinedTextField(password,{password=it},label={Text("Пароль")},singleLine=true,enabled=!busy,visualTransformation=PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password),modifier=Modifier.fillMaxWidth())
-                Note("Пароль от 8 до 128 символов.")
-                Primary(if(register) "Зарегистрироваться" else "Войти",!busy && email.contains('@') && password.length in 8..128) {run {Account.login(email,password,register);password=""}}
-                TextButton(onClick={register=!register;error=null},enabled=!busy) {Text(if(register) "Уже есть аккаунт? Войти" else "Создать новый аккаунт")}
+        } else {
+            Panel {
+                Text("Код входа: ${current.code}",style=MaterialTheme.typography.headlineSmall)
+                Note("Откройте бота, нажмите «Начать», затем «Подтвердить вход». Код в боте должен совпадать с этим.")
+                Primary("Открыть Telegram") {uri.openUri(current.botUrl)}
+                Note("После подтверждения вернитесь сюда — вход завершится автоматически.")
+                Note("Осталось ${remaining / 60}:${(remaining % 60).toString().padStart(2,'0')}")
             }
+            TextButton(onClick={challenge=null;error=null}) {Text("Начать вход заново")}
         }
-        if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let {Text(it,color=MaterialTheme.colorScheme.error)}
-        if(mode!="choose") TextButton(onClick={if(mode!="email" && codeSent) {codeSent=false;code=""} else mode="choose";error=null},enabled=!busy) {Text("‹ Назад")}
     }
-}
-@Composable private fun CodeStep(code: String,onCode:(String)->Unit,busy: Boolean,hint: String?,onSubmit:()->Unit) {
-    hint?.let {Heading("Код из мессенджера","Введите 4 цифры");Note(it)}
-    OutlinedTextField(code,{onCode(it.filter(Char::isDigit).take(4))},label={Text("Код")},singleLine=true,enabled=!busy,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),modifier=Modifier.fillMaxWidth())
-    Primary("Войти",!busy && code.length==4,onSubmit)
 }
 
-/** Getting to know the family: six short steps, the last one chooses the scenario; step 7 sets up the week. */
+
 @Composable internal fun OnboardingScreen(m: AppModel) {
     val step=m.onboardingStep
     val titles=listOf("Кто в семье?","Рост, вес и возраст","Насколько вы активны?","Тип питания","Чего не должно быть в меню?","С чего начнём?","Меню на неделю")

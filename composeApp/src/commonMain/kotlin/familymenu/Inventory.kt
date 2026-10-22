@@ -8,7 +8,7 @@ import io.ktor.http.*
 import kotlinx.serialization.Serializable
 
 @Serializable data class InventoryItem(val ingredientId: String,val name: String,val unit: String,val quantity: Double)
-@Serializable data class InventorySnapshot(val userEmail: String,val revision: Long,val items: List<InventoryItem>)
+@Serializable data class InventorySnapshot(val userLogin: String,val userApplication: String="",val revision: Long,val items: List<InventoryItem>)
 @Serializable data class InventoryInput(val ingredientId: String,val quantity: Double)
 @Serializable data class InventoryReplace(val revision: Long,val items: List<InventoryInput>)
 @Serializable data class InventoryEdit(val revision: Long,val ingredientId: String,val quantity: Double)

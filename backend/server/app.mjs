@@ -2,6 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import {createSupabaseAuth,AuthError} from './auth.mjs';
 import {bearer} from './auth-routes.mjs';
+import {createTelegramAuth} from './telegram-auth.mjs';
 import {createUserStateRepository,createUserStateRouter} from './user-state.mjs';
 import { createInventoryRepository, createInventoryRouter } from './inventory.mjs';
 import { createCatalogRepository } from './catalog.mjs';
@@ -21,7 +22,7 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
 }
 
-export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), authRouter = createAuthRouter({auth}) } = {}) {
+export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
   const userStateRouter=createUserStateRouter(userState);
   const inventoryRouter = createInventoryRouter({inventory,catalog});
   const fridgeRouter = createFridgeRouter({ apiKey, analyze, catalog, hourlyLimit });

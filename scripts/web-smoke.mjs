@@ -41,16 +41,17 @@ const errors=[];
 let scanCalls=0;
 let catalogCalls=0;
 let imageCalls=0;
-let inventory={userEmail:'a@example.test',revision:0,items:[{ingredientId:'milk',name:'Молоко',unit:'ml',quantity:100}]};
+let inventory={userLogin:'@alice',userApplication:'telegram',revision:0,items:[{ingredientId:'milk',name:'Молоко',unit:'ml',quantity:100}]};
 let inventoryWrites=0;
 let searchCalls=0;
 let refreshCalls=0;
 let protectedCalls=0;
 let messengerCalls=0;
+let telegramApproved=false,telegramUser='user-a';
 const documents=new Map();
-const stocks=new Map([['user-a',inventory],['user-b',{userEmail:'b@example.test',revision:0,items:[]}]]);
+const stocks=new Map([['user-a',inventory],['user-b',{userLogin:'Борис',userApplication:'telegram',revision:0,items:[]}]]);
 const userForToken=token=>token?.startsWith('user-b')?'user-b':token?.startsWith('user-a')?'user-a':null;
-const authBundle=id=>({user:{id,email:id==='user-a'?'a@example.test':'b@example.test'},session:{accessToken:id+'-token',refreshToken:id+'-refresh',expiresAt:Math.floor(Date.now()/1000)+3600,expiresIn:3600,tokenType:'bearer'}});
+const authBundle=id=>({user:{id,login:id==='user-a'?'@alice':'Борис',application:'telegram',providerUserId:id==='user-a'?'123':'456',displayName:id==='user-a'?'Alice':'Борис'},session:{accessToken:id+'-token',refreshToken:id+'-refresh',expiresAt:Math.floor(Date.now()/1000)+3600,expiresIn:3600,tokenType:'bearer'}});
 
 
 const catalog=JSON.parse(await readFile(resolve('backend/data/catalog.seed.json'),'utf8'));
@@ -109,9 +110,10 @@ try {
           if(path==='/api/auth/logout') {await send('Fetch.fulfillRequest',{requestId,responseCode:204,responseHeaders:headers});return;}
           const data=JSON.parse(request.postData);
           let body;
-          if(path==='/api/auth/register' && data.email.endsWith('@users.familymenu.invalid')) {messengerCalls++;assert.match(data.email,/^telegram-[a-z0-9]{20}@/);assert.ok(data.password.length>=32);body=authBundle('user-a');}
+          if(path==='/api/auth/telegram/start') {messengerCalls++;assert.deepEqual(data,{});body={challengeId:'challenge-'+messengerCalls,pollToken:'secret-poll-token',code:'4826',expiresIn:300,botUrl:'https://t.me/familymenu_test_bot?start=login_mock'};}
+          else if(path==='/api/auth/telegram/poll') {assert.equal(data.pollToken,'secret-poll-token');body=telegramApproved?{status:'authenticated',...authBundle(telegramUser)}:{status:'pending'};}
           else if(path==='/api/auth/refresh') {refreshCalls++;body=authBundle(data.refreshToken.startsWith('user-b')?'user-b':'user-a');}
-          else {assert.equal(data.password,'StrongPass123!');body=authBundle(data.email==='b@example.test'?'user-b':'user-a');}
+          else assert.fail('Unexpected auth endpoint: '+path);
           await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(body)).toString('base64')});
         }
         else if(new URL(request.url).pathname==='/api/user-state') {
@@ -211,16 +213,16 @@ try {
   assert.ok(catalogCalls>0,'App must load recipes from the backend');
   await click('Пропустить');
   await wait(has('Войти через Telegram'),'Sign-in choice did not render');
-  assert.ok(await evaluate(has('Войти через MAX')),'MAX sign-in must be offered');
+  assert.equal(await evaluate(has('Войти через MAX')),false,'MAX must be hidden');
+  assert.equal(await evaluate(has('Войти по почте')),false,'Email login must be removed');
   assert.equal(protectedCalls,0,'Nothing protected may be requested before sign-in');
-  // Telegram (test sign-in, no messenger request): phone → any code → device account
   await click('Войти через Telegram');
-  await fill('Номер телефона','9001234567');await click('Получить код в Telegram');
-  await wait(has('Введите 4 цифры'),'Code step did not render');
-  await fill('Код','1234');await click('Войти');
-  await wait(has('Кто в семье?'),'Telegram sign-in did not open getting to know');
-  assert.equal(messengerCalls,1,'Test messenger sign-in must register one device account');
-  assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes('9001234567'))`),false,'Phone must not be persisted');
+  await wait(has('Код входа: 4826'),'Telegram challenge did not render');
+  await wait(has('Открыть Telegram'),'Bot link is missing');
+  await delay(2200);assert.equal(protectedCalls,0,'Polling cannot sign in before bot approval');
+  telegramApproved=true;
+  await wait(has('Кто в семье?'),'Telegram approval did not open onboarding');
+  assert.equal(messengerCalls,1,'Exactly one device challenge should be created');
   // Getting to know: 5 steps, scenario choice, week setup
   for(let step=0;step<5;step++) await click('Дальше');
   await wait(has('С чего начнём?'),'Scenario step did not render');
@@ -295,14 +297,19 @@ try {
   // Premium: locked in week one, trial opens after a week
   await click('Профиль');await wait(has('Калории и КБЖУ'),'Profile did not render');
   await click('+неделя');await wait(has('Пробная неделя'),'Premium trial did not start after a week');
-  // Logout and account isolation (email sign-in)
+  // The same Telegram account returns to its saved data; a different ID starts clean.
   await click('Выйти');await wait(has('Войти через Telegram'),'Logout did not clear the session');
-  await click('Войти по почте и паролю');
-  await fill('Электронная почта','b@example.test');await fill('Пароль','StrongPass123!',1);await click('Зарегистрироваться');
+  telegramApproved=false;
+  await click('Войти через Telegram');await wait(has('Код входа: 4826'),'Second challenge did not render');telegramApproved=true;
+  await wait(has('Главная'),'Returning Telegram account must restore its data');
+  await click('Профиль');await wait(has('@alice'),'Profile must display Telegram login');
+  await click('Выйти');await wait(has('Войти через Telegram'),'Second logout failed');
+  telegramApproved=false;telegramUser='user-b';
+  await click('Войти через Telegram');await wait(has('Код входа: 4826'),'New account challenge missing');telegramApproved=true;
   await wait(has('Кто в семье?'),'A new account must not inherit another user preferences/menu');
   assert.equal(stocks.get('user-b').items.length,0,'Account inventory leaked across users');
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log('Compose Web: intro → test Telegram sign-in → getting to know → week menu → approve → cart → cook from what you have → steps → use up → fridge photos → replace stock → refresh → premium trial → logout → email account isolation: PASS. Backend mocked; no paid API calls.');
+  console.log('Compose Web: intro → Telegram confirmation → getting to know → week menu → approve → cart → cook from what you have → steps → use up → fridge photos → replace stock → refresh → premium trial → logout → same account restored → Telegram account isolation: PASS. Backend mocked; no paid API calls.');
 } catch(e) {
   let visible='';
   if(send) {try {const dom=await send('Runtime.evaluate',{expression:`(()=>{${deep};return all().map(e=>({tag:e.tagName,role:e.getAttribute('role'),label:e.getAttribute('aria-label'),text:e.textContent?.slice(0,300)}))})()`,returnByValue:true});await writeFile(resolve(report,'semantics.json'),JSON.stringify(dom.result.value,null,2));

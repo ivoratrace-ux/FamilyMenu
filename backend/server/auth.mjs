@@ -1,3 +1,4 @@
+import {randomBytes} from 'node:crypto';
 import { DEFAULT_SUPABASE_URL } from './supabase.mjs';
 
 export class AuthError extends Error {
@@ -9,8 +10,10 @@ const unavailable = () => new AuthError(503, 'AUTH_UNAVAILABLE', 'Сервис �
 export const invalidSession = () => new AuthError(401, 'INVALID_SESSION', 'Сессия недействительна. Войдите ещё раз.');
 
 function userInfo(user) {
-  if (!user || typeof user.id !== 'string' || !user.id || typeof user.email !== 'string') throw unavailable();
-  return { id: user.id, email: user.email };
+  if (!user || typeof user.id !== 'string' || !user.id) throw unavailable();
+  const meta=user.app_metadata || {};
+  return {id:user.id,application:meta.login_application || 'legacy',providerUserId:meta.provider_user_id || '',
+    login:meta.login || '',displayName:meta.display_name || 'Пользователь'};
 }
 function sessionInfo(data) {
   if (!data || typeof data.access_token !== 'string' || !data.access_token || typeof data.refresh_token !== 'string' || !data.refresh_token || !Number.isInteger(data.expires_in) || data.expires_in <= 0) throw unavailable();
@@ -26,15 +29,16 @@ export function createSupabaseAuth({ url = process.env.SUPABASE_URL || DEFAULT_S
     const parsed = new URL(url);
     if (parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.search && !parsed.hash && ['', '/'].includes(parsed.pathname)) base = parsed.origin;
   } catch { /* Configuration errors are reported without exposing their values. */ }
-  async function request(path, { method = 'POST', body, accessToken, operation } = {}) {
+  async function request(path, { method = 'POST', body, accessToken, operation, admin = false } = {}) {
     if (!base || !apiKey?.trim()) throw new AuthError(503, 'AUTH_NOT_CONFIGURED', 'Вход пока не настроен.');
-    const headers = { apikey: apiKey, Accept: 'application/json' };
+    const key=admin ? (process.env.SUPABASE_SERVICE_ROLE_KEY || apiKey) : apiKey;
+    const headers = { apikey: key, Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-    else if (apiKey.split('.').length === 3) headers.Authorization = `Bearer ${apiKey}`;
+    else if (key.split('.').length === 3) headers.Authorization = `Bearer ${key}`;
     let response;
     try {
-      response = await fetchImpl(`${base}/auth/v1${path}`, {
+      response = await fetchImpl(`${base}${path.startsWith('/rest/')?'':'/auth/v1'}${path}`, {
         method, headers, body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs), redirect: 'error'
       });
@@ -46,9 +50,6 @@ export function createSupabaseAuth({ url = process.env.SUPABASE_URL || DEFAULT_S
       if (response.status === 429 || ['over_email_send_rate_limit', 'over_request_rate_limit'].includes(code)) {
         throw new AuthError(429, 'AUTH_RATE_LIMITED', 'Слишком много попыток. Подождите перед повторной отправкой.', 60);
       }
-      if (code === 'email_address_not_authorized') throw new AuthError(403, 'EMAIL_NOT_AUTHORIZED', 'Встроенная почта Supabase отправляет письма только участникам команды проекта.');
-      if (['signup_disabled', 'email_provider_disabled', 'otp_disabled'].includes(code)) throw new AuthError(503, 'EMAIL_AUTH_DISABLED', 'Вход или регистрация по email отключены в настройках проекта.');
-      if (['signup','password'].includes(operation) && [400,401,403,422].includes(response.status)) throw new AuthError(400,'INVALID_CREDENTIALS',operation==='signup'?'Не удалось зарегистрироваться. Проверьте email и пароль или войдите в существующий аккаунт.':'Неверный email или пароль.');
       if (operation === 'verify' && [400, 401, 403, 422].includes(response.status)) throw new AuthError(401, 'INVALID_CODE', 'Код неверен или истёк. Запросите новый код.');
       if (['refresh', 'user', 'logout'].includes(operation) && [400, 401, 403, 422].includes(response.status)) throw invalidSession();
       throw unavailable();
@@ -56,16 +57,23 @@ export function createSupabaseAuth({ url = process.env.SUPABASE_URL || DEFAULT_S
     if (operation === 'logout') return;
     try { return await response.json(); } catch { throw unavailable(); }
   }
-  let settingsPending, settingsCache, settingsUntil = 0;
   return {
-    async signUp(email,password) {return sessionInfo(await request('/signup',{body:{email,password},operation:'signup'}));},
-    async signIn(email,password) {return sessionInfo(await request('/token?grant_type=password',{body:{email,password},operation:'password'}));},
-    async sendCode(email) {
-      // Supabase creates a new user on the first request and signs existing users in with the same flow.
-      await request('/otp', { body: { email, create_user: true }, operation: 'otp' });
-    },
-    async verifyCode(email, code) {
-      return sessionInfo(await request('/verify', { body: { email, token: code, type: 'email' }, operation: 'verify' }));
+    async signInWithTelegram(identity) {
+      // GoTrue still needs an internal address to issue its own refreshable sessions.
+      // It is never displayed, mailed, used as a login, or stored in the application profile.
+      const profiles=await request('/rest/v1/profiles?select=id&login_application=eq.telegram&provider_user_id=eq.'+encodeURIComponent(identity.id),{method:'GET',admin:true});
+      if(!Array.isArray(profiles) || profiles.length>1)throw unavailable();
+      const existing=profiles[0]?.id;
+      const previous=existing ? await request('/admin/users/'+encodeURIComponent(existing),{method:'GET',admin:true}) : null;
+      // Random internal addresses cannot be preclaimed through the retired public email signup flow.
+      const email=previous?.email || `telegram-${randomBytes(24).toString('hex')}@auth.familymenu.invalid`;
+      const result=await request('/admin/generate_link',{admin:true,body:{type:'magiclink',email}});
+      if(!result?.id || !result.hashed_token || (existing && result.id!==existing)) throw unavailable();
+      await request('/admin/users/'+encodeURIComponent(result.id),{method:'PUT',admin:true,body:{app_metadata:{
+        ...result.app_metadata,login_application:'telegram',provider_user_id:identity.id,
+        login:identity.username ? '@'+identity.username : identity.name,display_name:identity.name
+      }}});
+      return sessionInfo(await request('/verify',{body:{token_hash:result.hashed_token,type:result.verification_type==='signup'?'signup':'magiclink'},operation:'verify'}));
     },
     async refreshSession(refreshToken) {
       return sessionInfo(await request('/token?grant_type=refresh_token', { body: { refresh_token: refreshToken }, operation: 'refresh' }));
@@ -76,19 +84,6 @@ export function createSupabaseAuth({ url = process.env.SUPABASE_URL || DEFAULT_S
     },
     async signOut(accessToken) {
       await request('/logout?scope=local', { accessToken, operation: 'logout' });
-    },
-    async checkConfiguration() {
-      if (settingsCache && Date.now() < settingsUntil) return settingsCache;
-      if (settingsPending) return settingsPending;
-      settingsPending = (async () => {
-        const data = await request('/settings', { method: 'GET', operation: 'settings' });
-        if (typeof data?.external?.email !== 'boolean' || typeof data.disable_signup !== 'boolean' || typeof data.mailer_autoconfirm !== 'boolean') throw unavailable();
-        settingsCache = { status: data.external.email ? 'ok' : 'email_disabled', emailEnabled: data.external.email,
-          registrationEnabled: !data.disable_signup, emailConfirmationRequired: !data.mailer_autoconfirm };
-        settingsUntil = Date.now() + 30000;
-        return settingsCache;
-      })();
-      try { return await settingsPending; } finally { settingsPending = undefined; }
     }
   };
 }

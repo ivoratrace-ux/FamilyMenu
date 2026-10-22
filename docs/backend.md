@@ -78,11 +78,25 @@ Deploy webhook позволяет запустить деплой, но не ч�
 
 ## Авторизация и личные данные
 
-`POST /api/auth/register` и `/api/auth/login`: `{email,password}` (8–128 символов). Возвращают пользователя и access/refresh session, без серверных ключей. `POST /api/auth/refresh` принимает `{refreshToken}`, `/api/auth/logout` — Bearer access token, `/api/auth/me` проверяет пользователя через Supabase. Старые OTP endpoints удалены.
+Вход и регистрация объединены: только Telegram-бот, без номера телефона, почты, пароля и тестовых кодов.
 
-Запасы, поиск ингредиентов, сканирование, `/api/meals`, `/api/user-state`, `/api/menu`, `/api/preferences` требуют пользовательский Bearer JWT. Backend подтверждает его через Supabase Auth и передаёт тот же токен в RPC. Каталог, картинки, health и маршруты входа публичны. Первое меню после онбординга формируется существующим локальным Kotlin-движком по публичному каталогу; платный `/api/meals` не открывается анонимным посетителям.
+- `POST /api/auth/telegram/start` `{}` → `{challengeId,pollToken,code,expiresIn,botUrl}`. Попытка действует 5 минут.
+- Пользователь открывает `botUrl`, сравнивает код в приложении и боте и нажимает «Подтвердить вход».
+- `POST /api/auth/telegram/poll` `{challengeId,pollToken}` → `{status:"pending"}` либо `{status:"authenticated",user,session}`. Подтверждение обменивается на сессию один раз.
+- `POST /api/auth/telegram/webhook` принимает обновления только с верным `X-Telegram-Bot-Api-Secret-Token`. ID и username берутся из этого обновления, не из запроса клиента.
+- `POST /api/auth/refresh` `{refreshToken}`, `/api/auth/logout` с Bearer, `GET /api/auth/me`. Старые email/password/OTP endpoints возвращают 404.
+
+`user` содержит `{id,application,providerUserId,login,displayName}`; `application="telegram"`,
+`login` — `@username` или имя. Личные данные связаны с внутренним UUID, а не с изменяемым логином.
+`TELEGRAM_BOT` — серверный токен бота. При запуске backend регистрирует webhook на
+`PUBLIC_API_BASE` (по умолчанию текущий Render URL), при сбое повторяет регистрацию через минуту.
+Нужен Supabase server/service-role key (`SUPABASE_API_KEY`, либо `SUPABASE_SERVICE_ROLE_KEY` для admin Auth).
+Admin generate_link + verify создаёт стандартные Supabase sessions без отправки писем.
+Токены бота, admin-ссылки и технические email не передаются клиенту и не пишутся в логи.
+Смена токена бота требует обновить Render и перезапустить backend; аккаунты не изменятся.
+Попытки входа временные, в памяти одного backend: после рестарта нужно начать вход заново.
 
 `GET /api/user-state` → `{revision,preferences,menu}`; `PUT` сохраняет оба документа атомарно с той же структурой. `GET/PUT /api/preferences` и `/api/menu` позволяют получить/сохранить соответствующий документ с `revision`. Все данные принадлежат владельцу JWT; конфликт ревизий возвращает 409.
 
-Клиенты обновляют сессию и загружают документы при входе, сохраняют изменения последовательно. Пароль не хранится. Refresh session хранится в Android Keystore-encrypted preferences, iOS Keychain, browser localStorage (Web) или приватном файле (desktop). Личные документы не смешиваются с анонимным черновиком онбординга.
+Клиенты обновляют сессию и загружают документы при входе, сохраняют изменения последовательно. Refresh session хранится в Android Keystore-encrypted preferences, iOS Keychain, browser localStorage (Web) или приватном файле (desktop). Личные документы не смешиваются с анонимным черновиком онбординга.
 

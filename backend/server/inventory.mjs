@@ -30,7 +30,7 @@ export function createInventoryRepository({url=process.env.SUPABASE_URL || DEFAU
       throw new InventoryError(503,'Не удалось сохранить или загрузить запасы. Попробуйте ещё раз.');
     }
     const result=await response.json();
-    if(!result || typeof result.userEmail!=='string' || !Number.isSafeInteger(result.revision) || !Array.isArray(result.items)) throw Error('Invalid inventory response');
+    if(!result || typeof result.userLogin!=='string' || !Number.isSafeInteger(result.revision) || !Array.isArray(result.items)) throw Error('Invalid inventory response');
     return result;
   }
   return {load:accessToken=>rpc('get_inventory',{},accessToken),mutate:async(action,items,revision,accessToken)=>{

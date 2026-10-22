@@ -19,7 +19,10 @@ async function query(sql,readOnly=false) {
  return response.json();
 }
 if(verify && !apply) {
- console.log(JSON.stringify(await query(await readFile(new URL('supabase/tests/catalog.sql',root),'utf8'))));
+ for(const name of ['catalog','accounts','telegram']) {
+  await query(await readFile(new URL(`supabase/tests/${name}.sql`,root),'utf8'));
+  console.log(name+': rollback-only checks passed');
+ }
  process.exit(0);
 }
 await query('create schema if not exists familymenu_internal; revoke all on schema familymenu_internal from public, anon, authenticated; create table if not exists familymenu_internal.migrations (name text primary key, applied_at timestamptz not null default now());');

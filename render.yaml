@@ -12,6 +12,8 @@ services:
         value: '24'
       - key: OPENAI_API_KEY
         sync: false
+      - key: TELEGRAM_BOT
+        sync: false
       - key: SUPABASE_URL
         value: https://ssahtncunusgptkrkxkj.supabase.co
       - key: SUPABASE_API_KEY

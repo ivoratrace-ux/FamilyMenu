@@ -492,7 +492,7 @@ internal fun shareText(m: AppModel): String {
     Page {
         Panel {
             Text(p.members.firstOrNull()?.name?.ifBlank {null} ?: "Профиль",style=MaterialTheme.typography.titleMedium)
-            Note(Account.current?.login?.let {"${it.display} · вход через ${if(it.via=="max") "MAX" else "Telegram"}"} ?: Account.current?.user?.email ?: "")
+            Note(Account.current?.user?.let {"${it.login} · вход через Telegram"} ?: "")
         }
         Panel {
             Text("НАСТРОЙКИ",style=MaterialTheme.typography.labelMedium,color=Muted)

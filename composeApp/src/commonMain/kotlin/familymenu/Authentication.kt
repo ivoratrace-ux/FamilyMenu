@@ -11,12 +11,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 
-@Serializable data class AccountUser(val id: String,val email: String)
+@Serializable data class AccountUser(val id: String,val login: String="",val application: String="",val providerUserId: String="",val displayName: String="")
 @Serializable data class AccountTokens(val accessToken: String,val refreshToken: String,val expiresAt: Long,val expiresIn: Long=3600,val tokenType: String="bearer")
-@Serializable data class AccountLogin(val via: String,val display: String)
-@Serializable data class AccountSession(val user: AccountUser,val session: AccountTokens,val login: AccountLogin?=null)
-const val FAKE_LOGIN_DOMAIN="users.familymenu.invalid"
-@Serializable private data class PasswordInput(val email: String,val password: String)
+@Serializable data class AccountSession(val user: AccountUser,val session: AccountTokens)
+@Serializable data class TelegramChallenge(val challengeId: String,val pollToken: String,val code: String,val expiresIn: Long,val botUrl: String)
+@Serializable private data class TelegramPollInput(val challengeId: String,val pollToken: String)
+@Serializable private data class TelegramPollResult(val status: String,val user: AccountUser?=null,val session: AccountTokens?=null)
 @Serializable private data class RefreshInput(val refreshToken: String)
 @Serializable private data class ApiError(val error: String="Сервис временно недоступен.")
 class SignInRequired: IllegalStateException("Войдите в аккаунт ещё раз.")
@@ -26,26 +26,22 @@ object Account {
     private var initialized=false
     private val lock=Mutex()
     private val client by lazy {HttpClient {install(HttpTimeout) {requestTimeoutMillis=30_000}}}
-    fun initialize() {if(!initialized) {initialized=true;current=runCatching {loadAuthSession()?.let {appJson.decodeFromString<AccountSession>(it)}}.getOrNull()}}
+    fun initialize() {if(!initialized) {initialized=true;current=runCatching {loadAuthSession()?.let {appJson.decodeFromString<AccountSession>(it)}}.getOrNull();if(current?.user?.application!="telegram") clear()}}
     fun install(value: AccountSession) {saveAuthSession(appJson.encodeToString(value));current=value}
     fun clear() {current=null;runCatching {saveAuthSession(null)}}
-    suspend fun login(email: String,password: String,register: Boolean) {
-        val response=client.post("$SCAN_API_BASE/api/auth/${if(register) "register" else "login"}") {contentType(ContentType.Application.Json);setBody(appJson.encodeToString(PasswordInput(email.trim(),password)))}
+    private suspend fun responseText(response: HttpResponse): String {
         val text=response.bodyAsText()
         check(response.status.isSuccess()) {runCatching {appJson.decodeFromString<ApiError>(text).error}.getOrDefault("Не удалось войти. Попробуйте позже.")}
-        install(appJson.decodeFromString(text))
+        return text
     }
-    /**
-     * Temporary "messenger" sign-in for the pilot: no request goes to Telegram or MAX, any 4-digit code is accepted.
-     * The device registers a regular account with random credentials, so the menu, stock and purchases still
-     * sync through the backend. The phone number is only shown in the profile and never leaves the device.
-     */
-    suspend fun fakeMessengerLogin(via: String,display: String) {
-        val alphabet="abcdefghijklmnopqrstuvwxyz0123456789"
-        fun random(n: Int)=(1..n).map {alphabet[kotlin.random.Random.nextInt(alphabet.length)]}.joinToString("")
-        try {login("$via-${random(20)}@$FAKE_LOGIN_DOMAIN",random(32),register=true)}
-        catch(e: IllegalStateException) {throw IllegalStateException("Не получилось войти через ${if(via=="max") "MAX" else "Telegram"}. Войдите по почте и паролю.")}
-        current?.let {install(it.copy(login=AccountLogin(via,display)))}
+    suspend fun startTelegram(): TelegramChallenge = appJson.decodeFromString(responseText(client.post("$SCAN_API_BASE/api/auth/telegram/start") {contentType(ContentType.Application.Json);setBody("{}")}))
+    suspend fun pollTelegram(challenge: TelegramChallenge): Boolean {
+        val result=appJson.decodeFromString<TelegramPollResult>(responseText(client.post("$SCAN_API_BASE/api/auth/telegram/poll") {
+            contentType(ContentType.Application.Json);setBody(appJson.encodeToString(TelegramPollInput(challenge.challengeId,challenge.pollToken)))
+        }))
+        if(result.status!="authenticated") return false
+        install(AccountSession(checkNotNull(result.user),checkNotNull(result.session)))
+        return true
     }
     suspend fun token(previous: String?=null): String = lock.withLock {
         val session=current ?: throw SignInRequired()
@@ -53,7 +49,7 @@ object Account {
         val r=client.post("$SCAN_API_BASE/api/auth/refresh") {contentType(ContentType.Application.Json);setBody(appJson.encodeToString(RefreshInput(session.session.refreshToken)))}
         if(r.status.value in listOf(400,401,403)) {clear();throw SignInRequired()}
         check(r.status.isSuccess()) {"Не удалось обновить сессию. Проверьте интернет."}
-        val refreshed=appJson.decodeFromString<AccountSession>(r.bodyAsText());if(current?.user?.id!=session.user.id || current?.session?.refreshToken!=session.session.refreshToken) throw SignInRequired();install(refreshed.copy(login=session.login));refreshed.session.accessToken
+        val refreshed=appJson.decodeFromString<AccountSession>(r.bodyAsText());if(current?.user?.id!=session.user.id || current?.session?.refreshToken!=session.session.refreshToken) throw SignInRequired();install(refreshed);refreshed.session.accessToken
     }
     suspend fun logout() {val value=current;try {if(value!=null) client.post("$SCAN_API_BASE/api/auth/logout") {bearerAuth(value.session.accessToken)}} finally {clear()}}
 }

@@ -5,7 +5,7 @@ import {createApp,fetch} from './auth-fixtures.mjs';
 import {createInventoryRepository,InventoryError,validateInventoryItems} from '../server/inventory.mjs';
 const ingredients=[{id:'milk',name:'Молоко',unit:'ml'},{id:'cucumber',name:'Огурец',unit:'g'}];
 async function setup(t) {
- let state={userEmail:'user@example.com',revision:0,items:[]};let writes=0;
+ let state={userLogin:'user@example.com',revision:0,items:[]};let writes=0;
  const app=createApp({catalog:{load:async()=>({ingredients})},inventory:{load:async()=>structuredClone(state),mutate:async(action,items,revision)=>{
   if(revision!==state.revision) throw new InventoryError(409,'Inventory conflict');
   for(const item of items) assert.ok(ingredients.some(i=>i.id===item.ingredientId));
@@ -23,7 +23,7 @@ async function setup(t) {
 }
 test('inventory load, add, edit, delete and full replacement share only the authenticated identity',async t=>{
  const {request}=await setup(t);
- const initial=await (await request()).json();assert.deepEqual(initial,{userEmail:'user@example.com',revision:0,items:[]});
+ const initial=await (await request()).json();assert.deepEqual(initial,{userLogin:'user@example.com',revision:0,items:[]});
  let r=await request('/api/inventory/item','PUT',{revision:0,ingredientId:'milk',quantity:500});assert.equal(r.status,200);
  let state=await r.json();assert.equal(state.items[0].quantity,500);
  state=await (await request('/api/inventory/item','PUT',{revision:1,ingredientId:'milk',quantity:250})).json();assert.equal(state.items.length,1);assert.equal(state.items[0].quantity,250);
@@ -51,7 +51,7 @@ test('database repository uses scoped atomic RPC and maps conflicts without expo
  let body;
  const repo=createInventoryRepository({apiKey:'private',fetchImpl:async(url,opts)=>{
   assert.equal(url,'https://ssahtncunusgptkrkxkj.supabase.co/rest/v1/rpc/mutate_inventory');body=JSON.parse(opts.body);assert.equal(opts.headers.apikey,'private');
-  return new Response(JSON.stringify({userEmail:'user@example.com',revision:1,items:[]}));
+  return new Response(JSON.stringify({userLogin:'user@example.com',revision:1,items:[]}));
  }});
  await repo.mutate('replace',[],0,'user-token');assert.deepEqual(body,{p_action:'replace',p_items:[],p_revision:0});
  const conflict=createInventoryRepository({apiKey:'private',fetchImpl:async()=>new Response(JSON.stringify({code:'40001',message:'provider private'}),{status:400})});

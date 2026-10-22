@@ -38,7 +38,7 @@ class InventoryTest {
                 val replace=appJson.decodeFromString<InventoryReplace>(text)
                 assertEquals(7,replace.revision);assertEquals(listOf(InventoryInput("milk",250.0)),replace.items)
             }
-            respond("""{"userEmail":"user@example.com","revision":8,"items":[{"ingredientId":"milk","name":"Молоко","unit":"ml","quantity":250}]}""",HttpStatusCode.OK,headersOf(HttpHeaders.ContentType,"application/json"))
+            respond("""{"userLogin":"user@example.com","revision":8,"items":[{"ingredientId":"milk","name":"Молоко","unit":"ml","quantity":250}]}""",HttpStatusCode.OK,headersOf(HttpHeaders.ContentType,"application/json"))
         }))
         try {assertEquals(250.0,service.replace(7,listOf(InventoryInput("milk",250.0))).items.single().quantity)} finally {service.close()}
         assertEquals(listOf(HttpMethod.Put),calls)
