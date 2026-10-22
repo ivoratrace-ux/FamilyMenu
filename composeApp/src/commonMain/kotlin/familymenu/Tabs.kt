@@ -33,7 +33,7 @@ private fun slotTime(meal: String)=mealTimes[meal]?.let {"${it/60}:${(it%60).toS
 @Composable internal fun MenuScreen(m: AppModel,preview: Boolean=false) {
     val plan=m.state.plan
     if(plan==null || plan.days.isEmpty()) {Page {
-        Text("Меню ещё нет",fontSize=26.sp,fontWeight=FontWeight.Bold)
+        Heading("Меню","Меню ещё нет")
         Note("Составим по вашим ответам: цель, тип питания, ограничения и продукты дома.")
         Primary("Составить меню") {m.update(m.state.copy(stage="loading"))}
     };return}
@@ -41,77 +41,85 @@ private fun slotTime(meal: String)=mealTimes[meal]?.let {"${it/60}:${(it%60).toS
     LaunchedEffect(plan.days.first().date) {val i=plan.days.indexOfFirst {it.date==today};if(i>=0) m.menuDay=i}
     val di=m.menuDay.coerceIn(0,plan.days.lastIndex);val day=plan.days[di];val date=LocalDate.parse(day.date)
     Page {
-        if(preview) Text("Ваше меню готово!",fontSize=26.sp,fontWeight=FontWeight.Bold)
-        if(plan.days.size>1) Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+        if(preview) Hint("Ваше меню готово! Сохраните его — и список покупок соберётся сам.")
+        Row(verticalAlignment=Alignment.Bottom) {
+            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                Eyebrow(if(day.date==today) "Сегодня" else if(plan.days.size>1) "Меню на ${plan.days.size} ${plural(plan.days.size,"день","дня","дней")}" else "Меню")
+                Text("${weekdayNames[date.dayOfWeek.ordinal]}, ${date.dayOfMonth} ${months[date.monthNumber-1]}",style=if(plan.days.size==1) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineSmall)
+            }
+            if(!preview) Badge(if(plan.approved) "утверждено" else "черновик",!plan.approved)
+        }
+        if(plan.days.size>1) Row(horizontalArrangement=Arrangement.spacedBy(4.dp)) {
             plan.days.forEachIndexed {i,d -> val ld=LocalDate.parse(d.date);val selected=i==di
-                Column(Modifier.clip(RoundedCornerShape(14.dp)).background(if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-                    .border(1.dp,if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(14.dp))
-                    .clickable {m.menuDay=i}.padding(horizontal=14.dp,vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                    val color=if(selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                    Text(if(d.date==today) "Сегодня" else weekdays[ld.dayOfWeek.ordinal],color=color,style=MaterialTheme.typography.labelMedium)
-                    Text("${ld.dayOfMonth}",color=color,fontSize=20.sp,fontWeight=FontWeight.Bold)
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                    .border(1.dp,if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(10.dp))
+                    .clickable {m.menuDay=i}.padding(vertical=6.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                    Text(weekdays[ld.dayOfWeek.ordinal],color=if(selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,fontSize=12.sp)
+                    Text("${ld.dayOfMonth}",color=if(selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,fontSize=15.sp,fontWeight=FontWeight.Bold)
                 }
             }
-        }
-        Column {
-            Text("${date.dayOfMonth} ${months[date.monthNumber-1]}",fontSize=if(plan.days.size==1) 34.sp else 26.sp,fontWeight=FontWeight.Bold)
-            Text(if(day.date==today) "Сегодня, ${weekdayNames[date.dayOfWeek.ordinal].lowercase()}" else weekdayNames[date.dayOfWeek.ordinal],color=Muted)
         }
         if(day.slots.isEmpty()) Note("На этот день блюд нет.")
         val nowMinutes=Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).let {it.hour*60+it.minute}
         val next=if(day.date==today) day.slots.indexOfFirst {!it.cooked && (mealTimes[it.meal] ?: 0)+90>=nowMinutes}.takeIf {it>=0} ?: day.slots.indexOfFirst {!it.cooked}.coerceAtLeast(0)
         else 0
         day.slots.getOrNull(next)?.let {BigMealCard(m,di,next,it,preview)}
-        day.slots.forEachIndexed {si,s -> if(si!=next) SmallMealCard(m,di,si,s,preview)}
+        val rest=day.slots.withIndex().filter {it.index!=next}
+        if(rest.isNotEmpty()) Surface(shape=RoundedCornerShape(14.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),color=MaterialTheme.colorScheme.surface) {
+            Column {
+                Row(Modifier.fillMaxWidth().background(if(day.date==today) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.background).padding(horizontal=14.dp,vertical=10.dp)) {
+                    Text("Ещё в этот день",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                    if(day.date==today) Text("сегодня",color=MaterialTheme.colorScheme.primary,fontSize=12.sp,fontWeight=FontWeight.SemiBold)
+                }
+                rest.forEach {(si,s) -> HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant);SlotRow(m,di,si,s,preview)}
+            }
+        }
         if(!preview) {
             if(m.state.kcalVisible() && day.date==today) CaloriesPanel(m,di)
             if(!plan.approved) Primary("Утвердить меню и собрать покупки") {m.update(m.state.copy(plan=plan.copy(approved=true)));m.track("menu_approved");m.open("shop")}
             else Secondary("Отправить меню семье") {m.share=true;m.track("share_opened")}
-            TextButton(onClick={m.update(m.state.copy(stage="loading"))},Modifier.align(Alignment.CenterHorizontally)) {Text("Пересобрать меню")}
+            Ghost("Пересобрать меню",Modifier.fillMaxWidth().heightIn(min=46.dp)) {m.update(m.state.copy(stage="loading"))}
         }
     }
 }
+/** v4 hero: green card with the dish picture, white title and a white button. */
 @Composable private fun BigMealCard(m: AppModel,di: Int,si: Int,slot: Slot,preview: Boolean) {
     val r=m.catalog.byRecipe[slot.recipeId]
-    Surface(shape=RoundedCornerShape(20.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),color=MaterialTheme.colorScheme.surface) {
-        Column {
-            Box {
-                Picture(r?.imageUrl,Modifier.fillMaxWidth().aspectRatio(16f/10))
-                Text("${slotName(slot.meal)} · ${slotTime(slot.meal)}",Modifier.padding(12.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).padding(horizontal=10.dp,vertical=4.dp),style=MaterialTheme.typography.labelLarge)
-            }
-            Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                if(r==null) {Note("Не нашли подходящее блюдо. Ослабьте ограничения в профиле.");return@Column}
-                Text(r.name,fontFamily=DishFont.current,fontSize=22.sp,fontWeight=FontWeight.SemiBold)
-                Note("${r.minutes} мин · ${servingsText(slot.servings)}"+(if(m.state.kcalVisible()) " · ${m.catalog.nutrition(r)[0].roundToInt()} ккал" else "")+(if(slot.cooked) " · приготовлено ✓" else ""))
-                if(!preview) {
-                    Primary(if(slot.cooked) "Открыть рецепт" else "Готовить") {m.selectedSlot=m.recipePosition(di,si)}
-                    TextButton(onClick={m.replacement=m.recipePosition(di,si)}) {Text("Заменить блюдо")}
-                }
-            }
+    val onAccent=MaterialTheme.colorScheme.onPrimary
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.primary).padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        Picture(r?.imageUrl,Modifier.fillMaxWidth().aspectRatio(400f/260).clip(RoundedCornerShape(14.dp)))
+        Text("${slotName(slot.meal)} · ${slotTime(slot.meal)}",color=onAccent.copy(alpha=.85f),fontSize=14.sp)
+        if(r==null) {Text("Не нашли подходящее блюдо. Ослабьте ограничения в профиле.",color=onAccent);return@Column}
+        Text(r.name,fontFamily=DishFont.current,fontSize=24.sp,lineHeight=29.sp,fontWeight=FontWeight.SemiBold,color=onAccent)
+        Text("${r.minutes} мин   ${servingsText(slot.servings)}"+(if(m.state.kcalVisible()) "   ${m.catalog.nutrition(r)[0].roundToInt()} ккал" else "")+(if(slot.cooked) "   приготовлено ✓" else ""),color=onAccent.copy(alpha=.85f),fontSize=12.5.sp)
+        if(!preview) Row(horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
+            Button(onClick={m.selectedSlot=m.recipePosition(di,si)},Modifier.weight(1f).heightIn(min=46.dp),shape=RoundedCornerShape(12.dp),
+                colors=ButtonDefaults.buttonColors(containerColor=onAccent,contentColor=MaterialTheme.colorScheme.primary)) {Text(if(slot.cooked) "Открыть рецепт" else "Готовить",style=MaterialTheme.typography.labelLarge)}
+            OutlinedButton(onClick={m.replacement=m.recipePosition(di,si)},Modifier.heightIn(min=36.dp),shape=RoundedCornerShape(999.dp),border=BorderStroke(1.dp,onAccent),
+                colors=ButtonDefaults.outlinedButtonColors(contentColor=onAccent),contentPadding=PaddingValues(horizontal=12.dp)) {Text("Заменить",fontSize=13.sp)}
         }
     }
 }
-@Composable private fun SmallMealCard(m: AppModel,di: Int,si: Int,slot: Slot,preview: Boolean) {
+/** v4 slot row inside a day card: meal label column, thumbnail, dish name, meta, replace icon. */
+@Composable private fun SlotRow(m: AppModel,di: Int,si: Int,slot: Slot,preview: Boolean) {
     val r=m.catalog.byRecipe[slot.recipeId]
-    Surface(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(enabled=!preview && r!=null) {m.selectedSlot=m.recipePosition(di,si)},shape=RoundedCornerShape(16.dp),
-        border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),color=if(slot.cooked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface) {
-        Row(Modifier.padding(10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-            Picture(r?.imageUrl,Modifier.size(64.dp))
-            Column(Modifier.weight(1f)) {
-                Text("${slotName(slot.meal)} · ${slotTime(slot.meal)}",style=MaterialTheme.typography.labelMedium,color=Muted)
-                Text(r?.name ?: "Нет подходящего блюда",fontFamily=DishFont.current,fontWeight=FontWeight.SemiBold)
-                if(r!=null) Note("${r.minutes} мин"+(if(slot.cooked) " · приготовлено ✓" else ""))
-            }
-            if(!preview && r!=null) TextButton(onClick={m.replacement=m.recipePosition(di,si)}) {AppIcon("replace",MaterialTheme.colorScheme.primary)}
+    Row(Modifier.fillMaxWidth().clickable(enabled=!preview && r!=null) {m.selectedSlot=m.recipePosition(di,si)}.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+        Picture(r?.imageUrl,Modifier.size(width=64.dp,height=46.dp).clip(RoundedCornerShape(10.dp)))
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
+            Text(slotName(slot.meal).uppercase(),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,fontWeight=FontWeight.SemiBold,letterSpacing=0.5.sp)
+            Text(r?.name ?: "Нет подходящего блюда",fontFamily=DishFont.current,fontSize=16.sp,fontWeight=FontWeight.SemiBold,
+                textDecoration=if(slot.cooked) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
+            if(r!=null) Text("${r.minutes} мин   ${servingsText(slot.servings)}",fontSize=12.5.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if(!preview && r!=null) IconBox({m.replacement=m.recipePosition(di,si)}) {AppIcon("replace",MaterialTheme.colorScheme.primary)}
     }
 }
 
 // ---------- Home: what is in the fridge ----------
 @Composable internal fun HomeTab(m: AppModel,scope: CoroutineScope) {
     Page {
-        Text("Что есть дома",fontSize=26.sp,fontWeight=FontWeight.Bold)
-        if(m.inventory==null && m.inventoryBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Heading("Дома","Что есть дома")
+        if(m.inventory==null && m.inventoryBusy) LinearProgressIndicator(Modifier.fillMaxWidth(),color=MaterialTheme.colorScheme.primary,trackColor=MaterialTheme.colorScheme.outlineVariant)
         PantryBlock(m,scope)
         val have=m.have()
         if(have.isNotEmpty()) Primary("Что приготовить из этого") {m.open("cookfrom")}
@@ -124,44 +132,55 @@ private fun slotTime(meal: String)=mealTimes[meal]?.let {"${it/60}:${(it%60).toS
     val clipboard=LocalClipboardManager.current;val scope=rememberCoroutineScope()
     val rows=shoppingRows(m);val need=rows.filter {!it.covered};val left=need.filter {it.item.ingredient.id !in m.state.bought}
     if(rows.isEmpty()) {Page {
-        Text("Список пуст",fontSize=26.sp,fontWeight=FontWeight.Bold)
+        Heading("Покупки","Список пуст")
         Note("Он соберётся сам, когда вы утвердите меню.")
         Primary("Открыть меню") {m.open("menu")}
     };return}
     Page {
-        if(m.state.plan?.approved==false) Panel {Note("Меню ещё не утверждено: список может измениться после замен.");TextButton(onClick={m.update(m.state.copy(plan=m.state.plan?.copy(approved=true)));m.track("menu_approved")}) {Text("Утвердить меню")}}
-        Surface(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable {m.track("cart_price_tapped");m.open("autocart")},shape=RoundedCornerShape(18.dp),color=MaterialTheme.colorScheme.secondaryContainer) {
-            Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                Text("Корзина примерно",style=MaterialTheme.typography.labelLarge,color=Muted)
-                Text("≈ ${money(left.sumOf {it.cost})}",fontSize=30.sp,fontWeight=FontWeight.Bold)
-                Text("Осталось купить: ${left.size} из ${need.size}",style=MaterialTheme.typography.bodyMedium)
-                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Text("Собрать корзину автоматически ›",color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.SemiBold);Badge("Premium",true)
-                }
+        Row(verticalAlignment=Alignment.Bottom) {
+            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {Eyebrow("Покупки");Text("Список покупок",style=MaterialTheme.typography.headlineSmall)}
+            Ghost("Копировать") {clipboard.setText(AnnotatedString(left.joinToString("\n") {"${it.item.ingredient.name} — ${quantity(it.item.ingredient,it.toBuy)}"}));m.track("list_copied")}
+        }
+        if(m.state.plan?.approved==false) Hint("Меню ещё не утверждено: список может измениться после замен.")
+        Panel(Modifier.clickable {m.track("cart_price_tapped");m.open("autocart")}) {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Text("Осталось купить: ",color=MaterialTheme.colorScheme.onSurfaceVariant);Text("${left.size} ${plural(left.size,"позиция","позиции","позиций")}",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
+                Text("≈${money(left.sumOf {it.cost})}",fontWeight=FontWeight.Bold,fontSize=17.sp)
+            }
+            Progress(if(need.isEmpty()) 1f else (need.size-left.size)/need.size.toFloat())
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text("Собрать корзину автоматически ›",color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f,fill=false));Badge("Premium",true)
+            }
+            Note("Одинаковые продукты из разных блюд объединены. Цены — снимок на 20–21 октября, примерные.")
+        }
+        need.groupBy {it.item.ingredient.category}.forEach {(category,products) ->
+            Column {
+                Eyebrow(category);Spacer(Modifier.height(6.dp))
+                Surface(shape=RoundedCornerShape(12.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),color=MaterialTheme.colorScheme.surface) {Column {
+                    products.forEachIndexed {index,row ->
+                        val i=row.item.ingredient;val done=i.id in m.state.bought
+                        if(index>0) HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+                        Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Check(done) {m.update(m.state.copy(bought=m.state.bought.toggle(i.id)));if(it) m.track("item_bought")}
+                            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                                Row(verticalAlignment=Alignment.Top) {
+                                    Text(i.name,Modifier.weight(1f),color=if(done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                        textDecoration=if(done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
+                                    Text(quantity(i,row.toBuy),fontWeight=FontWeight.SemiBold,modifier=Modifier.padding(start=8.dp))
+                                }
+                                Text("для: ${row.item.dishes.joinToString()}"+if(row.stock>0) " · дома ${quantity(i,row.stock)}" else "",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if(Account.current!=null) Ghost("есть") {m.setStock(scope,i.id,row.item.amount)}
+                        }
+                    }
+                }}
             }
         }
-        TextButton(onClick={clipboard.setText(AnnotatedString(left.joinToString("\n") {"${it.item.ingredient.name} — ${quantity(it.item.ingredient,it.toBuy)}"}));m.track("list_copied")}) {Text("Копировать список")}
-        need.groupBy {it.item.ingredient.category}.forEach {(category,products) ->
-            Text(category,style=MaterialTheme.typography.titleMedium)
-            Panel {products.forEach {row ->
-                val i=row.item.ingredient
-                Row(verticalAlignment=Alignment.Top) {
-                    Checkbox(checked=i.id in m.state.bought,onCheckedChange={m.update(m.state.copy(bought=m.state.bought.toggle(i.id)));if(it) m.track("item_bought")})
-                    Column(Modifier.weight(1f).padding(top=10.dp),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-                        Text(i.name,style=MaterialTheme.typography.bodyLarge)
-                        Text(quantity(i,row.toBuy)+if(row.stock>0) " · дома ${quantity(i,row.stock)}" else "",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.primary)
-                        Note("Для: ${row.item.dishes.joinToString()}")
-                    }
-                    TextButton(onClick={m.setStock(scope,i.id,row.item.amount)},enabled=Account.current!=null) {Text("Есть дома")}
-                }
-            }}
-        }
         val covered=rows.filter {it.covered}
-        if(covered.isNotEmpty()) {Text("Уже есть дома",style=MaterialTheme.typography.titleMedium);Panel {covered.forEach {Note("${it.item.ingredient.name} — хватает запаса")}}}
-        if(m.state.extraBuy.isNotEmpty()) TextButton(onClick={m.update(m.state.copy(extraBuy=emptyMap()))}) {Text("Убрать докупки для блюд «из того, что есть»")}
+        if(covered.isNotEmpty()) Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {Eyebrow("Уже есть дома");Panel {covered.forEach {Note("${it.item.ingredient.name} — хватает запаса")}}}
+        if(m.state.extraBuy.isNotEmpty()) Ghost("Убрать докупки для блюд «из того, что есть»",Modifier.fillMaxWidth()) {m.update(m.state.copy(extraBuy=emptyMap()))}
         val spices=m.state.plan?.days?.flatMap {it.slots}?.flatMap {m.catalog.byRecipe[it.recipeId]?.spices.orEmpty()}?.distinct().orEmpty()
-        if(spices.isNotEmpty()) Panel {Text("Специи — проверьте, есть ли дома");Note(spices.joinToString())}
-        Note("Цены — снимок на 20–21 октября, примерные.")
+        if(spices.isNotEmpty()) Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {Eyebrow("Специи — проверьте, есть ли дома");Panel {Text(spices.joinToString());Note("Количество «по вкусу», в список не суммируем.")}}
     }
 }
 
@@ -169,7 +188,7 @@ private fun slotTime(meal: String)=mealTimes[meal]?.let {"${it/60}:${(it%60).toS
 @Composable internal fun PremiumOffer(m: AppModel,title: String,text: String) {
     var plan by remember {mutableStateOf("year")}
     Page {
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {AppIcon("lock",Amber);Text(title,fontSize=24.sp,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f,fill=false));Badge("Premium",true)}
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {AppIcon("lock",Amber);Text(title,style=MaterialTheme.typography.headlineSmall,modifier=Modifier.weight(1f,fill=false));Badge("Premium",true)}
         Text(text,style=MaterialTheme.typography.bodyLarge)
         Panel(accent=Amber) {
             Text("Что входит в Premium",style=MaterialTheme.typography.titleMedium)
@@ -186,7 +205,7 @@ private fun slotTime(meal: String)=mealTimes[meal]?.let {"${it/60}:${(it%60).toS
 @Composable internal fun SubscriptionPage(m: AppModel) {
     val sub=m.state.subscription ?: return PremiumOffer(m,"Premium","Меню и список покупок остаются бесплатными. Premium экономит время и деньги на покупках.")
     Page {
-        Text("Premium подключён",fontSize=24.sp,fontWeight=FontWeight.Bold)
+        Heading("Premium","Подписка подключена")
         Panel {Text(if(sub.plan=="year") "На год — 1 990 ₽" else "На месяц — 299 ₽");Note("С ${dateLabel(sub.since)}. Отменить можно в любой момент — меню и настройки останутся.")}
         Secondary("Отменить подписку (прототип)") {m.update(m.state.copy(subscription=null));m.track("unsubscribed")}
     }
@@ -195,7 +214,7 @@ private fun slotTime(meal: String)=mealTimes[meal]?.let {"${it/60}:${(it%60).toS
     if(!m.state.premiumOn()) return PremiumOffer(m,"Автосборка корзины","Соберём корзину из утверждённого меню на нужную сумму и подскажем, в каком магазине дешевле.")
     val plan=m.state.plan;val p=m.state.profile
     Page {
-        Text("Автосборка корзины",fontSize=24.sp,fontWeight=FontWeight.Bold)
+        Heading("Premium","Автосборка корзины")
         if(plan==null) {Note("Сначала составьте меню.");Primary("Открыть меню") {m.open("menu")};return@Page}
         if(!plan.approved) {Panel {Note("Корзина собирается из утверждённого меню.");Primary("Утвердить меню") {m.update(m.state.copy(plan=plan.copy(approved=true)));m.track("menu_approved")}};return@Page}
         Panel {

@@ -30,6 +30,8 @@ internal val Muted=Color(0xff646c66)
 internal val Line=Color(0xffdfe3dc)
 internal val Amber=Color(0xffc98a10)
 internal val AmberSoft=Color(0xfffaf0d9)
+internal val Danger=Color(0xffb03a2e)
+internal val DangerSoft=Color(0xfff8e3df)
 internal val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
 
 @Composable fun FamilyMenuApp() {
@@ -51,12 +53,20 @@ internal val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
     var splash by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(1500); splash=false }
     val dark=when(model?.state?.theme) {"dark" -> true; "light" -> false; else -> isSystemInDarkTheme()}
-    val colors=if(dark) darkColorScheme(primary=Color(0xff78c09a),background=Color(0xff121513),surface=Color(0xff1b1f1c),onSurface=Color(0xffe8ece8),secondaryContainer=Color(0xff1e3328))
-        else lightColorScheme(primary=Green,background=Cream,surface=Color.White,onSurface=Ink,secondaryContainer=Soft,outline=Line)
-    MaterialTheme(colorScheme=colors,typography=Typography().let { t -> t.copy(
-        bodyLarge=t.bodyLarge.copy(fontFamily=uiFont,fontSize=15.sp), bodyMedium=t.bodyMedium.copy(fontFamily=uiFont),bodySmall=t.bodySmall.copy(fontFamily=uiFont),
-        titleLarge=t.titleLarge.copy(fontFamily=uiFont,fontWeight=FontWeight.Bold),titleMedium=t.titleMedium.copy(fontFamily=uiFont,fontWeight=FontWeight.SemiBold),
-        headlineSmall=t.headlineSmall.copy(fontFamily=uiFont,fontWeight=FontWeight.Bold),labelLarge=t.labelLarge.copy(fontFamily=uiFont),labelMedium=t.labelMedium.copy(fontFamily=uiFont),labelSmall=t.labelSmall.copy(fontFamily=uiFont)) }) {
+    // Design tokens of prototype v4: same palette, type scale, radii and spacing.
+    val colors=if(dark) darkColorScheme(primary=Color(0xff78c09a),onPrimary=Color(0xff0f1a14),background=Color(0xff121513),surface=Color(0xff1b1f1c),onSurface=Color(0xffe8ece8),onBackground=Color(0xffe8ece8),
+            onSurfaceVariant=Color(0xffa0a9a2),secondaryContainer=Color(0xff1e3328),onSecondaryContainer=Color(0xff78c09a),outline=Color(0xff2f3631),outlineVariant=Color(0xff2f3631),error=Color(0xffef8a7d),surfaceVariant=Color(0xff121513),
+            surfaceContainer=Color(0xff1b1f1c),surfaceContainerHigh=Color(0xff1b1f1c),surfaceContainerHighest=Color(0xff222723),surfaceContainerLow=Color(0xff1b1f1c))
+        else lightColorScheme(primary=Green,onPrimary=Color.White,background=Cream,surface=Color.White,onSurface=Ink,onBackground=Ink,onSurfaceVariant=Muted,
+            secondaryContainer=Soft,onSecondaryContainer=Green,outline=Line,outlineVariant=Line,error=Danger,surfaceVariant=Cream,
+            surfaceContainer=Color.White,surfaceContainerHigh=Color.White,surfaceContainerHighest=Color(0xfff0f2ee),surfaceContainerLow=Color.White)
+    val type=Typography().let { t -> t.copy(
+        bodyLarge=t.bodyLarge.copy(fontFamily=uiFont,fontSize=15.sp,lineHeight=22.sp),bodyMedium=t.bodyMedium.copy(fontFamily=uiFont,fontSize=14.sp,lineHeight=20.sp),bodySmall=t.bodySmall.copy(fontFamily=uiFont,fontSize=13.sp,lineHeight=18.sp),
+        titleLarge=t.titleLarge.copy(fontFamily=uiFont,fontSize=18.sp,fontWeight=FontWeight.SemiBold),titleMedium=t.titleMedium.copy(fontFamily=uiFont,fontSize=15.sp,fontWeight=FontWeight.SemiBold),titleSmall=t.titleSmall.copy(fontFamily=uiFont,fontWeight=FontWeight.SemiBold),
+        headlineSmall=t.headlineSmall.copy(fontFamily=uiFont,fontSize=24.sp,fontWeight=FontWeight.Bold,lineHeight=30.sp),headlineMedium=t.headlineMedium.copy(fontFamily=uiFont,fontWeight=FontWeight.Bold),
+        labelLarge=t.labelLarge.copy(fontFamily=uiFont,fontSize=15.sp,fontWeight=FontWeight.SemiBold),labelMedium=t.labelMedium.copy(fontFamily=uiFont,fontSize=12.sp,fontWeight=FontWeight.SemiBold),labelSmall=t.labelSmall.copy(fontFamily=uiFont,fontSize=11.sp)) }
+    val shapes=Shapes(extraSmall=RoundedCornerShape(10.dp),small=RoundedCornerShape(10.dp),medium=RoundedCornerShape(14.dp),large=RoundedCornerShape(20.dp),extraLarge=RoundedCornerShape(20.dp))
+    MaterialTheme(colorScheme=colors,typography=type,shapes=shapes) {
         CompositionLocalProvider(DishFont provides dishFont) {
             Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background) {
                 Box(Modifier.fillMaxSize(),contentAlignment=Alignment.TopCenter) {
@@ -162,16 +172,17 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
             FamilyViewScreen(m)
         } else {
             val page=m.page
-            Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
-                if(page!=null) TextButton(onClick={m.back()}) {Text("‹ Назад")} else Spacer(Modifier.width(8.dp))
+            // v4 app bar: back control, 17sp bold title, hairline below.
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal=16.dp,vertical=10.dp).heightIn(min=36.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                if(page!=null) IconBox({m.back()}) {Text("‹",fontSize=22.sp,color=MaterialTheme.colorScheme.primary)}
                 Text(page?.let {pageTitles[it]} ?: when(m.tab) {"menu" -> "Меню"; "shop" -> "Покупки"; "home" -> "Дома"; else -> "Профиль"},
-                    Modifier.weight(1f).padding(vertical=8.dp),style=MaterialTheme.typography.titleMedium)
+                    Modifier.weight(1f),fontSize=17.sp,fontWeight=FontWeight.Bold)
             }
             HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
             m.persistenceError?.let { Text(it,Modifier.padding(12.dp),color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall);if(m.syncConflict) TextButton(onClick={loadRetry++}) {Text("Загрузить актуальные данные")} }
             val running=m.timers.filterValues { it.paused==null || it.done }
-            if(running.isNotEmpty()) FlowRow(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                running.forEach { (key,t) -> TextButton(onClick={m.timers.remove(key)}) { Text(if(t.done) "Таймер готов ×" else "Таймер ${timeText(t.remaining(now))}") } }
+            if(running.isNotEmpty()) FlowRow(Modifier.fillMaxWidth().background(if(isSystemInDarkTheme()) Color(0xff352a12) else AmberSoft).padding(horizontal=16.dp,vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                running.forEach { (key,t) -> Text(if(t.done) "Таймер готов ×" else "⏱ ${timeText(t.remaining(now))}",Modifier.clickable {m.timers.remove(key)},color=if(t.done) MaterialTheme.colorScheme.error else Amber,fontSize=13.sp,fontWeight=FontWeight.SemiBold) }
             }
             Box(Modifier.weight(1f)) {
                 when(page) {
@@ -198,14 +209,15 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
                 }
             }
             HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical=4.dp)) {
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
                 val left=shoppingRows(m).count {!it.covered && it.item.ingredient.id !in m.state.bought}
                 tabs.forEach { (key,label) ->
                     val selected=m.tab==key
-                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { m.open(key) }.padding(vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                        Box {AppIcon(key,if(selected) MaterialTheme.colorScheme.primary else Muted)
-                            if(key=="shop" && left>0) Text("$left",Modifier.align(Alignment.TopEnd).offset(x=10.dp,y=(-4).dp).clip(RoundedCornerShape(8.dp)).background(Amber).padding(horizontal=4.dp),color=Color.White,fontSize=10.sp)}
-                        Text(label,color=if(selected) MaterialTheme.colorScheme.primary else Muted,style=MaterialTheme.typography.labelSmall)
+                    val tint=if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    Column(Modifier.weight(1f).clickable { m.open(key) }.padding(top=8.dp,bottom=10.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                        Box {AppIcon(key,tint)
+                            if(key=="shop" && left>0) Text("$left",Modifier.align(Alignment.TopEnd).offset(x=12.dp,y=(-4).dp).clip(RoundedCornerShape(999.dp)).background(Amber).padding(horizontal=5.dp),color=Color.White,fontSize=10.sp,fontWeight=FontWeight.Bold)}
+                        Text(label,color=tint,fontSize=11.sp,fontWeight=if(selected) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
             }
@@ -221,7 +233,7 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
 }
 
 @Composable internal fun AppIcon(type: String,color: Color) {
-    Canvas(Modifier.size(25.dp)) {
+    Canvas(Modifier.size(22.dp)) {
         val s=size.width/24;val stroke=Stroke(1.8f*s)
         fun line(x:Float,y:Float,x2:Float,y2:Float)=drawLine(color,androidx.compose.ui.geometry.Offset(x*s,y*s),androidx.compose.ui.geometry.Offset(x2*s,y2*s),1.8f*s)
         when(type) {
@@ -239,20 +251,61 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
 }
 
 @Composable internal fun Page(content: @Composable ColumnScope.()->Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp),content=content)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start=16.dp,end=16.dp,top=18.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp),content=content)
 }
 @Composable internal fun Panel(modifier: Modifier=Modifier,accent: Color?=null,content: @Composable ColumnScope.()->Unit) {
     Surface(modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),border=BorderStroke(1.dp,accent ?: MaterialTheme.colorScheme.outlineVariant),color=MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp),content=content)
     }
 }
-@Composable internal fun Heading(kicker: String,title: String) { Column(verticalArrangement=Arrangement.spacedBy(4.dp)) { Text(kicker.uppercase(),style=MaterialTheme.typography.labelMedium,color=Muted);Text(title,style=MaterialTheme.typography.headlineSmall) } }
+/** v4 eyebrow: small uppercase muted label above a heading. */
+@Composable internal fun Eyebrow(text: String,color: Color=MaterialTheme.colorScheme.onSurfaceVariant) { Text(text.uppercase(),style=MaterialTheme.typography.labelMedium,color=color,letterSpacing=0.84.sp) }
+@Composable internal fun Heading(kicker: String,title: String) { Column(verticalArrangement=Arrangement.spacedBy(4.dp)) { Eyebrow(kicker);Text(title,style=MaterialTheme.typography.headlineSmall) } }
 @Composable internal fun Note(text: String) { Text(text,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-@Composable internal fun Primary(text: String,enabled: Boolean=true,onClick:()->Unit) { Button(onClick=onClick,enabled=enabled,modifier=Modifier.fillMaxWidth().heightIn(min=46.dp),shape=RoundedCornerShape(12.dp)) { Text(text) } }
-@Composable internal fun Secondary(text: String,enabled: Boolean=true,onClick:()->Unit) { OutlinedButton(onClick=onClick,enabled=enabled,modifier=Modifier.fillMaxWidth().heightIn(min=44.dp),shape=RoundedCornerShape(12.dp)) { Text(text) } }
-@Composable internal fun Choice(label: String,selected: Boolean,onClick:()->Unit) { FilterChip(selected=selected,onClick=onClick,label={Text(label)},shape=RoundedCornerShape(24.dp)) }
+/** Saffron hint box. */
+@Composable internal fun Hint(text: String) { Text(text,Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if(isSystemInDarkTheme()) Color(0xff352a12) else AmberSoft).padding(horizontal=12.dp,vertical=10.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurface) }
+@Composable internal fun Primary(text: String,enabled: Boolean=true,onClick:()->Unit) {
+    Button(onClick=onClick,enabled=enabled,modifier=Modifier.fillMaxWidth().heightIn(min=46.dp),shape=RoundedCornerShape(12.dp),
+        colors=ButtonDefaults.buttonColors(disabledContainerColor=MaterialTheme.colorScheme.primary.copy(alpha=.45f),disabledContentColor=MaterialTheme.colorScheme.onPrimary)) { Text(text,style=MaterialTheme.typography.labelLarge) }
+}
+/** v4 secondary: soft green fill, green text. */
+@Composable internal fun Secondary(text: String,enabled: Boolean=true,onClick:()->Unit) {
+    Button(onClick=onClick,enabled=enabled,modifier=Modifier.fillMaxWidth().heightIn(min=46.dp),shape=RoundedCornerShape(12.dp),elevation=null,
+        colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.secondaryContainer,contentColor=MaterialTheme.colorScheme.primary,disabledContainerColor=MaterialTheme.colorScheme.secondaryContainer.copy(alpha=.45f))) { Text(text,style=MaterialTheme.typography.labelLarge) }
+}
+/** v4 ghost: thin border, green text. Small by default (36dp), as in the prototype's header buttons. */
+@Composable internal fun Ghost(text: String,modifier: Modifier=Modifier,enabled: Boolean=true,onClick:()->Unit) {
+    OutlinedButton(onClick=onClick,enabled=enabled,modifier=modifier.heightIn(min=36.dp),shape=RoundedCornerShape(10.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),
+        contentPadding=PaddingValues(horizontal=12.dp,vertical=6.dp),colors=ButtonDefaults.outlinedButtonColors(containerColor=MaterialTheme.colorScheme.surface,contentColor=MaterialTheme.colorScheme.primary)) { Text(text,fontSize=14.sp,fontWeight=FontWeight.SemiBold) }
+}
+/** v4 chip: pill with a thin border; selected is filled green. */
+@Composable internal fun Choice(label: String,selected: Boolean,onClick:()->Unit) {
+    Surface(onClick=onClick,shape=RoundedCornerShape(999.dp),color=if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        contentColor=if(selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,border=BorderStroke(1.dp,if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
+        Text(label,Modifier.padding(horizontal=13.dp,vertical=7.dp),fontSize=14.sp)
+    }
+}
 @Composable internal fun Badge(text: String,warn: Boolean=false) {
-    Text(text,Modifier.clip(RoundedCornerShape(10.dp)).background(if(warn) AmberSoft else Soft).padding(horizontal=8.dp,vertical=2.dp),color=if(warn) Amber else Green,style=MaterialTheme.typography.labelSmall)
+    val dark=isSystemInDarkTheme()
+    Text(text,Modifier.clip(RoundedCornerShape(999.dp)).background(if(warn) (if(dark) Color(0xff352a12) else AmberSoft) else MaterialTheme.colorScheme.secondaryContainer).padding(horizontal=9.dp,vertical=2.dp),
+        color=if(warn) (if(dark) Color(0xffe8b347) else Amber) else MaterialTheme.colorScheme.primary,fontSize=12.sp,fontWeight=FontWeight.SemiBold,maxLines=1)
+}
+/** v4 progress: 6dp rounded track. */
+@Composable internal fun Progress(value: Float,modifier: Modifier=Modifier,over: Boolean=false,height: Dp=6.dp) {
+    Box(modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(999.dp)).background(MaterialTheme.colorScheme.outlineVariant)) {
+        Box(Modifier.fillMaxWidth(value.coerceIn(0f,1f)).fillMaxHeight().clip(RoundedCornerShape(999.dp)).background(if(over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary))
+    }
+}
+/** v4 checkbox: 24dp rounded square. */
+@Composable internal fun Check(checked: Boolean,onChange:(Boolean)->Unit) {
+    Box(Modifier.padding(4.dp).size(24.dp).clip(RoundedCornerShape(7.dp)).background(if(checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+        .border(2.dp,if(checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(7.dp)).clickable {onChange(!checked)},contentAlignment=Alignment.Center) {
+        if(checked) Text("✓",color=MaterialTheme.colorScheme.onPrimary,fontWeight=FontWeight.Bold,fontSize=14.sp)
+    }
+}
+/** v4 icon button: 36dp, thin border. */
+@Composable internal fun IconBox(onClick:()->Unit,content: @Composable ()->Unit) {
+    Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).border(1.dp,MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(10.dp)).clickable(onClick=onClick),contentAlignment=Alignment.Center) {content()}
 }
 @Composable internal fun NavRow(title: String,subtitle: String,locked: Boolean=false,badge: String?=null,onClick:()->Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick=onClick).padding(vertical=10.dp,horizontal=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
