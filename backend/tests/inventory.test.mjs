@@ -56,5 +56,7 @@ test('database repository uses scoped atomic RPC and maps conflicts without expo
  await repo.mutate('replace',[],0);assert.deepEqual(body,{p_action:'replace',p_items:[],p_revision:0});
  const conflict=createInventoryRepository({apiKey:'private',fetchImpl:async()=>new Response(JSON.stringify({code:'40001',message:'provider private'}),{status:400})});
  await assert.rejects(conflict.mutate('replace',[],0),e=>e.status===409 && !e.message.includes('provider'));
+ const httpConflict=createInventoryRepository({apiKey:'private',fetchImpl:async()=>new Response(JSON.stringify({code:'PT409',message:'Inventory version conflict'}),{status:409})});
+ await assert.rejects(httpConflict.mutate('replace',[],0),e=>e.status===409);
  assert.throws(()=>validateInventoryItems([{ingredientId:'bad id',quantity:1}]));
 });

@@ -23,7 +23,7 @@ export function createInventoryRepository({url=process.env.SUPABASE_URL || DEFAU
     const response=await fetchImpl(`${base.origin}/rest/v1/rpc/${name}`,{method:'POST',headers,body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(15000)});
     if(!response.ok) {
       const error=await response.json().catch(()=>({}));
-      if(error.code==='40001') throw new InventoryError(409,'Запасы уже изменились. Обновите список и повторите действие.');
+      if(response.status===409 || error.code==='PT409' || error.code==='40001') throw new InventoryError(409,'Запасы уже изменились. Обновите список и повторите действие.');
       if(error.code==='22023') throw new InventoryError(400,'Проверьте ингредиенты и количество.');
       throw new InventoryError(503,'Не удалось сохранить или загрузить запасы. Попробуйте ещё раз.');
     }

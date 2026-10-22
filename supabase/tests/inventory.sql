@@ -27,7 +27,7 @@ begin
  begin
   perform public.mutate_test_inventory('replace','[]'::jsonb,version-1);
   raise exception 'Stale version accepted';
- exception when serialization_failure then null; end;
+ exception when sqlstate 'PT409' then null; end;
  if public.get_test_inventory()<>result then raise exception 'Failed operation mutated inventory'; end if;
  result:=public.mutate_test_inventory('delete','[{"ingredientId":"milk"}]'::jsonb,version);
  if jsonb_array_length(result->'items')<>1 or result->'items'->0->>'ingredientId'<>'eggs' then raise exception 'Delete failed'; end if;
