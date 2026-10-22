@@ -151,7 +151,7 @@ node scripts/check-scan-backend.mjs
   Результаты доступны в artifacts. Android debug APK использует публичный ключ
   разработки из проекта сканера для обновлений между сборками; это не release-подпись.
 - **Publish Compose Web to GitHub Pages**: вызывается основным workflow после
-  успешных Android, Web и iOS jobs на `main`; публикует уже собранный Web artifact
+  успешного Web job на `main`, не ожидая Android и iOS; публикует уже собранный Web artifact
   без повторной компиляции. В Settings → Pages выберите **GitHub Actions**.
   Для этого репозитория ожидаемый адрес: `https://ivoratrace-ux.github.io/FamilyMenu/`.
 - **Backend checks** на `main` после тестов вызывает Render deploy hook из секрета `RENDER_DEPLOY_HOOK`

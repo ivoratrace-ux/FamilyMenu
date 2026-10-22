@@ -129,7 +129,7 @@ jobs:
   publish-web:
     name: Publish GitHub Pages
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [android, web, ios]
+    needs: [web]
     permissions:
       contents: read
       pages: write
