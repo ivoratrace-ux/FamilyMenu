@@ -48,6 +48,8 @@ internal val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
     val uiFont=FontFamily(Font(Res.font.golos))
     val dishFont=FontFamily(Font(Res.font.literata))
     val model=catalog?.let { remember(it) { AppModel(it) } }
+    var splash by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { delay(1500); splash=false }
     val dark=when(model?.state?.theme) {"dark" -> true; "light" -> false; else -> isSystemInDarkTheme()}
     val colors=if(dark) darkColorScheme(primary=Color(0xff78c09a),background=Color(0xff121513),surface=Color(0xff1b1f1c),onSurface=Color(0xffe8ece8),secondaryContainer=Color(0xff1e3328))
         else lightColorScheme(primary=Green,background=Cream,surface=Color.White,onSurface=Ink,secondaryContainer=Soft,outline=Line)
@@ -58,7 +60,8 @@ internal val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
         CompositionLocalProvider(DishFont provides dishFont) {
             Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background) {
                 Box(Modifier.fillMaxSize(),contentAlignment=Alignment.TopCenter) {
-                    if(model==null) Column(Modifier.padding(32.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+                    if(splash || (model==null && !failure)) SplashScreen()
+                    else if(model==null) Column(Modifier.padding(32.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                         Text(if(failure) "Не удалось загрузить каталог. Проверьте подключение к интернету." else "Загружаем семейное меню…")
                         if(!failure) CircularProgressIndicator()
                         else Button(onClick={loadAttempt++}) { Text("Повторить") }
@@ -69,9 +72,9 @@ internal val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
     }
 }
 
-private val tabs=listOf("today" to "Главная","cook" to "Готовить","menu" to "Неделя","shop" to "Покупки","profile" to "Профиль")
-private val pageTitles=mapOf("family" to "Семья","food" to "Питание и ограничения","week" to "Неделя и напоминания","promo" to "Бюджет и цены",
-    "kcal" to "Калории и КБЖУ","sub" to "Premium","metrics" to "Метрики пилота","familyview" to "Как увидит семья")
+private val tabs=listOf("menu" to "Меню","shop" to "Покупки","home" to "Дома","profile" to "Профиль")
+private val pageTitles=mapOf("family" to "Семья","food" to "Питание и ограничения","details" to "Дни и приёмы пищи","recipes" to "Мои рецепты","recipe" to "Рецепт",
+    "promo" to "Подборка акций","autocart" to "Автосборка корзины","kcal" to "Калории и КБЖУ","sub" to "Premium","metrics" to "Метрики пилота","familyview" to "Как увидит семья","cookfrom" to "Что приготовить")
 
 @Composable private fun AppContent(m: AppModel) {
     val scope=rememberCoroutineScope()
@@ -85,11 +88,11 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
     LaunchedEffect(accountId,loadRetry) {
         m.accountReady=false;accountLoadError=null
         if(accountId==null) {
-            if(m.state.stage !in listOf("intro","auth")) m.resetAccount()
+            if(m.state.stage=="app") m.resetAccount()
         } else {
             try {
                 m.applyDocument(documents.load());saveState("")
-                m.loadInventory(scope)
+                m.loadInventory(scope);m.flushDraft(scope)
                 while(isActive) {
                     delay(600)
                     if(!m.syncConflict && m.changeNumber>m.savedNumber) {
@@ -125,17 +128,25 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
                 if(accountLoadError==null) CircularProgressIndicator() else {Note(accountLoadError!!);Primary("Повторить загрузку") {loadRetry++}}
                 TextButton(onClick={Account.clear();m.resetAccount()}) {Text("Вернуться ко входу")}
             }
+        } else if(m.state.stage=="intro" && Account.current==null) {
+            IntroScreen(m)
+        } else if(m.state.stage=="quiz") {
+            OnboardingScreen(m,scope)
+        } else if(m.state.stage=="loading") {
+            LoadingScreen(m)
+        } else if(m.state.stage=="ready" && Account.current==null) {
+            ReadyScreen(m)
         } else if(Account.current==null) {
-            if(m.state.stage=="intro") IntroScreen(m) else AuthenticationScreen(m)
+            AuthenticationScreen(m)
         } else if(m.state.stage!="app") {
-            OnboardingScreen(m)
+            LaunchedEffect(Unit) {m.update(m.state.copy(stage=if(m.state.plan!=null) "app" else "quiz"))}
         } else if(m.page=="familyview") {
             FamilyViewScreen(m)
         } else {
             val page=m.page
             Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
                 if(page!=null) TextButton(onClick={m.back()}) {Text("‹ Назад")} else Spacer(Modifier.width(8.dp))
-                Text(page?.let {pageTitles[it]} ?: when(m.tab) {"today" -> "Главная"; "cook" -> "Из того, что есть"; "menu" -> "Меню на неделю"; "shop" -> "Покупки"; else -> "Профиль"},
+                Text(page?.let {pageTitles[it]} ?: when(m.tab) {"menu" -> "Меню"; "shop" -> "Покупки"; "home" -> "Дома"; else -> "Профиль"},
                     Modifier.weight(1f).padding(vertical=8.dp),style=MaterialTheme.typography.titleMedium)
             }
             HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
@@ -148,20 +159,23 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
                 when(page) {
                     "family" -> FamilyPage(m)
                     "food" -> FoodPage(m)
-                    "week" -> WeekPage(m)
-                    "promo" -> if(m.state.premiumOn()) PromoScreen(m) else PremiumLock(m,"budget")
-                    "kcal" -> KcalPage(m)
+                    "details" -> DetailsPage(m)
+                    "recipes" -> MyRecipesPage(m)
+                    "recipe" -> RecipeEditorPage(m)
+                    "promo" -> PromoPage(m)
+                    "autocart" -> AutoCartPage(m)
+                    "kcal" -> KcalGate(m)
                     "sub" -> SubscriptionPage(m)
                     "metrics" -> MetricsPage(m)
+                    "cookfrom" -> CookScreen(m,scope)
                     else -> when(m.tab) {
-                        "cook" -> if(m.scanningFridge && m.inventory!=null) ScannerScreen(m,scope,scannerService,m.inventoryService,m.inventory!!,m.inventoryBusy,
+                        "home" -> if(m.scanningFridge && m.inventory!=null) ScannerScreen(m,scope,scannerService,m.inventoryService,m.inventory!!,m.inventoryBusy,
                             onSaved={m.inventory=it;m.scanningFridge=false;m.scannerProducts=emptyList();m.scannerPhotos=emptyList();m.track("fridge_scanned")},
                             onConflict={m.inventoryError=it;m.scanningFridge=false;m.loadInventory(scope)},onCancel={m.scanningFridge=false})
-                            else CookScreen(m,scope)
-                        "menu" -> MenuScreen(m)
+                            else HomeTab(m,scope)
                         "shop" -> ShoppingScreen(m)
                         "profile" -> ProfileHub(m,scope)
-                        else -> HomeScreen(m)
+                        else -> MenuScreen(m)
                     }
                 }
             }
@@ -184,7 +198,6 @@ private val pageTitles=mapOf("family" to "Семья","food" to "Питание 
     m.cooking?.let { CookDialog(m,scope,it,now) }
     m.replacement?.let { ReplacementDialog(m,it) }
     m.nowRecipe?.let { NowDialog(m,it) }
-    if(m.pantryPicker) PantryPicker(m,scope)
     m.cart?.let { CartDialog(m,it,scope) }
     if(m.share) ShareDialog(m)
 }
@@ -201,7 +214,7 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
         when(type) {
             "replace" -> {drawArc(color,40f,290f,false,androidx.compose.ui.geometry.Offset(4*s,4*s),androidx.compose.ui.geometry.Size(16*s,16*s),style=stroke);line(18f,3f,20f,8f);line(20f,8f,15f,8f)}
             "link" -> {line(5f,19f,19f,5f);line(10f,5f,19f,5f);line(19f,5f,19f,14f)}
-            "today" -> {line(4f,11f,12f,4f);line(12f,4f,20f,11f);line(5f,10f,5f,20f);line(19f,10f,19f,20f);line(5f,20f,19f,20f);line(10f,20f,10f,14f);line(14f,20f,14f,14f);line(10f,14f,14f,14f)}
+            "home","today" -> {line(4f,11f,12f,4f);line(12f,4f,20f,11f);line(5f,10f,5f,20f);line(19f,10f,19f,20f);line(5f,20f,19f,20f);line(10f,20f,10f,14f);line(14f,20f,14f,14f);line(10f,14f,14f,14f)}
             "cook" -> {drawRoundRect(color,androidx.compose.ui.geometry.Offset(4*s,11*s),androidx.compose.ui.geometry.Size(16*s,9*s),androidx.compose.ui.geometry.CornerRadius(3*s),style=stroke);line(2f,11f,22f,11f);line(9f,4f,9f,8f);line(14f,4f,14f,8f)}
             "menu" -> {drawRoundRect(color,androidx.compose.ui.geometry.Offset(4*s,5*s),androidx.compose.ui.geometry.Size(16*s,16*s),androidx.compose.ui.geometry.CornerRadius(2*s),style=stroke);line(4f,10f,20f,10f);line(9f,3f,9f,7f);line(15f,3f,15f,7f);line(8f,14f,15f,14f);line(8f,17f,13f,17f)}
             "shop" -> {val path=Path().apply {moveTo(5*s,8*s);lineTo(19*s,8*s);lineTo(17*s,21*s);lineTo(7*s,21*s);close()};drawPath(path,color,style=stroke);drawArc(color,180f,180f,false,androidx.compose.ui.geometry.Offset(9*s,3*s),androidx.compose.ui.geometry.Size(6*s,10*s),style=stroke)}

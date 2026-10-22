@@ -24,46 +24,10 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-fun premiumNote(s: AppState) = when(s.premiumState()) {
-    "soon" -> "откроется через ${max(1,7-s.dayNumber())} ${plural(max(1,7-s.dayNumber()),"день","дня","дней")}, первая неделя бесплатно"
-    "trial" -> "бесплатно ещё ${14-s.dayNumber()} ${plural(14-s.dayNumber(),"день","дня","дней")}"
-    "expired" -> "299 ₽ в месяц"
-    else -> "подключено"
-}
-private fun mealName(meal: String)=mealLabels[meal].orEmpty()
-private fun servingsText(n: Int)="$n ${plural(n,"порция","порции","порций")}"
+internal fun mealName(meal: String)=mealLabels[meal].orEmpty()
+internal fun servingsText(n: Int)="$n ${plural(n,"порция","порции","порций")}"
 
-// ---------- Home ----------
-@Composable internal fun HomeScreen(m: AppModel) {
-    val s=m.state;val plan=s.plan;val name=s.profile.members.firstOrNull()?.name.orEmpty()
-    val hour=Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).hour
-    val greeting=when {hour<5 -> "Доброй ночи";hour<12 -> "Доброе утро";hour<18 -> "Добрый день";else -> "Добрый вечер"}
-    val rows=shoppingRows(m);val left=rows.filter {!it.covered && it.item.ingredient.id !in s.bought}
-    Page {
-        Heading(dateLabel(s.today().toString()),greeting+if(name.isNotBlank()) ", $name" else "")
-        ScenarioCard("Что приготовить из того, что есть?",if(m.have().isEmpty()) "Отметьте продукты — подберём основное и гарнир, суп или целое блюдо" else "Дома ${m.have().size} ${plural(m.have().size,"продукт","продукта","продуктов")} — подберём основное и гарнир") {m.open("cook")}
-        ScenarioCard("Меню на неделю",if(plan==null) "Составим за минуту по профилю семьи" else "${dateLabel(plan.days.first().date).substringAfter(", ")} — ${dateLabel(plan.days.last().date).substringAfter(", ")} · ${if(plan.approved) "утверждено" else "черновик, нужно утвердить"}") {
-            if(plan==null) {m.weekFromApp=true;m.onboardingStep=6;m.update(m.state.copy(stage="quiz"))} else m.open("menu")
-        }
-        if(plan!=null) {
-            val index=plan.days.indexOfFirst {it.date==s.today().toString()}
-            if(index<0) Panel {Text("Неделя закончилась",style=MaterialTheme.typography.titleMedium);Note("Составим новое меню с теми же настройками и учётом ваших оценок.");Primary("Составить новое меню") {m.generate()}}
-            else {
-                Row(verticalAlignment=Alignment.CenterVertically) {Text("Сегодня по меню",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.open("menu")}) {Text("Вся неделя")}}
-                plan.days[index].slots.forEachIndexed {si,slot -> MealCard(m,index,si,slot,true)}
-                if(s.kcalVisible()) CaloriesPanel(m,index)
-            }
-        }
-        if(rows.isNotEmpty()) ScenarioCard("Покупки",if(left.isEmpty()) "Всё куплено" else "Осталось купить ${left.size} ${plural(left.size,"продукт","продукта","продуктов")}${if(s.premiumOn()) " · ≈${money(left.sumOf {it.cost})}" else ""}") {m.open("shop")}
-        if(!s.premiumOn()) Panel(accent=Amber) {
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {AppIcon("lock",Amber);Text("Бюджет и калории",style=MaterialTheme.typography.titleMedium);Badge("Premium",true)}
-            Note(if(s.premiumState()=="soon") "Откроются через ${max(1,7-s.dayNumber())} ${plural(max(1,7-s.dayNumber()),"день","дня","дней")}: первая неделя бесплатно, дальше 299 ₽ в месяц." else "Пробная неделя Premium закончилась — 299 ₽ в месяц.")
-            TextButton(onClick={m.open("sub")}) {Text("Что входит")}
-        }
-        Note("Каталог: ${m.catalog.recipes.size} рецептов")
-    }
-}
-@Composable private fun CaloriesPanel(m: AppModel,index: Int) {
+@Composable internal fun CaloriesPanel(m: AppModel,index: Int) {
     val day=m.state.plan!!.days[index]
     var memberIndex by remember {mutableStateOf(0)}
     var foodText by remember {mutableStateOf("")};var foodError by remember {mutableStateOf<String?>(null)}
@@ -86,14 +50,6 @@ private fun servingsText(n: Int)="$n ${plural(n,"порция","порции","�
     }
 }
 
-// ---------- Cook from what you have ----------
-private val pantryGroups=listOf(
-    "Мясо и птица" to listOf("chicken_fillet","chicken_thigh","minced_turkey","minced_mix","beef","pork","turkey","chicken_liver"),
-    "Рыба и морепродукты" to listOf("fish_white","cod","salmon","shrimp","squid","tuna"),
-    "Крупы и макароны" to listOf("buckwheat","rice","pasta","bulgur","barley","quinoa","lentils","noodles","oats"),
-    "Овощи" to listOf("potato","onion","carrot","cabbage","tomato","cucumber","zucchini","bell_pepper","broccoli","cauliflower","garlic","greens","mushrooms"),
-    "Молочное и яйца" to listOf("eggs","milk","sour_cream","cheese","butter","cream","kefir","cottage"),
-    "Другое" to listOf("tomato_paste","canned_tomatoes","chickpeas","beans","tofu","flour","bread","lemon"))
 private data class Ranked(val recipe: Recipe,val missing: Int,val hits: Int)
 private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,missingIngredients(r,have).size,r.ingredients.count {it.id in have && it.id !in pantryStaples})}
     .sortedWith(compareBy<Ranked>({it.missing},{-it.hits},{it.recipe.minutes}))
@@ -103,16 +59,7 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
     var more by remember {mutableStateOf(false)}
     val have=m.have()
     Page {
-        Panel {
-            Row(verticalAlignment=Alignment.CenterVertically) {Text("Что есть дома",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.pantryPicker=true}) {Text(if(have.isEmpty()) "+ Отметить" else "Изменить")}}
-            if(m.inventory==null && m.inventoryBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            val items=m.inventory?.items.orEmpty()
-            if(items.isEmpty()) Note("Пока пусто. Отметьте, что лежит в холодильнике и шкафу, — подберём блюда, где докупать меньше всего.")
-            else FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {items.forEach {item -> Choice("${item.name} ×",true) {m.togglePantry(scope,item.ingredientId)}}}
-            OutlinedButton(onClick={m.scannerProducts=emptyList();m.scannerPhotos=emptyList();m.scanningFridge=true},enabled=m.inventory!=null && !m.inventoryBusy,modifier=Modifier.fillMaxWidth()) {Text("Сфотографировать холодильник")}
-            m.inventoryError?.let {Note(it)}
-            Note("Соль, специи, масло и сахар считаем, что есть.")
-        }
+        Note(if(have.isEmpty()) "Отметьте продукты во вкладке «Дома» — подберём блюда, где докупать меньше всего." else "Дома ${have.size} ${plural(have.size,"продукт","продукта","продуктов")}. Соль, специи, масло и сахар считаем, что есть.")
         Row(verticalAlignment=Alignment.CenterVertically) {
             Text("Готовим на",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
             TextButton(onClick={m.nowServings=max(1,m.portionsNow()-1)}) {Text("−")}
@@ -154,25 +101,6 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
             }
         }
     }
-}
-@Composable internal fun PantryPicker(m: AppModel,scope: CoroutineScope) {
-    var query by remember {mutableStateOf("")}
-    val have=m.have()
-    Dialog(onDismissRequest={m.pantryPicker=false}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.92f),shape=RoundedCornerShape(20.dp)) {Page {
-        Row(verticalAlignment=Alignment.CenterVertically) {Text("Что есть дома",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.pantryPicker=false}) {Text("Готово")}}
-        Note("Отметьте продукты. Количество поправите потом, а фото холодильника распознает всё сразу.")
-        if(m.inventoryBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        m.inventoryError?.let {Note(it)}
-        OutlinedTextField(query,{query=it.take(40)},label={Text("Найти продукт: например, фарш")},singleLine=true,modifier=Modifier.fillMaxWidth())
-        if(query.isNotBlank()) FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-            m.catalog.ingredients.filter {it.name.contains(query.trim(),true)}.take(10).forEach {i -> Choice(i.name,i.id in have) {m.togglePantry(scope,i.id)}}
-        }
-        pantryGroups.forEach {(title,ids) ->
-            Text(title,style=MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {ids.mapNotNull {m.catalog.byIngredient[it]}.forEach {i -> Choice(i.name,i.id in have) {m.togglePantry(scope,i.id)}}}
-        }
-        Primary("Готово · ${have.size} ${plural(have.size,"продукт","продукта","продуктов")}") {m.pantryPicker=false}
-    }}}
 }
 @Composable internal fun NowDialog(m: AppModel,recipe: Recipe) {
     val servings=m.portionsNow();val have=m.have();val missing=missingIngredients(recipe,have)
@@ -298,68 +226,6 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
     }}}
 }
 
-// ---------- Week menu ----------
-@Composable internal fun MenuScreen(m: AppModel) {
-    val plan=m.state.plan
-    if(plan==null) {Page {
-        Heading("Меню на неделю","Меню ещё нет")
-        Note("Составим по профилю семьи: завтраки, супы на обед, второе на ужин — и сразу список покупок.")
-        Primary("Составить меню") {m.weekFromApp=true;m.onboardingStep=6;m.update(m.state.copy(stage="quiz"))}
-        Secondary("Или приготовить из того, что есть") {m.open("cook")}
-    };return}
-    val rows=shoppingRows(m);val cost=rows.filter {!it.covered}.sumOf {it.cost}
-    Page {
-        Heading("Меню на неделю","${dateLabel(plan.days.first().date).substringAfter(", ")} — ${dateLabel(plan.days.last().date).substringAfter(", ")}")
-        Text(if(plan.approved) "Утверждено" else "Черновик — замените лишнее и утвердите",color=if(plan.approved) MaterialTheme.colorScheme.primary else Amber)
-        Panel {
-            if(m.state.premiumOn() && m.state.profile.budgetSet) {
-                Text("Оценка покупок",style=MaterialTheme.typography.titleMedium)
-                Text("≈${money(cost)} / ${m.state.profile.budget} ₽")
-                LinearProgressIndicator(progress={(cost/m.state.profile.budget).toFloat().coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth(),color=if(cost>m.state.profile.budget) Amber else MaterialTheme.colorScheme.primary)
-            } else {Text("Покупки на неделю: ${rows.count {!it.covered}} ${plural(rows.count {!it.covered},"продукт","продукта","продуктов")}",style=MaterialTheme.typography.titleMedium)}
-            Note(if(m.state.premiumOn()) "Оценка по ценам магазина на 20–21 октября, без учёта фасовок и акций." else "Лимит бюджета и сравнение магазинов — в Premium.")
-        }
-        if(plan.approved) Secondary("Отправить меню семье") {m.share=true;m.track("share_opened")}
-        m.swapSource?.let {Panel {Note("Выберите другое блюдо кнопкой «Поменять сюда».");TextButton(onClick={m.swapSource=null}) {Text("Отмена")}}}
-        plan.days.forEachIndexed {di,day ->
-            Panel(accent=if(day.date==m.state.today().toString()) Green else null) {
-                Text(dateLabel(day.date),style=MaterialTheme.typography.titleMedium)
-                if(m.state.kcalVisible()) Note("≈${day.slots.sumOf {s -> m.catalog.byRecipe[s.recipeId]?.let {m.catalog.nutrition(it)[0]} ?: 0.0}.roundToInt()} ккал на стандартную порцию")
-                day.slots.forEachIndexed {si,s -> MealCard(m,di,si,s,false)}
-            }
-        }
-        if(!plan.approved) Primary("Утвердить меню и собрать список") {m.update(m.state.copy(plan=plan.copy(approved=true)));m.track("menu_approved");m.open("shop")}
-        Secondary("Пересобрать всю неделю") {m.generate()}
-    }
-}
-@Composable internal fun MealCard(m: AppModel,di: Int,si: Int,slot: Slot,compact: Boolean) {
-    val r=m.catalog.byRecipe[slot.recipeId]
-    if(r==null) {Note("${mealName(slot.meal)}: не нашли подходящее блюдо. Ослабьте ограничения в профиле.");return}
-    Surface(shape=RoundedCornerShape(12.dp),color=if(slot.cooked) Soft else MaterialTheme.colorScheme.surface) {
-        Column(Modifier.padding(4.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth().clickable {m.selectedSlot=m.recipePosition(di,si)},verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                Picture(r.imageUrl,Modifier.size(64.dp))
-                Column(Modifier.weight(1f)) {
-                    Note(mealName(slot.meal))
-                    Text(r.name,fontFamily=DishFont.current,fontWeight=FontWeight.SemiBold)
-                    Note("${r.minutes} мин"+(if(m.state.kcalVisible()) " · ${m.catalog.nutrition(r)[0].roundToInt()} ккал" else "")+" · ${slot.servings} порц.")
-                    if(slot.leftover) Note("Остатки со вчера")
-                    if(slot.cooked) Text("Приготовлено",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelSmall)
-                }
-                if(!compact) TextButton(onClick={m.replacement=m.recipePosition(di,si)}) {AppIcon("replace",MaterialTheme.colorScheme.primary)}
-            }
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                if(compact) {
-                    TextButton(onClick={m.selectedSlot=m.recipePosition(di,si)}) {Text("Готовить")}
-                    FilterChip(selected=m.eatKey(di,si) in m.state.eaten,onClick={m.toggleEat(di,si)},label={Text(if(m.eatKey(di,si) in m.state.eaten) "Съели ✓" else "Съели")})
-                } else if(!slot.leftover && slot.servings<=m.state.profile.portions()) {
-                    TextButton(onClick={if(m.swapSource==null) m.swapSource=di to si else m.swap(di to si)}) {Text(if(m.swapSource==null) "Переместить" else "Поменять сюда",style=MaterialTheme.typography.labelSmall)}
-                }
-            }
-        }
-    }
-}
-
 // ---------- Shopping ----------
 internal data class ShoppingRow(val item: ShoppingItem,val toBuy: Double,val stock: Double,val covered: Boolean,val cost: Double)
 internal fun shoppingRows(m: AppModel): List<ShoppingRow> = m.engine.shopping(m.state).map {item ->
@@ -367,51 +233,7 @@ internal fun shoppingRows(m: AppModel): List<ShoppingRow> = m.engine.shopping(m.
     val need=(item.amount-stock).coerceAtLeast(0.0);val buy=if(i.unit in listOf("g","ml")) need else kotlin.math.ceil(need-.001)
     ShoppingRow(item,buy,stock,buy<=0.0001,buy*price(i,m.state.store,m.state.profile.city))
 }
-private fun storeUrl(i: Ingredient,store: String)=if(store=="lavka" && i.lavkaPath!=null) "https://lavka.yandex.ru${i.lavkaPath}" else if(store=="lavka") "https://lavka.yandex.ru/search?text=${i.name.encodeURLParameter()}" else "https://vkusvill.ru/search/?q=${i.name.encodeURLParameter()}"
-@Composable internal fun ShoppingScreen(m: AppModel) {
-    val clipboard=LocalClipboardManager.current;val uri=LocalUriHandler.current;val scope=rememberCoroutineScope()
-    val rows=shoppingRows(m);val need=rows.filter {!it.covered};val left=need.filter {it.item.ingredient.id !in m.state.bought}
-    if(rows.isEmpty()) {Page {
-        Heading("Покупки","Список пуст")
-        Note("Он соберётся сам из меню на неделю или из блюда, которое вы выберете в «Готовить».")
-        Primary("Меню на неделю") {m.open("menu")}
-        Secondary("Приготовить из того, что есть") {m.open("cook")}
-    };return}
-    val premium=m.state.premiumOn()
-    Page {
-        Heading("Покупки","Список")
-        if(m.state.plan?.approved==false) Panel {Note("Меню ещё не утверждено: список может измениться после замен.");TextButton(onClick={m.update(m.state.copy(plan=m.state.plan?.copy(approved=true)));m.track("menu_approved")}) {Text("Утвердить меню")}}
-        Panel {
-            Text("Осталось купить: ${left.size}"+if(premium) " · ≈${money(left.sumOf {it.cost})}" else "",style=MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("vv" to "ВкусВилл","lavka" to "Яндекс Лавка").forEach {(key,label) -> Choice(label,m.state.store==key) {m.update(m.state.copy(store=key))}}}
-            if(left.isNotEmpty()) Primary("Собрать корзину по шагам") {m.cart=CartSession(left.map {it.item.ingredient.id});m.track("cart_started")}
-            TextButton(onClick={clipboard.setText(AnnotatedString(left.joinToString("\n") {"${it.item.ingredient.name} — ${quantity(it.item.ingredient,it.toBuy)}"}));m.track("list_copied")}) {Text("Копировать список")}
-            Note("Одинаковые продукты из разных блюд объединены, то, что есть дома, вычтено. Цены на 20–21 октября."+if(premium) "" else " Сравнение магазинов — в Premium.")
-            if(premium) TextButton(onClick={m.open("promo")}) {Text("Акции и сравнение магазинов")}
-        }
-        need.groupBy {it.item.ingredient.category}.forEach {(category,products) ->
-            Text(category,style=MaterialTheme.typography.titleMedium)
-            Panel {products.forEach {row ->
-                val i=row.item.ingredient
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Checkbox(checked=i.id in m.state.bought,onCheckedChange={m.update(m.state.copy(bought=m.state.bought.toggle(i.id)));if(it) m.track("item_bought")})
-                    Column(Modifier.weight(1f)) {
-                        Text(i.name);Note(quantity(i,row.toBuy)+if(row.stock>0) " · дома ${quantity(i,row.stock)}" else "")
-                        if(premium) Note("ВВ ${money(row.toBuy*price(i,"vv",m.state.profile.city))} · Лавка ${money(row.toBuy*price(i,"lavka",m.state.profile.city))}")
-                        Note("Для: ${row.item.dishes.joinToString()}")
-                    }
-                    TextButton(onClick={m.setStock(scope,i.id,row.item.amount)}) {Text("есть")}
-                    TextButton(onClick={uri.openUri(storeUrl(i,m.state.store))}) {AppIcon("link",MaterialTheme.colorScheme.primary)}
-                }
-            }}
-        }
-        val covered=rows.filter {it.covered}
-        if(covered.isNotEmpty()) {Text("Уже есть дома",style=MaterialTheme.typography.titleMedium);Panel {covered.forEach {Note("${it.item.ingredient.name} — хватает запаса")}}}
-        if(m.state.extraBuy.isNotEmpty()) TextButton(onClick={m.update(m.state.copy(extraBuy=emptyMap()))}) {Text("Убрать докупки из «Готовить»")}
-        val spices=m.state.plan?.days?.flatMap {it.slots}?.flatMap {m.catalog.byRecipe[it.recipeId]?.spices.orEmpty()}?.distinct().orEmpty()
-        if(spices.isNotEmpty()) Panel {Text("Специи — проверьте, есть ли дома");Note(spices.joinToString())}
-    }
-}
+internal fun storeUrl(i: Ingredient,store: String)=if(store=="lavka" && i.lavkaPath!=null) "https://lavka.yandex.ru${i.lavkaPath}" else if(store=="lavka") "https://lavka.yandex.ru/search?text=${i.name.encodeURLParameter()}" else "https://vkusvill.ru/search/?q=${i.name.encodeURLParameter()}"
 @Composable internal fun CartDialog(m: AppModel,session: CartSession,scope: CoroutineScope) {
     val uri=LocalUriHandler.current
     val store=m.state.store;val storeName=if(store=="lavka") "Лавке" else "ВкусВилле"
@@ -488,80 +310,8 @@ internal fun shareText(m: AppModel): String {
     }
 }
 
-// ---------- Profile ----------
-@Composable internal fun ProfileHub(m: AppModel,scope: CoroutineScope) {
-    val s=m.state;val p=s.profile
-    var reset by remember {mutableStateOf(false)}
-    Page {
-        Panel {
-            Text(p.members.firstOrNull()?.name?.ifBlank {null} ?: "Профиль",style=MaterialTheme.typography.titleMedium)
-            Note(Account.current?.login?.let {"${it.display} · вход через ${if(it.via=="max") "MAX" else "Telegram"}"} ?: Account.current?.user?.email ?: "")
-        }
-        Panel {
-            Text("НАСТРОЙКИ",style=MaterialTheme.typography.labelMedium,color=Muted)
-            NavRow("Семья","${p.members.size} ${plural(p.members.size,"человек","человека","человек")} · рост, вес, активность") {m.open("family")}
-            NavRow("Питание и ограничения","${diets[p.diet] ?: p.diet}"+(if(p.allergies.isNotEmpty()) " · аллергии: ${p.allergies.size}" else "")+(if(p.dislikes.isNotEmpty()) " · не едим: ${p.dislikes.size}" else "")) {m.open("food")}
-            NavRow("Неделя и напоминания",p.meals.mapNotNull {mealLabels[it]?.lowercase()}.joinToString()+" · напоминания "+(if(p.reminder) "в ${p.reminderTime}" else "выключены")) {m.open("week")}
-        }
-        Panel(accent=if(s.premiumOn()) null else Amber) {
-            Text("PREMIUM",style=MaterialTheme.typography.labelMedium,color=Muted)
-            NavRow("Подписка",when(s.premiumState()) {"paid" -> "Подключена";"trial" -> "Пробная неделя: ${premiumNote(s)}";"soon" -> premiumNote(s).replaceFirstChar {it.uppercase()};else -> "Пробная неделя закончилась"}) {m.open("sub")}
-            NavRow("Бюджет и цены",if(s.premiumOn()) "Лимит, акции ВкусВилла и Лавки, сравнение корзины" else premiumNote(s),locked=!s.premiumOn(),badge="Premium") {m.open(if(s.premiumOn()) "promo" else "sub")}
-            NavRow("Калории и КБЖУ",if(s.premiumOn()) (if(p.kcalOn) "Включены" else "Выключены — включить") else premiumNote(s),locked=!s.premiumOn(),badge="Premium") {m.open(if(s.premiumOn()) "kcal" else "sub")}
-        }
-        if(s.plan?.approved==true) Panel {NavRow("Отправить меню семье","Ссылкой или текстом в мессенджер") {m.share=true;m.track("share_opened")}}
-        Panel {
-            Row(verticalAlignment=Alignment.CenterVertically) {Column(Modifier.weight(1f)) {Text("Подборка акций раз в неделю");Note("По умолчанию выключено")};Switch(p.promoOptIn,{m.profile(p.copy(promoOptIn=it))})}
-            Text("Оформление",style=MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("system" to "Системное","light" to "Светлое","dark" to "Тёмное").forEach {(key,label) -> Choice(label,s.theme==key) {m.update(s.copy(theme=key))}}}
-        }
-        Panel {
-            Text("Для пилота",style=MaterialTheme.typography.titleMedium)
-            Note("День ${s.dayNumber()+1} с начала. Перемотайте время, чтобы проверить, как открывается Premium.")
-            FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick={m.update(s.copy(dayShift=s.dayShift+1))}) {Text("+1 день")}
-                OutlinedButton(onClick={m.update(s.copy(dayShift=s.dayShift+7))}) {Text("+неделя")}
-                OutlinedButton(onClick={m.update(s.copy(dayShift=0))},enabled=s.dayShift!=0) {Text("Сегодня")}
-                OutlinedButton(onClick={m.open("metrics")}) {Text("Метрики")}
-            }
-        }
-        Secondary("Выйти") {scope.launch {try {Account.logout()} catch(_: Exception) {} finally {m.resetAccount()}}}
-        TextButton(onClick={reset=true}) {Text("Начать настройку заново")}
-    }
-    if(reset) AlertDialog(onDismissRequest={reset=false},title={Text("Начать заново?")},text={Text("Меню и настройки семьи будут заменены новыми. Запасы «Что есть дома» сохранятся.")},
-        confirmButton={TextButton(onClick={m.update(AppState(stage="quiz",premiumStart=s.premiumStart,subscription=s.subscription,events=s.events));m.onboardingStep=0;m.page=null;m.timers.clear();reset=false}) {Text("Начать заново")}},
-        dismissButton={TextButton(onClick={reset=false}) {Text("Отмена")}})
-}
-@Composable internal fun FamilyPage(m: AppModel) {Page {MembersEditor(m);Note("Норма калорий нужна для размера порций. Подробный подсчёт калорий — в Premium.")}}
-@Composable internal fun FoodPage(m: AppModel) {Page {DietEditor(m);AllergiesEditor(m);DislikesEditor(m);GoalsEditor(m);TastesEditor(m)
-    if(m.state.blocked.isNotEmpty()) Panel {Text("Скрытые блюда");m.state.blocked.forEach {id -> Row(verticalAlignment=Alignment.CenterVertically) {Text(m.catalog.byRecipe[id]?.name ?: id,Modifier.weight(1f));TextButton(onClick={m.update(m.state.copy(blocked=m.state.blocked-id))}) {Text("Вернуть")}}}}
-}}
-@Composable internal fun WeekPage(m: AppModel) {
-    val p=m.state.profile
-    Page {
-        MealsEditor(m);WeekEditor(m)
-        Panel {
-            Row(verticalAlignment=Alignment.CenterVertically) {Text("Напоминание накануне",Modifier.weight(1f));Switch(p.reminder,{m.profile(p.copy(reminder=it))})}
-            if(p.reminder) {
-                FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {listOf("18:00","19:00","20:00","21:00","22:00").forEach {t -> Choice(t,p.reminderTime==t) {m.profile(p.copy(reminderTime=t))}}}
-                Note("Пока напоминание показывается, когда приложение открыто. Сообщение от бота в Telegram или MAX появится позже.")
-            }
-        }
-        Primary("Сохранить и пересобрать меню",p.meals.isNotEmpty()) {m.generate()}
-    }
-}
-@Composable internal fun PremiumLock(m: AppModel,kind: String) {
-    val (title,text)=if(kind=="kcal") "Калории и КБЖУ" to "Норма для каждого члена семьи, КБЖУ блюд и дневник «что съели»." else "Бюджет и цены" to "Лимит на неделю, акции ВкусВилла и Лавки, сравнение корзины: где дешевле."
-    Page {Panel(accent=Amber) {
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {AppIcon("lock",Amber);Text(title,style=MaterialTheme.typography.titleMedium);Badge("Premium",true)}
-        Note(text)
-        Text(if(m.state.premiumState()=="soon") "Откроется через ${max(1,7-m.state.dayNumber())} ${plural(max(1,7-m.state.dayNumber()),"день","дня","дней")} — первая неделя Premium бесплатно." else "Пробная неделя Premium закончилась.")
-        Primary(if(m.state.premiumState()=="soon") "Подробнее о Premium" else "Подключить за 299 ₽ в месяц") {m.open("sub")}
-    }}
-}
 @Composable internal fun KcalPage(m: AppModel) {
-    if(!m.state.premiumOn()) return PremiumLock(m,"kcal")
-    val p=m.state.profile
+        val p=m.state.profile
     Page {
         Panel {
             Row(verticalAlignment=Alignment.CenterVertically) {Column(Modifier.weight(1f)) {Text("Считать калории",style=MaterialTheme.typography.titleMedium);Note("Нормы для взрослых, КБЖУ блюд, дневник «что съели». Для детей нормы не показываем.")}
@@ -574,32 +324,6 @@ internal fun shareText(m: AppModel): String {
             TextButton(onClick={m.open("family")}) {Text("Изменить рост, вес, активность")}
         }
     }
-}
-@Composable internal fun SubscriptionPage(m: AppModel) {
-    val s=m.state
-    var plan by remember {mutableStateOf("year")}
-    Page {
-        val sub=s.subscription
-        if(sub!=null) {
-            Heading("Premium","Подписка подключена")
-            Panel {Text(if(sub.plan=="year") "На год — 1 990 ₽" else "На месяц — 299 ₽");Note("С ${dateLabel(sub.since)}. Напомним за 3 дня до продления. Отменить можно в любой момент — меню и настройки останутся.")
-                Secondary("Отменить подписку (прототип)") {m.update(s.copy(subscription=null));m.track("unsubscribed")}}
-            return@Page
-        }
-        Heading(when(s.premiumState()) {"soon" -> "Откроется через ${max(1,7-s.dayNumber())} ${plural(max(1,7-s.dayNumber()),"день","дня","дней")}";"trial" -> "Бесплатно ещё ${14-s.dayNumber()} ${plural(14-s.dayNumber(),"день","дня","дней")}";else -> "Пробная неделя закончилась"},"Premium")
-        Panel(accent=Amber) {
-            Text("Бюджет и цены",style=MaterialTheme.typography.titleMedium);Note("Лимит на неделю, меню под бюджет, акции ВкусВилла и Лавки, сравнение корзины.")
-            Text("Калории и КБЖУ",style=MaterialTheme.typography.titleMedium);Note("Норма для каждого члена семьи, КБЖУ блюд, дневник «что съели».")
-        }
-        Panel {Text("Остаётся бесплатно",style=MaterialTheme.typography.titleMedium);Note("Меню на неделю, блюда из того, что есть, список покупок и сборка корзины, рецепты с таймером.")}
-        if(s.premiumState()=="soon") Note("Первую неделю Premium дадим бесплатно, без карты. Хотите сразу — можно подключить уже сейчас.")
-        listOf(Triple("year","На год · 1 990 ₽","≈166 ₽ в месяц — на 45% выгоднее"),Triple("month","На месяц · 299 ₽","отмена в любой момент")).forEach {(key,title,note) ->
-            Panel(Modifier.clickable {plan=key},accent=if(plan==key) Green else null) {Text(title,style=MaterialTheme.typography.titleMedium);Note(note)}
-        }
-        Primary("Подключить за ${if(plan=="year") "1 990 ₽" else "299 ₽"} — оплата по СБП") {m.update(s.copy(subscription=Subscription(plan,s.today().toString())));m.track("subscribed",plan)}
-        Note("Прототип: деньги не списываются. В пилоте — ссылка на оплату по СБП, о продлении напомним за 3 дня.")
-    }
-    LaunchedEffect(Unit) {if(s.subscription==null) m.track("paywall_shown",s.premiumState())}
 }
 @Composable internal fun MetricsPage(m: AppModel) {
     val events=m.state.events

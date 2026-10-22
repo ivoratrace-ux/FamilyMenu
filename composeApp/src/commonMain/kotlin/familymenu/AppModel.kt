@@ -24,21 +24,28 @@ class AppModel(val catalog: Catalog) {
     var changeNumber by mutableStateOf(0L)
     var savedNumber by mutableStateOf(0L)
     var syncConflict by mutableStateOf(false)
+    init { syncRecipes() }
+    private fun syncRecipes() { catalog.byRecipe.extra = state.myRecipes.associateBy { it.id } }
     fun applyDocument(document: UserDocument) {
         val prefs = document.preferences
-        state = prefs?.copy(plan = document.menu, stage = if (prefs.onboarded || document.menu != null) "app" else "quiz") ?: AppState(stage = "quiz")
-        loadedAccountId = Account.current?.user?.id; remoteRevision = document.revision; changeNumber = 0; savedNumber = 0; accountReady = true; syncConflict = false; persistenceError = null
+        val local = state
+        // A new account takes over the menu and answers made before signing in.
+        val adopt = prefs == null && document.menu == null && local.onboarded
+        state = if (adopt) local.copy(stage = "app") else prefs?.copy(plan = document.menu, stage = if (prefs.onboarded || document.menu != null) "app" else "quiz", pantryDraft = local.pantryDraft) ?: AppState(stage = "quiz", pantryDraft = local.pantryDraft)
+        syncRecipes()
+        loadedAccountId = Account.current?.user?.id; remoteRevision = document.revision; changeNumber = if (adopt) 1 else 0; savedNumber = 0; accountReady = true; syncConflict = false; persistenceError = null
     }
     fun resetAccount() {
-        state = AppState(stage = "auth"); accountReady = false; loadedAccountId = null; changeNumber = 0; savedNumber = 0; persistenceError = null
-        tab = "today"; page = null; scannerPhotos = emptyList(); scannerProducts = emptyList(); timers.clear(); inventory = null; saveState("")
+        state = AppState(stage = "auth"); syncRecipes(); accountReady = false; loadedAccountId = null; changeNumber = 0; savedNumber = 0; persistenceError = null
+        tab = "menu"; menuDay = 0; page = null; scannerPhotos = emptyList(); scannerProducts = emptyList(); timers.clear(); inventory = null; saveState("")
     }
 
     // Navigation: five tabs; a page is a sub-screen opened over its tab with a back arrow.
-    var tab by mutableStateOf("today")
+    var tab by mutableStateOf("menu")
+    var menuDay by mutableStateOf(0)
     var page by mutableStateOf<String?>(null)
     var pageParent by mutableStateOf<String?>(null)
-    fun open(target: String) { if (target in setOf("today", "cook", "menu", "shop", "profile")) { tab = target; page = null } else { pageParent = tab; page = target }; track("screen", target) }
+    fun open(target: String) { if (target in setOf("menu", "shop", "home", "profile")) { tab = target; page = null } else { pageParent = tab; page = target }; track("screen", target) }
     fun back() { page = null }
 
     // Overlays
@@ -55,6 +62,7 @@ class AppModel(val catalog: Catalog) {
     var scanningFridge by mutableStateOf(false)
     var onboardingStep by mutableStateOf(0)
     var weekFromApp by mutableStateOf(false)
+    var editRecipe by mutableStateOf<String?>(null)
 
     // Scanner (unchanged from the fridge scanner flow)
     var scannerPhotos by mutableStateOf<List<PhotoResult.Success>>(emptyList())
@@ -69,7 +77,7 @@ class AppModel(val catalog: Catalog) {
     var inventoryBusy by mutableStateOf(false)
     var inventoryError by mutableStateOf<String?>(null)
     private val inventoryLock = Mutex()
-    fun have(): Set<String> = inventory?.items?.map { it.ingredientId }?.toSet().orEmpty()
+    fun have(): Set<String> = inventory?.items?.map { it.ingredientId }?.toSet() ?: state.pantryDraft
     fun stock(id: String): Double = inventory?.items?.firstOrNull { it.ingredientId == id }?.quantity ?: 0.0
     private fun inventoryJob(scope: CoroutineScope, action: suspend () -> Unit) {
         scope.launch {
@@ -85,7 +93,17 @@ class AppModel(val catalog: Catalog) {
         }
     }
     fun loadInventory(scope: CoroutineScope) = inventoryJob(scope) { inventory = inventoryService.load() }
-    fun togglePantry(scope: CoroutineScope, id: String) = inventoryJob(scope) {
+    /** Products marked before signing in; saved to the account's stock right after sign-in. */
+    fun flushDraft(scope: CoroutineScope) {
+        val draft = state.pantryDraft; if (draft.isEmpty()) return
+        inventoryJob(scope) {
+            var current = inventory ?: inventoryService.load()
+            draft.filter { id -> current.items.none { it.ingredientId == id } && id in catalog.byIngredient }.forEach { current = inventoryService.edit(current.revision, it, defaultStock(it)) }
+            inventory = current; update(state.copy(pantryDraft = emptySet()))
+        }
+    }
+    fun togglePantry(scope: CoroutineScope, id: String) { if (Account.current == null) update(state.copy(pantryDraft = state.pantryDraft.toggle(id))) else togglePantryRemote(scope, id) }
+    private fun togglePantryRemote(scope: CoroutineScope, id: String) = inventoryJob(scope) {
         val current = inventory ?: inventoryService.load()
         inventory = if (current.items.any { it.ingredientId == id }) inventoryService.delete(current.revision, id)
         else inventoryService.edit(current.revision, id, defaultStock(id))
@@ -118,7 +136,9 @@ class AppModel(val catalog: Catalog) {
     }
 
     fun update(next: AppState) {
+        val recipesChanged = next.myRecipes !== state.myRecipes
         state = next
+        if (recipesChanged) syncRecipes()
         if (Account.current != null) { if (accountReady) changeNumber++; return }
         runCatching { saveState(appJson.encodeToString(next)) }.onFailure { persistenceError = "Не удалось сохранить данные на устройстве. Они доступны до закрытия приложения." }
     }
@@ -130,15 +150,14 @@ class AppModel(val catalog: Catalog) {
     fun profile(profile: Profile) = update(state.copy(profile = profile))
     fun finishOnboarding() {
         if (!state.onboarded || state.premiumStart == null) {
-            update(state.copy(onboarded = true, stage = "app", premiumStart = state.premiumStart ?: state.today().toString()))
+            update(state.copy(onboarded = true, stage = "app"))
             track("onboarding_done", "${state.profile.members.size} чел.")
         } else update(state.copy(stage = "app"))
     }
-    fun generate() {
-        if (!state.onboarded) finishOnboarding()
-        update(state.copy(stage = "app", plan = engine.generate(state, state.today()), bought = emptySet(), eaten = emptySet()))
-        track("menu_built", "неделя ${state.dayNumber() / 7 + 1}")
-        tab = "menu"; page = null
+    fun generate(nextStage: String = "app") {
+        update(state.copy(onboarded = true, stage = nextStage, plan = engine.generate(state, state.today()), bought = emptySet(), eaten = emptySet()))
+        track("menu_built", "${state.profile.days} дн.")
+        tab = "menu"; page = null; menuDay = 0
     }
     fun recipePosition(day: Int, index: Int): Pair<Int, Int> {
         val plan = state.plan ?: return day to index

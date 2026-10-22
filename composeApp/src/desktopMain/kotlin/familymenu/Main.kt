@@ -1,4 +1,4 @@
 package familymenu
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-fun main() = application {Window(onCloseRequest=::exitApplication,title="Семейное меню") {FamilyMenuApp()}}
+fun main() = application {Window(onCloseRequest=::exitApplication,title="Frigo") {FamilyMenuApp()}}

@@ -21,7 +21,7 @@ class MenuIntegrationTest {
         }
     }
     @Test fun weeklyMenuHonorsHardExclusionsAcrossSeeds() {
-        val state=AppState(profile=Profile(diet="vegan",allergies=setOf("nuts","soy"),dislikes=setOf("mushrooms"),meals=mealLabels.keys))
+        val state=AppState(profile=Profile(diet="vegan",allergies=setOf("nuts","soy"),dislikes=setOf("mushrooms"),days=7,mealSetup=mapOf("b" to "breakfast","l" to "soup","s" to "dessert","d" to "pair")))
         repeat(12) {seed ->
             val plan=engine.generate(state,LocalDate(2026,10,21),Random(seed))
             assertEquals(7,plan.days.size)
@@ -46,17 +46,25 @@ class MenuIntegrationTest {
             assertEquals(q.quantity*2,item.amount,.001)
         }
     }
-    @Test fun soupLeftoversReferencePreviousBatchAndAreNeverSalads() {
-        val state=AppState(profile=Profile(meals=setOf("l","d"),soupBatch=true))
-        val plan=engine.generate(state,LocalDate(2026,10,21),Random(42))
-        for(index in listOf(1,3,5)) {
-            val previous=plan.days[index-1].slots.first {it.meal=="l"}
-            val current=plan.days[index].slots.first {it.meal=="l"}
-            assertTrue(current.leftover)
-            assertEquals(previous.recipeId,current.recipeId)
-            assertEquals(state.profile.portions()*2,previous.servings)
-            assertFalse("salad" in catalog.byRecipe.getValue(current.recipeId!!).tags)
+    @Test fun dinnerPairsMainWithSideAndDaysFollowProfile() {
+        val state=AppState(profile=Profile(days=3,mealSetup=mapOf("b" to "none","l" to "soup","s" to "none","d" to "pair")))
+        val plan=engine.generate(state,LocalDate(2026,10,21),Random(7))
+        assertEquals(3,plan.days.size)
+        plan.days.forEach {day ->
+            assertEquals(listOf("l","d"),day.slots.map {it.meal})
+            assertTrue("soup" in catalog.byRecipe.getValue(day.slots[0].recipeId!!).tags)
+            val dinner=day.slots[1].recipeId!!
+            assertTrue(dinner.startsWith("c:"),dinner)
+            val combo=catalog.byRecipe.getValue(dinner)
+            assertTrue(combo.steps.first().startsWith("Гарнир."))
+            assertTrue(engine.shopping(AppState(plan=Plan(listOf(day)))).isNotEmpty())
         }
+    }
+    @Test fun userRecipesJoinThePool() {
+        val mine=Recipe(id="u-test",name="Бабушкин борщ",meal="m",minutes=60,tags=listOf("soup","mine"),ingredients=listOf(Quantity("potato",300.0)),spices=emptyList(),steps=listOf("Сварить"))
+        val state=AppState(myRecipes=listOf(mine))
+        assertTrue(engine.poolKind("soup",state).any {it.id=="u-test"})
+        assertFalse(engine.poolKind("soup",state.copy(profile=Profile(dislikes=setOf("potato")))).any {it.id=="u-test"})
     }
     @Test fun storesAndCitiesChangeCostsWithoutChangingAmounts() {
         val plan=engine.generate(AppState(),LocalDate(2026,10,21),Random(2))
