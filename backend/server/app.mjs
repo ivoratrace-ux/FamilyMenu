@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { createInventoryRepository, createInventoryRouter } from './inventory.mjs';
 import { createCatalogRepository } from './catalog.mjs';
 import { createFridgeRouter, analyzeFridge } from './fridge.mjs';
 import { generateMeals } from './openai.mjs';
@@ -17,7 +18,8 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
 }
 
-export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), authRouter = createAuthRouter() } = {}) {
+export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), authRouter = createAuthRouter() } = {}) {
+  const inventoryRouter = createInventoryRouter({inventory,catalog});
   const fridgeRouter = createFridgeRouter({ apiKey, analyze, catalog, hourlyLimit });
   // A deliberately small global budget for this unauthenticated single-instance prototype.
   let calls = 0, resetAt = Date.now() + 3600000, inFlight = 0;
@@ -27,14 +29,15 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
     };
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
+    if (path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
       const origin = req.headers.origin;
       if (origin && !allowedOrigins.includes(origin) && origin !== `http://${req.headers.host}` && origin !== `https://${req.headers.host}`) return send(403, { error: 'Этот сайт не подключён к API.' });
       if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Expose-Headers', 'Retry-After');
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+      if (path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients') return inventoryRouter(req,path,send,res);
       if (path === '/api/catalog') {
         if (req.method !== 'GET') {res.setHeader('Allow','GET, OPTIONS');return send(405,{error:'Метод не поддерживается.'});}
         try {return send(200,await catalog.load());}

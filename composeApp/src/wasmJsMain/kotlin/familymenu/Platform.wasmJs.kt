@@ -55,3 +55,5 @@ private fun selectPhoto(camera: Boolean,done: (String,String,String)->Unit): Uni
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
 actual fun decodePhotoPreview(base64: String): androidx.compose.ui.graphics.ImageBitmap =
     org.jetbrains.skia.Image.makeFromEncoded(kotlin.io.encoding.Base64.decode(base64)).toComposeImageBitmap()
+
+actual val supportsPhotoCamera: Boolean = false

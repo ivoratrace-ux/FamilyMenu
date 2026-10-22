@@ -75,3 +75,5 @@ actual fun decodePhotoPreview(base64: String): androidx.compose.ui.graphics.Imag
     val bytes=Base64.decode(base64,Base64.DEFAULT)
     return requireNotNull(BitmapFactory.decodeByteArray(bytes,0,bytes.size)).asImageBitmap()
 }
+
+actual val supportsPhotoCamera: Boolean = true

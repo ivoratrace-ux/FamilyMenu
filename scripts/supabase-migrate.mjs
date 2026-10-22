@@ -31,5 +31,6 @@ for(const name of (await readdir(dir)).filter(n=>/^\d+_[a-z_]+\.sql$/.test(n)).s
  await query(`begin;\n${sql}\ninsert into familymenu_internal.migrations(name) values ('${name}');\ncommit;`);
  console.log('Applied:',name);
 }
+if(process.argv.includes('--migrations-only')) {console.log('Migrations applied without reimporting the catalog.');process.exit(0);}
 await query(seed);console.log('Seed imported (repeatable upsert; history is preserved).');
 console.log(JSON.stringify(await query('select (select count(*) from public.dishes) as dishes, (select count(*) from public.dish_steps) as steps, (select count(*) from public.ingredients) as ingredients, (select count(*) from public.dish_ingredients) as links',true)));

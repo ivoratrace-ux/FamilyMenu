@@ -108,7 +108,7 @@ private val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
             }
             Box(Modifier.weight(1f)) {
                 // The upload uses the app scope and survives navigation between tabs.
-                if(m.tab=="home" && m.page==null) ScannerScreen(m,scope,scannerService) else when(m.page) {
+                if(m.tab=="home" && m.page==null) InventoryScreen(m,scope,scannerService) else when(m.page) {
                     "profile" -> ProfileScreen(m)
                     "promo" -> PromoScreen(m)
                     else -> when(m.tab) {"menu" -> MenuScreen(m); "shop" -> ShoppingScreen(m); else -> TodayScreen(m)}

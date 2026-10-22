@@ -103,3 +103,5 @@ private fun encodeImage(image: UIImage?): PhotoResult.Success {
             require(data.length<=4uL*1024uL*1024uL) {"Фото должно быть не больше 4 МБ."}
             return PhotoResult.Success(data.base64EncodedStringWithOptions(0u),"image/jpeg")
 }
+
+actual val supportsPhotoCamera: Boolean = true
