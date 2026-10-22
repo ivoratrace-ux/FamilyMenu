@@ -29,7 +29,7 @@ const bundle=(id=user)=>({user:{id,application:'telegram',providerUserId:id,logi
 const bodyText=`(document.body?.innerText || '')`;
 try {
  let pages;
- for(let n=0;n<100;n++){if(chromeError)throw chromeError;try{pages=(await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter(target=>target.type==='page' && target.url==='about:blank' && target.webSocketDebuggerUrl);if(pages.length)break;}catch{}await delay(100);}
+ for(let n=0;n<300;n++){if(chromeError)throw chromeError;try{pages=(await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter(target=>target.type==='page' && target.webSocketDebuggerUrl && !/^chrome-extension:/.test(target.url));if(pages.length)break;}catch{}await delay(100);}
  assert.ok(pages?.length,'Chrome did not start');ws=new WebSocket(pages[0].webSocketDebuggerUrl);await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j;});
  let id=0;const pending=new Map();send=(method,params={})=>new Promise((resolve,reject)=>{const requestId=++id;const timer=setTimeout(()=>{pending.delete(requestId);reject(Error('CDP timeout: '+method));},30000);pending.set(requestId,r=>{clearTimeout(timer);r.error?reject(Error(JSON.stringify(r.error))):resolve(r.result)});ws.send(JSON.stringify({id:requestId,method,params}));});
  ws.onmessage=async event=>{
