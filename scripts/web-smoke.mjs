@@ -240,13 +240,13 @@ try {
   await click('Готовить');await click('Готовить по шагам с таймером');await wait(has('Шаг 1 из'),'Step-by-step cooking did not open');
   await click('Закрыть');await wait(`!(${has('Шаг 1 из')})`,'Recipe screen did not close');
   // Shopping → Premium offer → auto cart
-  await click('Покупки');await wait(has('Корзина примерно'),'Shopping list did not render');
+  await click('Покупки');await wait(has('Осталось купить'),'Shopping list did not render');
   await click('Собрать корзину автоматически ›');await wait(has('Что входит в Premium'),'Premium offer did not open');
   await click('Подключить за 1 990 ₽');await click('Утвердить меню');
   await clickWhere(`t.startsWith('Собрать корзину ·')`,'Collect cart');
   await wait(has('Положила ✓'),'Cart session did not open');await click('Положила ✓');
   await click('Закрыть');await wait(`!(${has('Положила ✓')})`,'Cart screen did not close');
-  await click('‹ Назад');
+  await click('‹');
   // Home: fridge photos → recognition → replace stock
   await click('Дома');await wait(has('Что есть дома'),'Home tab did not render');
   await click('Фото холодильника');

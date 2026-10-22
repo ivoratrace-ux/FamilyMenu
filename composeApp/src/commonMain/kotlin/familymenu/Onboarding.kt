@@ -47,30 +47,30 @@ private val features=listOf(
     Column(Modifier.fillMaxSize().pointerInput(Unit) {
         detectHorizontalDragGestures(onDragStart={drag=0f},onDragEnd={if(drag<-80) next() else if(drag>80 && index>0) index--}) {_,amount -> drag+=amount}
     }.padding(16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            LinearProgressIndicator(progress={(index+1)/features.size.toFloat()},modifier=Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)))
-            TextButton(onClick={m.update(m.state.copy(stage="quiz"))}) {Text("Пропустить")}
-        }
-        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text(f.title,Modifier.weight(1f,fill=false),fontSize=24.sp,fontWeight=FontWeight.Bold,maxLines=1,overflow=TextOverflow.Ellipsis)
-            if(f.premium) Badge("Premium",true)
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Spacer(Modifier.width(44.dp))
+            Box(Modifier.weight(1f),contentAlignment=Alignment.Center) {Progress((index+1)/features.size.toFloat(),Modifier.fillMaxWidth(.7f))}
+            Ghost("Пропустить") {m.update(m.state.copy(stage="quiz"))}
         }
         Box(Modifier.fillMaxWidth().weight(1f),contentAlignment=Alignment.Center) {FeatureArt(m,index)}
-        Text(f.text,style=MaterialTheme.typography.bodyLarge)
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Text(f.title,Modifier.weight(1f,fill=false),style=MaterialTheme.typography.headlineSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+            if(f.premium) Badge("Premium",true)
+        }
+        Text(f.text,style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Primary(if(index<features.lastIndex) "Дальше" else "Начать") {next()}
-        TextButton(onClick={m.update(m.state.copy(stage="auth"))},Modifier.align(Alignment.CenterHorizontally)) {Text("Уже есть аккаунт? Войти")}
+        TextButton(onClick={m.update(m.state.copy(stage="auth"))},Modifier.align(Alignment.CenterHorizontally)) {Text("Уже есть аккаунт? Войти",fontWeight=FontWeight.SemiBold)}
     }
 }
 @Composable private fun Overlay(text: String,modifier: Modifier,warn: Boolean=false) {
-    Text(text,modifier.clip(RoundedCornerShape(14.dp)).background(if(warn) AmberSoft else Color.White).padding(horizontal=12.dp,vertical=6.dp),color=if(warn) Amber else Ink,fontWeight=FontWeight.SemiBold)
+    Text(text,modifier.clip(RoundedCornerShape(16.dp)).background(if(warn) AmberSoft else Color.White).border(1.dp,Line,RoundedCornerShape(16.dp)).padding(horizontal=14.dp,vertical=8.dp),color=if(warn) Amber else Ink,fontWeight=FontWeight.Bold)
 }
 @Composable private fun FeatureArt(m: AppModel,index: Int) {
     val url={id: String -> m.catalog.byRecipe[id]?.imageUrl}
     when(index) {
         0 -> Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
             Picture(url("p1"),Modifier.fillMaxSize())
-            Overlay("⏱ 25:00",Modifier.align(Alignment.TopEnd).padding(12.dp))
-            Overlay("Шаг 2 из 5 · обжарьте на сковороде",Modifier.align(Alignment.BottomStart).padding(12.dp))
+            Overlay("4:59",Modifier.align(Alignment.BottomCenter).padding(bottom=16.dp))
         }
         1 -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             listOf(listOf("m5","b1"),listOf("m3","p11")).forEach {row -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {row.forEach {Picture(url(it),Modifier.weight(1f).aspectRatio(1f))}}}
@@ -79,14 +79,14 @@ private val features=listOf(
         2 -> Panel {
             Text("Корзина на неделю",style=MaterialTheme.typography.titleMedium)
             Row(verticalAlignment=Alignment.Bottom) {Text("3 480 ₽",fontSize=30.sp,fontWeight=FontWeight.Bold);Text("  из 4 000 ₽",color=Muted)}
-            LinearProgressIndicator(progress={.87f},modifier=Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)))
+            Progress(.87f)
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {Badge("ВкусВилл · 3 480 ₽");Badge("Лавка · 3 910 ₽",true)}
             Note("Дешевле во ВкусВилле на 430 ₽")
         }
         else -> Panel {
             Text("Сегодня",style=MaterialTheme.typography.titleMedium)
             Row(verticalAlignment=Alignment.Bottom) {Text("1 640",fontSize=30.sp,fontWeight=FontWeight.Bold);Text("  из 2 100 ккал",color=Muted)}
-            listOf("Белки" to .7f,"Жиры" to .55f,"Углеводы" to .8f).forEach {(label,v) -> Text(label,style=MaterialTheme.typography.labelMedium);LinearProgressIndicator(progress={v},modifier=Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)))}
+            listOf("Белки" to .7f,"Жиры" to .55f,"Углеводы" to .8f).forEach {(label,v) -> Text(label,style=MaterialTheme.typography.labelMedium);Progress(v)}
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {Badge("Похудение");Badge("Без свинины")}
         }
     }
@@ -102,13 +102,13 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
     var goal by remember {mutableStateOf(if(m.state.onboarded) (p.goals.firstOrNull() ?: "none") else null)}
     var diet by remember {mutableStateOf(if(m.state.onboarded) p.diet else null)}
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(horizontal=8.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
-            TextButton(onClick={if(step>0) m.onboardingStep=step-1 else m.update(m.state.copy(stage=if(m.state.plan!=null) "app" else "intro"))}) {Text("‹ Назад")}
-            LinearProgressIndicator(progress={(step+1)/5f},modifier=Modifier.weight(1f).padding(horizontal=8.dp).height(6.dp).clip(RoundedCornerShape(3.dp)))
-            Text("${step+1}/5",color=Muted,style=MaterialTheme.typography.labelMedium)
+        Row(Modifier.padding(start=16.dp,end=16.dp,top=12.dp,bottom=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            IconBox({if(step>0) m.onboardingStep=step-1 else m.update(m.state.copy(stage=if(m.state.plan!=null) "app" else "intro"))}) {Text("‹",fontSize=22.sp,color=MaterialTheme.colorScheme.primary)}
+            Box(Modifier.weight(1f),contentAlignment=Alignment.Center) {Progress((step+1)/5f,Modifier.fillMaxWidth(.75f))}
+            Spacer(Modifier.width(36.dp))
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=16.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-            Text(stepTitles[step],fontSize=24.sp,fontWeight=FontWeight.Bold)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=16.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {Eyebrow("Вопрос ${step+1} из 5");Text(stepTitles[step],style=MaterialTheme.typography.headlineSmall)}
             when(step) {
                 0 -> {
                     Note("Под цель подберём блюда и посчитаем порции.")
@@ -149,12 +149,14 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
     }
 }
 @Composable private fun AnswerRow(label: String,selected: Boolean,onClick:()->Unit) {
-    Surface(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick=onClick),shape=RoundedCornerShape(14.dp),
+    Surface(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick=onClick),shape=RoundedCornerShape(18.dp),
         border=BorderStroke(if(selected) 2.dp else 1.dp,if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
         color=if(selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface) {
-        Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically) {
-            Text(label,Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
-            RadioButton(selected,onClick=onClick)
+        Row(Modifier.padding(horizontal=16.dp,vertical=18.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text(label,Modifier.weight(1f),fontSize=17.sp,fontWeight=FontWeight.SemiBold)
+            Box(Modifier.size(22.dp).clip(RoundedCornerShape(999.dp)).border(2.dp,if(selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(999.dp)),contentAlignment=Alignment.Center) {
+                if(selected) Box(Modifier.size(12.dp).clip(RoundedCornerShape(999.dp)).background(MaterialTheme.colorScheme.primary))
+            }
         }
     }
 }
@@ -163,10 +165,12 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
 @Composable internal fun CollapsingChips(items: List<Pair<String,String>>,selected: Set<String>,maxRows: Int=4,onToggle:(String)->Unit) {
     var expanded by remember {mutableStateOf(false)}
     Layout(content={
-        items.forEach {(key,label) -> FilterChip(selected=key in selected,onClick={onToggle(key)},label={Text(label)},shape=RoundedCornerShape(24.dp))}
-        AssistChip(onClick={expanded=!expanded},label={Text(if(expanded) "Свернуть" else "Ещё",color=MaterialTheme.colorScheme.primary)},shape=RoundedCornerShape(24.dp))
+        items.forEach {(key,label) -> Choice(label,key in selected) {onToggle(key)}}
+        Surface(onClick={expanded=!expanded},shape=RoundedCornerShape(999.dp),color=MaterialTheme.colorScheme.secondaryContainer,contentColor=MaterialTheme.colorScheme.primary) {
+            Text(if(expanded) "Свернуть" else "Ещё ▾",Modifier.padding(horizontal=13.dp,vertical=7.dp),fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+        }
     }) {measurables,constraints ->
-        val gap=6.dp.roundToPx();val loose=constraints.copy(minWidth=0,minHeight=0)
+        val gap=8.dp.roundToPx();val loose=constraints.copy(minWidth=0,minHeight=0)
         val placeables=measurables.map {it.measure(loose)}
         val more=placeables.last();val chips=placeables.dropLast(1);val width=constraints.maxWidth
         fun rows(list: List<Int>,reserveLast: Int=0): List<MutableList<Int>> {
@@ -211,7 +215,8 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
         else -> Unit
     }}
     OutlinedTextField(query,{query=it.take(40)},placeholder={Text("Найти продукт: курица, рис, сыр…")},singleLine=true,
-        shape=RoundedCornerShape(16.dp),textStyle=MaterialTheme.typography.titleMedium,modifier=Modifier.fillMaxWidth().heightIn(min=60.dp))
+        shape=RoundedCornerShape(12.dp),textStyle=MaterialTheme.typography.bodyLarge,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),
+        colors=OutlinedTextFieldDefaults.colors(unfocusedContainerColor=MaterialTheme.colorScheme.surface,focusedContainerColor=MaterialTheme.colorScheme.surface,unfocusedBorderColor=MaterialTheme.colorScheme.outlineVariant))
     if(query.isNotBlank()) {
         val found=m.catalog.ingredients.filter {it.name.contains(query.trim(),true)}.take(12)
         if(found.isEmpty()) Note("Ничего не нашли. Попробуйте по-другому.")
@@ -220,14 +225,15 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
     Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
         (0..1).forEach {slot ->
             val photo=m.scannerPhotos.getOrNull(slot)
-            Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.secondaryContainer)
-                .border(1.dp,MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(16.dp)).clickable {if(photo==null) picker.launch(supportsPhotoCamera)},contentAlignment=Alignment.Center) {
+            Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
+                .border(1.dp,MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(14.dp)).clickable {if(photo==null) picker.launch(supportsPhotoCamera)},contentAlignment=Alignment.Center) {
                 if(photo!=null) {
                     val bitmap=remember(photo) {runCatching {decodePhotoPreview(photo.base64)}.getOrNull()}
                     bitmap?.let {Image(it,null,Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}
                     Text("×",Modifier.align(Alignment.TopEnd).padding(6.dp).clip(RoundedCornerShape(12.dp)).background(Color.White).clickable {m.scannerPhotos=m.scannerPhotos.filterIndexed {i,_ -> i!=slot}}.padding(horizontal=8.dp),fontWeight=FontWeight.Bold)
                 } else Column(horizontalAlignment=Alignment.CenterHorizontally) {
-                    Text("+",fontSize=34.sp,color=MaterialTheme.colorScheme.primary)
+                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(999.dp)).background(MaterialTheme.colorScheme.secondaryContainer),contentAlignment=Alignment.Center) {Text("+",fontSize=26.sp,color=MaterialTheme.colorScheme.primary)}
+                    Spacer(Modifier.height(8.dp))
                     Text(if(slot==0) "Фото холодильника" else "Фото полок",style=MaterialTheme.typography.labelMedium,color=Muted)
                 }
             }
@@ -240,7 +246,7 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
     } else Note("Сфотографируйте холодильник — распознаем продукты сами. Или отметьте вручную ниже.")
     m.inventoryError?.let {Note(it)}
     val groups=remember {m.catalog.ingredients.filter {it.id !in pantryStaples}.groupBy {it.category}.entries.sortedBy {it.key}.associate {it.key to it.value}}
-    Surface(shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
+    Surface(shape=RoundedCornerShape(12.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),color=MaterialTheme.colorScheme.surface) {
         Column {
             groups.entries.forEachIndexed {gi,(category,list) ->
                 if(gi>0) HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
@@ -248,9 +254,9 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
                 Row(Modifier.fillMaxWidth().clickable {open=open.toggle(category)}.padding(horizontal=14.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
                     Text(category,Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
                     if(count>0) Badge("$count")
-                    Text(if(isOpen) "−" else "+",Modifier.padding(start=10.dp),fontSize=24.sp,color=MaterialTheme.colorScheme.primary)
+                    Box(Modifier.padding(start=10.dp).size(28.dp).clip(RoundedCornerShape(999.dp)).background(MaterialTheme.colorScheme.secondaryContainer),contentAlignment=Alignment.Center) {Text(if(isOpen) "−" else "+",fontSize=18.sp,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.SemiBold)}
                 }
-                if(isOpen) FlowRow(Modifier.padding(start=14.dp,end=14.dp,bottom=12.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                if(isOpen) FlowRow(Modifier.padding(start=14.dp,end=14.dp,bottom=14.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     list.sortedBy {it.name}.forEach {i -> Choice(i.name,i.id in have) {m.togglePantry(scope,i.id)}}
                 }
             }
@@ -282,7 +288,7 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
             Row(verticalAlignment=Alignment.CenterVertically) {
                 Text(label,Modifier.width(92.dp),style=MaterialTheme.typography.titleMedium)
                 Box(Modifier.weight(1f)) {
-                    OutlinedButton(onClick={open=true},Modifier.fillMaxWidth(),shape=RoundedCornerShape(12.dp)) {
+                    OutlinedButton(onClick={open=true},Modifier.fillMaxWidth().heightIn(min=44.dp),shape=RoundedCornerShape(10.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),contentPadding=PaddingValues(horizontal=12.dp)) {
                         Text(kindLabels.getValue(current),Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,color=if(current=="none") Muted else MaterialTheme.colorScheme.onSurface);Text(" ▾")
                     }
                     DropdownMenu(open,{open=false}) {
@@ -295,10 +301,10 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
     }
 }
 @Composable internal fun Counter(value: String,canMinus: Boolean,canPlus: Boolean,minus:()->Unit,plus:()->Unit) {
-    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        OutlinedButton(onClick=minus,enabled=canMinus,shape=RoundedCornerShape(12.dp),contentPadding=PaddingValues(0.dp),modifier=Modifier.size(44.dp)) {Text("−",fontSize=20.sp)}
-        Text(value,Modifier.widthIn(min=72.dp),style=MaterialTheme.typography.titleMedium,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
-        OutlinedButton(onClick=plus,enabled=canPlus,shape=RoundedCornerShape(12.dp),contentPadding=PaddingValues(0.dp),modifier=Modifier.size(44.dp)) {Text("+",fontSize=20.sp)}
+    Row(Modifier.clip(RoundedCornerShape(10.dp)).border(1.dp,MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface),verticalAlignment=Alignment.CenterVertically) {
+        Box(Modifier.size(width=44.dp,height=40.dp).clickable(enabled=canMinus,onClick=minus),contentAlignment=Alignment.Center) {Text("−",fontSize=20.sp,color=if(canMinus) MaterialTheme.colorScheme.primary else Muted.copy(alpha=.4f))}
+        Text(value,Modifier.widthIn(min=48.dp).padding(horizontal=6.dp),fontSize=17.sp,fontWeight=FontWeight.SemiBold,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+        Box(Modifier.size(width=44.dp,height=40.dp).clickable(enabled=canPlus,onClick=plus),contentAlignment=Alignment.Center) {Text("+",fontSize=20.sp,color=if(canPlus) MaterialTheme.colorScheme.primary else Muted.copy(alpha=.4f))}
     }
 }
 
@@ -311,8 +317,8 @@ private val stepTitles=listOf("Какая у вас цель?","Какой у в
         m.generate(nextStage=if(Account.current!=null) "app" else "ready")
     }
     Column(Modifier.fillMaxSize().padding(24.dp),verticalArrangement=Arrangement.spacedBy(20.dp,Alignment.CenterVertically),horizontalAlignment=Alignment.CenterHorizontally) {
-        Image(painterResource(Res.drawable.frigo_logo),contentDescription="Frigo",modifier=Modifier.fillMaxWidth(.8f).aspectRatio(720f/666).clip(RoundedCornerShape(28.dp)),contentScale=ContentScale.Crop)
-        LinearProgressIndicator(progress={progress.value},modifier=Modifier.fillMaxWidth(.8f).height(8.dp).clip(RoundedCornerShape(4.dp)))
+        Image(painterResource(Res.drawable.frigo_logo),contentDescription="Frigo",modifier=Modifier.fillMaxWidth(.8f).aspectRatio(720f/666).clip(RoundedCornerShape(20.dp)),contentScale=ContentScale.Crop)
+        Progress(progress.value,Modifier.fillMaxWidth(.8f))
         Text(texts[(progress.value*texts.size).toInt().coerceAtMost(texts.lastIndex)],style=MaterialTheme.typography.titleMedium)
     }
 }
