@@ -13,35 +13,15 @@ function fixLeftovers(){
   }));
   return changed;
 }
-const TITLES={today:'Сегодня',menu:'Меню на неделю',shop:'Покупки',home:'Продукты дома',profile:'Семья и настройки',promo:'Акции и цены'};
+const TITLES={today:'Сегодня',menu:'Меню на неделю',shop:'Покупки',home:'Продукты дома',profile:'Семья и настройки',promo:'Акции и цены',sub:'Подписка',metrics:'Метрики пилота'};
 const initials=()=>{const n=(S.profile.members[0]&&S.profile.members[0].name)||'';return (n&&n!=='Я'?n[0]:'Я').toUpperCase()};
-function appbar(){return `<header class="appbar"><button class="iconbtn burger" data-act="drawer" aria-label="Открыть меню">${IC.burger}</button><b class="grow">${TITLES[S.tab]||''}</b><button class="avatar" data-act="drawer" aria-label="Профиль">${esc(initials())}</button></header>`}
-function drawer(){
-  if(!UI.drawer) return '';
-  const it=(act,v,icon,label,sub)=>`<button class="ditem" data-act="${act}" data-v="${v||''}">${icon}<span class="grow"><b>${label}</b>${sub?`<br><span class="small muted">${sub}</span>`:''}</span></button>`;
-  const promoCount=VV_PROMO.length;
-  return `<div class="dscrim" data-act="drawerClose"><nav class="drawer" aria-label="Главное меню" data-stop>
-   <div class="duser"><span class="avatar big">${esc(initials())}</span><div><b>${esc((S.profile.members[0]&&S.profile.members[0].name)||'Профиль')}</b><br><span class="small muted">${S.user?esc(S.user.phone):'гость (демо)'}</span></div></div>
-   ${it('nav','profile',IC.profile,'Семья и настройки',`${S.profile.members.length} ${plural(S.profile.members.length,'человек','человека','человек')} · вкусы, ограничения, нормы калорий`)}
-   ${it('nav','promo',IC.tag,'Акции ВкусВилла',`${promoCount} предложений до конца недели`)}
-   ${it('navPrices','',IC.scale,'Цены: ВкусВилл и Лавка','Где ваша корзина дешевле')}
-   ${it('nav','home',IC.home,'Продукты дома','')}
-   ${it('navRem','',IC.bell,'Напоминания',S.profile.reminder.on?`накануне в ${S.profile.reminder.time}`:'выключены')}
-   <div style="flex:1"></div>
-   ${it('logout','',IC.logout,'Выйти','')}
-   <p class="proto" style="padding:0 16px 8px">Прототип, версия 3 · ${R.length} рецептов</p>
-  </nav></div>`;
-}
-function tabsV3(){
-  const left=S.plan?shopping().items.filter(i=>!i.covered&&!i.bought).length:0;
-  const t=[['today','Сегодня'],['menu','Меню'],['shop','Покупки'],['home','Дома']];
-  return `<div class="tabs"><nav aria-label="Разделы" style="grid-template-columns:repeat(4,1fr)">${t.map(([k,l])=>`<button data-act="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${IC[k]}<span>${l}</span>${k==='shop'&&left?`<span class="badge">${left}</span>`:''}</button>`).join('')}</nav></div>`;
-}
+function appbar(){return `<header class="appbar"><button class="iconbtn burger" data-act="drawer" aria-label="Открыть меню">${IC.burger}</button><b class="grow">${TITLES[S.tab]||''}</b></header>`}
+/* drawer, tabs — v4 versions live in v4.js */
 /* ---------- intro ---------- */
 const SLIDES=[
- {t:'Меню на неделю для всей семьи',d:'Учитываем вкусы, аллергии и нормы калорий каждого. Суп на обед, второе на ужин — как привыкли.',art:()=>`<div class="collage">${['m5','m3','b1','m66'].map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
- {t:'Список покупок соберётся сам',d:'Одинаковые продукты объединены, а цены сравниваются между ВкусВиллом и Яндекс Лавкой.',art:()=>`<div class="card introlist">${[['potato',1.4,'кг'],['chicken_fillet',700,'г'],['buckwheat',300,'г'],['tomato',400,'г']].map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(ING[k][0])}</span><span class="qty">${typeof q==='number'&&q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="pill">ВкусВилл ≈ 1 240 ₽</span><span class="pill warn">Лавка ≈ 1 090 ₽</span></div></div>`},
- {t:'Готовьте по шагам с таймером',d:'Картинка и граммовки на каждом шаге, таймер со звуком, калории считаются сами.',art:()=>`<div class="heroimg">${stepArt(RBY.m2,3)}</div><div class="card timerbox" style="margin-top:-30px;width:70%;align-self:center"><span class="bigtime" style="font-size:40px">4:59</span></div>`},
+ {t:'Меню на неделю для всей семьи',d:'Блюда, которые семья правда съест: суп на обед, второе на ужин — как привыкли. Аллергии учтём.',art:()=>`<div class="collage">${['m5','m3','b1','m66'].map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
+ {t:'Список покупок соберётся сам',d:'С точными граммами и без дублей. Корзину во ВкусВилле или Лавке соберёте по шагам за пару минут.',art:()=>`<div class="card introlist">${[['potato',1.4,'кг'],['chicken_fillet',700,'г'],['buckwheat',300,'г'],['tomato',400,'г']].map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(ING[k][0])}</span><span class="qty">${typeof q==='number'&&q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="pill">ВкусВилл ≈ 1 240 ₽</span><span class="pill warn">Лавка ≈ 1 090 ₽</span></div></div>`},
+ {t:'Первая неделя — бесплатно',d:'Без привязки карты. Готовьте по шагам с таймером и решите, нужно ли вам это дальше.',art:()=>`<div class="heroimg">${stepArt(RBY.m2,3)}</div><div class="card timerbox" style="margin-top:-30px;width:70%;align-self:center"><span class="bigtime" style="font-size:40px">4:59</span></div>`},
 ];
 function intro(){
   const i=S.introIdx||0,s=SLIDES[i];
@@ -67,26 +47,22 @@ function setCounts(kind,delta){const ms=S.profile.members,of=ms.filter(m=>m.kind
   if(delta>0) ms.push(newMember(kind,kind==='adult'?(of.length?'Взрослый '+(of.length+1):'Я'):'Ребёнок'+(of.length?' '+(of.length+1):'')));
   else if(of.length>(kind==='adult'?1:0)){const last=of[of.length-1];ms.splice(ms.indexOf(last),1)}}
 const QUIZ=[
- ['Для кого готовим?','Посчитаем порции и нормы калорий. Подробнее о каждом — потом, в «Семье».',()=>{const p=S.profile,a=p.members.filter(m=>m.kind==='adult').length,k=p.members.length-a;
+ ['Для кого готовим?','Посчитаем порции: детская меньше взрослой. Имена и подробности — потом.',()=>{const p=S.profile,a=p.members.filter(m=>m.kind==='adult').length,k=p.members.length-a;
    return `<div class="stack" style="gap:12px">${[['adult','Взрослые','от 14 лет',a],['child','Дети','до 14 лет',k]].map(([kd,l,s,n])=>`<div class="card bigcount"><div><h2>${l}</h2><p class="small muted">${s}</p></div><div class="stepper big"><button data-act="qcnt" data-v="${kd}:-1" aria-label="Меньше">−</button><span>${n}</span><button data-act="qcnt" data-v="${kd}:1" aria-label="Больше">+</button></div></div>`).join('')}
    <p class="small muted">Готовим на ${portions()} ${plural(portions(),'порцию','порции','порций')} за приём пищи</p></div>`}],
- ['Есть ли аллергии?','Такие блюда исключим полностью.',()=>{const p=S.profile;return `<div class="chips">${`<button class="chip" data-act="noAllergy" aria-pressed="${!p.allergies.length}">Нет аллергий</button>`}${Object.entries(ALLERG).map(([k,l])=>`<button class="chip danger" data-act="allergy" data-v="${k}" aria-pressed="${p.allergies.includes(k)}">${l}</button>`).join('')}</div>`}],
- ['Как вы питаетесь?','Выберите один вариант.',()=>`<div class="stack" style="gap:8px">${Object.entries(DIETS).map(([k,[l,d]])=>`<button class="optcard" data-act="diet" data-v="${k}" aria-pressed="${S.profile.diet===k}"><b>${l}</b>${d?`<span class="small muted">${d}</span>`:''}</button>`).join('')}</div>`],
- ['Что планируем?','Можно выбрать несколько. На обед — суп, на ужин — второе.',()=>{const p=S.profile;return `${chips(SLOT_NAMES,SLOTS.filter(k=>p.meals[k]),'meal')}
+ ['Что нельзя или не едите?','Такие блюда не попадут в меню. Если ограничений нет — просто жмите «Дальше».',()=>{const p=S.profile;return `<div class="stack" style="gap:6px"><h3>Аллергии</h3><div class="chips">${`<button class="chip" data-act="noAllergy" aria-pressed="${!p.allergies.length}">Нет аллергий</button>`}${Object.entries(ALLERG).map(([k,l])=>`<button class="chip danger" data-act="allergy" data-v="${k}" aria-pressed="${p.allergies.includes(k)}">${l}</button>`).join('')}</div></div>
+   <div class="stack" style="gap:6px"><h3>Тип питания</h3><div class="chips">${Object.entries(DIETS).map(([k,[l,d]])=>`<button class="chip" data-act="diet" data-v="${k}" aria-pressed="${p.diet===k}" title="${esc(d)}">${l}</button>`).join('')}</div></div>`}],
+ ['Что планируем?','На обед — суп, на ужин — второе. Перекусы и десерты добавите позже.',()=>{const p=S.profile;return `${chips({b:'Завтрак',l:'Обед',d:'Ужин'},SLOTS.filter(k=>p.meals[k]),'meal')}
    ${p.meals.l?`<label class="toggle togglecard"><span><b>Суп варить на два дня</b><br><span class="small muted">Остатки супа на следующий обед</span></span><input type="checkbox" class="switch" id="soupBatch" data-act="soupBatch" ${p.soupBatch?'checked':''}></label>`:''}`}],
- ['Бюджет и город','По городу пересчитаем цены магазинов.',()=>{const p=S.profile;return `<div class="card"><label class="field" for="budget">Бюджет на продукты в неделю<b id="budgetv" style="color:var(--fg);font-size:26px;font-variant-numeric:tabular-nums">${rub(p.budget)}</b></label>
-   <input type="range" id="budget" min="2000" max="30000" step="500" value="${p.budget}" data-act="budget" aria-label="Бюджет в неделю"></div>
-   <label class="field" for="city">Город<select id="city" data-act="city">${Object.entries(CITIES).map(([k,[l]])=>`<option value="${k}" ${p.city===k?'selected':''}>${l}</option>`).join('')}</select></label>`}],
- ['Есть цель по питанию?','Необязательно. Подходящие блюда будут чаще.',()=>chips(GOALS,S.profile.goals,'goal')],
 ];
 function quiz(){
   const i=S.qStep||0,[t,d,body]=QUIZ[i],last=i===QUIZ.length-1,okMeals=Object.values(S.profile.meals).some(Boolean);
   return `<div class="screen onbscreen">
    <div class="row between">${i?`<button class="iconbtn" data-act="qBack" aria-label="Назад">←</button>`:'<span style="width:36px"></span>'}<div class="progress grow" style="margin:0 12px"><i style="width:${Math.round((i+1)/QUIZ.length*100)}%"></i></div><button class="btn ghost small" data-act="qSkip">${last?'Пропустить':'Позже'}</button></div>
-   <div class="stack" style="gap:6px;margin-top:8px"><p class="eyebrow">Шаг ${i+1} из ${QUIZ.length}</p><h1>${t}</h1><p class="muted">${d}</p></div>
+   <div class="stack" style="gap:6px;margin-top:8px"><p class="eyebrow">Вопрос ${i+1} из ${QUIZ.length} — и меню готово</p><h1>${t}</h1><p class="muted">${d}</p></div>
    ${body()}
    <div style="flex:1"></div>
-   <button class="btn block" data-act="${last?'build':'qNext'}" ${i===3&&!okMeals?'disabled':''}>${last?'Составить меню':'Дальше'}</button></div>`;
+   <button class="btn block" data-act="${last?'build':'qNext'}" ${i===2&&!okMeals?'disabled':''}>${last?'Составить меню':'Дальше'}</button></div>`;
 }
 /* ---------- promos & prices ---------- */
 function scrPromo(){
@@ -118,15 +94,16 @@ function scrPromo(){
 /* ---------- render override ---------- */
 function render(){
   const app=$('#app');
+  if(UI.fam){app.innerHTML=famView(); renderSheet(); return}
   if(S.stage==='intro') app.innerHTML=intro();
   else if(S.stage==='auth') app.innerHTML=auth();
   else if(S.stage==='quiz') app.innerHTML=quiz();
-  else if(S.stage==='gen') app.innerHTML=`<div class="screen"><div class="loader"><div class="spin" aria-hidden="true"></div><h2>Подбираем меню на неделю</h2><p class="muted small">Учитываем семью, ограничения, калории, время и бюджет</p></div></div>`;
-  else app.innerHTML=appbar()+({today:scrToday,menu:scrMenu,shop:scrShop,home:scrHome,profile:scrProfile,promo:scrPromo}[S.tab]||scrToday)()+tabsV3()+drawer();
-  renderSheet(); renderCook(); paintTimers();
+  else if(S.stage==='gen') app.innerHTML=`<div class="screen"><div class="loader"><div class="spin" aria-hidden="true"></div><h2>Подбираем меню на неделю</h2><p class="muted small">Учитываем семью, ограничения, время готовки и то, что понравилось</p></div></div>`;
+  else app.innerHTML=appbar()+({today:scrToday,menu:scrMenu,shop:scrShop,home:scrHome,profile:scrProfile,promo:scrPromo,sub:scrSub,metrics:scrMetrics}[S.tab]||scrToday)()+tabsV4()+drawer();
+  renderSheet(); renderCook(); renderCart(); paintTimers();
 }
 function shellAct(a,v,el){
-  const p=S.profile;
+  const p=S.profile; if(v4Act(a,v,el)) return true;
   switch(a){
    case 'introNext': if((S.introIdx||0)<SLIDES.length-1) S.introIdx=(S.introIdx||0)+1; else S.stage=S.user?(S.plan?'app':'quiz'):'auth'; return true;
    case 'introSkip': S.stage=S.user?(S.plan?'app':'quiz'):'auth'; return true;

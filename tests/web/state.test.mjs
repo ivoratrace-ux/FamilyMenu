@@ -33,8 +33,8 @@ test('shorter menus from prior clients are retained and padded for the seven-day
  const result=convert.fromMenu(m);assert.equal(result.days.length,7);assert.equal(result.days[0].slots.l.rid,'m1');
  validateUserState(convert.toPreferences(state()),convert.toMenu(result));
 });
-test('original styles and SVG artwork are byte-for-byte identical to the source prototype',async()=>{
- for(const file of ['styles.css','art.js'])assert.deepEqual(await readFile(new URL('../../src/'+file,import.meta.url)),await readFile(new URL('../../legacy/src/'+file,import.meta.url)));
+test('SVG artwork stays byte-for-byte identical to the source prototype',async()=>{
+ for(const file of ['art.js'])assert.deepEqual(await readFile(new URL('../../src/'+file,import.meta.url)),await readFile(new URL('../../legacy/src/'+file,import.meta.url)));
 });
 
 test('Moscow midnight keeps the correct calendar day, food marks and quantities after a round-trip',()=>{
@@ -56,4 +56,12 @@ test('original decimal weight values survive through the integer-compatible back
  const s=state();s.profile.members[0].weight='65.5';const preferences=convert.toPreferences(s),menu=convert.toMenu(s.plan);
  validateUserState(preferences,menu);assert.equal(preferences.profile.members[0].weight,66);
  const restored=convert.fromDocument({preferences,menu},state());assert.equal(restored.profile.members[0].weight,'65.5');
+});
+
+test('v8 answers, own recipes and per-meal kinds round-trip through the seven-day API',()=>{
+ const s=state();s.profile.days=3;s.profile.mealSetup={b:'none',l:'soup',s:'none',d:'pair'};
+ s.myRecipes=[{id:'uabc',n:'Бабушкин борщ',m:'m',t:60,tags:['soup','mine'],i:[['potato',300]],sp:[],s:['Сварить']}];
+ const preferences=convert.toPreferences(s),menu=convert.toMenu(s.plan);validateUserState(preferences,menu);
+ const restored=convert.fromDocument({preferences,menu},state());
+ assert.equal(restored.profile.days,3);assert.deepEqual(plain(restored.profile.mealSetup),s.profile.mealSetup);assert.equal(restored.myRecipes[0].n,'Бабушкин борщ');
 });

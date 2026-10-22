@@ -31,13 +31,17 @@
     }
   }
   async function hydrate() {
-    const version=generation,user=api.session?.user?.id;ready=false;
+    const version=generation,user=api.session?.user?.id,local=S;ready=false;
     const [document,inventory]=await Promise.all([api.request('/api/user-state'),api.request('/api/inventory')]);
     if(generation!==version || api.session?.user?.id!==user)return;
     clearPrivateRecipes();addSavedRecipes(document);previousPreferences=document.preferences || {};documentRevision=document.revision;
-    clearLayers();S=convert.fromDocument(document,blank());S.user={...api.session.user,phone:api.session.user.login};
-    S.stage=S.plan?'app':'quiz';S.tab=S.tab || 'today';stockFrom(inventory);savedState=payloadText();
-    ready=true;conflict=false;localStorage.removeItem(KEY);render();
+    // A new account takes over the menu, answers, own recipes and products made before signing in.
+    const adopt=!document.preferences && !document.menu && !!local?.plan;
+    clearLayers();S=adopt?{...local}:convert.fromDocument(document,blank());S.user={...api.session.user,phone:api.session.user.login};
+    S.stage=S.plan?'app':'quiz';if(adopt)S.tab='menu';S.tab=S.tab || 'menu';stockFrom(inventory);
+    if(adopt)for(const item of local.pantry || [])if(ING[item.key] && !S.pantry.some(p=>p.key===item.key))S.pantry.push({key:item.key,qty:item.qty});
+    savedState=adopt?'':payloadText();
+    ready=true;conflict=false;localStorage.removeItem(KEY);render();if(adopt)flush();
   }
   function showError(error) {
     if(error.status===401){logout();return;}
@@ -81,7 +85,8 @@
   }
   function changed() {
     clearTimeout(scheduled);
-    if(!api.session){try{localStorage.setItem(KEY,JSON.stringify({...S,user:null,plan:null,pantry:[]}));}catch{}return;}
+    // Before sign-in the answers, the first menu and marked products stay on this device only.
+    if(!api.session){try{localStorage.setItem(KEY,JSON.stringify({...S,user:null}));}catch{}return;}
     if(ready)scheduled=setTimeout(flush,350);
   }
   async function logout() {
@@ -115,7 +120,7 @@
     if(action==='telegramStart' || action==='telegramRetry'){startLogin();return;}
     if(action==='accountRetry'){hydrate().catch(error=>{UI.authError=error.message;render();});return;}
     if(action==='guest' || action==='demo')return;
-    if(action==='reset'){clearLayers();S={...blank(),user:S.user,stage:'quiz'};changed();render();return;}
+    if(action==='reset'){clearLayers();S={...blank(),user:S.user,stage:'quiz',qStep:0,myRecipes:S.myRecipes || [],pantry:S.pantry,v4:{...blank().v4,sub:S.v4?.sub || null,ev:S.v4?.ev || []},theme:S.theme};changed();render();return;}
     originalAct(action,value,element);
   };
   // Preserve the original search markup but use the authenticated dictionary endpoint (minimum 3 characters).
@@ -128,5 +133,5 @@
   },true);
   window.addEventListener('online',flush);
   window.addEventListener('pagehide',()=>{if(ready)flush();});
-  window.FamilyMenuBridge={changed,logout,async mount(){if(api.session)await hydrate();else {S.user=null;if(S.stage!=='intro')S.stage='auth';render();}},get ready(){return ready;},get pending(){return busy || stockText()!==savedStock || payloadText()!==savedState;}};
+  window.FamilyMenuBridge={changed,logout,async mount(){if(api.session)await hydrate();else {S.user=null;if(S.stage==='gen')S.stage='quiz';if(!['intro','quiz','ready','auth'].includes(S.stage))S.stage=S.plan?'ready':'auth';render();}},get ready(){return ready;},get pending(){return busy || stockText()!==savedStock || payloadText()!==savedState;}};
 })();

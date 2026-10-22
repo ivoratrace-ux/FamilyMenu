@@ -26,8 +26,9 @@ const KEY='family-menu-web-draft-v1';
 let mid=1; const newMember=(kind,name)=>({id:'m'+Date.now().toString(36)+(mid++),name,kind,sex:'',age:kind==='child'?'7':'',weight:'',height:'',act:'mid',goal:'keep',custom:'',open:false});
 const blank=()=>({
   stage:'intro', tab:'today', onbStep:0, introIdx:0, qStep:0, user:null, store:'vv',
-  profile:{members:[newMember('adult','Я'),newMember('adult','Партнёр'),newMember('child','Ребёнок')],likes:['t:kids','i:chicken_fillet'],dislikes:[],allergies:[],diet:'all',goals:[],budget:8000,city:'msk',maxTime:45,meals:{b:false,l:true,s:false,d:true,z:false,k:false},soupBatch:true,reminder:{on:true,time:'20:00'}},
-  pantry:[], plan:null, bought:{}, eaten:{}, extra:{}, history:{liked:[],disliked:[],blocked:[],replaced:[]}, remShown:''
+  profile:{members:[newMember('adult','Я'),newMember('adult','Партнёр'),newMember('child','Ребёнок')],likes:['t:kids','i:chicken_fillet'],dislikes:[],allergies:[],diet:'all',goals:[],budget:8000,budgetSet:false,kcalOn:false,city:'msk',maxTime:45,meals:{b:false,l:true,s:false,d:true,z:false,k:false},soupBatch:true,reminder:{on:true,time:'20:00'}},
+  pantry:[], plan:null, bought:{}, eaten:{}, extra:{}, history:{liked:[],disliked:[],blocked:[],replaced:[]}, remShown:'',
+  v4:{trialStart:null,sub:null,shift:0,ul:{},seen:{},ev:[],weeks:0}
 });
 let S=blank();
 try {const draft=JSON.parse(localStorage.getItem(KEY));if(draft && !draft.user) S={...blank(),...draft,user:null};}catch{}
@@ -36,6 +37,8 @@ let UI={sheet:null,open:{},q:'',dq:'',member:null};
 
 /* ============ HELPERS ============ */
 const $=s=>document.querySelector(s);
+const NOW=()=>new Date(Date.now()+((S&&S.v4&&S.v4.shift)||0)*864e5);
+const KC=()=>!!(S&&S.profile&&S.profile.kcalOn);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rub=n=>Math.round(n).toLocaleString('ru-RU')+' ₽';
 const num=n=>Math.round(n).toLocaleString('ru-RU');
@@ -138,7 +141,7 @@ function pick(slot,used,weekend,ctx){
   used.cnt=used.cnt||{}; used.cnt[ch.id]=cnt(ch.id)+1; return ch;
 }
 function generate(){
-  const p=S.profile,start=day0(new Date()),used={},por=portions(); let prev=null; const days=[];
+  const p=S.profile,start=day0(NOW()),used={},por=portions(); let prev=null; const days=[];
   for(let d=0;d<7;d++){
     const date=addDays(start,d),wd=date.getDay(),weekend=wd===0||wd===6,slots={};
     if(p.meals.b){const r=pick('b',used,weekend);slots.b={rid:r&&r.id,serv:por}}
@@ -152,7 +155,7 @@ function generate(){
     if(p.meals.k){const r=pick('k',used,weekend);slots.k={rid:r&&r.id,serv:por}}
     days.push({date:date.toISOString(),slots});
   }
-  S.plan={created:new Date().toISOString(),status:'draft',days}; S.bought={}; S.eaten={}; S.extra={}; fixLeftovers();
+  S.plan={created:NOW().toISOString(),status:'draft',days}; S.bought={}; S.eaten={}; S.extra={}; fixLeftovers();
 }
 function slotRecipe(day,key){const s=S.plan.days[day].slots[key]; if(!s) return null; if(s.left){const src=S.plan.days[s.from].slots[s.of||'l']; return src&&src.rid?RBY[src.rid]:null} return s.rid?RBY[s.rid]:null}
 const srcRef=(di,k)=>{const s=S.plan.days[di].slots[k];return s&&s.left?`${s.from}:${s.of||'l'}`:`${di}:${k}`};
@@ -184,8 +187,12 @@ function markHave(k,qtyNeeded){
   if(q>0) S.pantry.push({key:k,qty:q,src:'list'});
 }
 const unmarkHave=k=>{S.pantry=S.pantry.filter(x=>!(x.key===k&&x.src==='list'))};
-function todayIdx(){if(!S.plan) return -1; const t=day0(new Date()).getTime(); return S.plan.days.findIndex(d=>day0(d.date).getTime()===t)}
-function dateLabel(iso,long){const d=new Date(iso); return long?`${DOWL[d.getDay()][0].toUpperCase()+DOWL[d.getDay()].slice(1)}, ${d.getDate()} ${MON[d.getMonth()]}`:`${DOW[d.getDay()]}, ${d.getDate()} ${MONS[d.getMonth()]}`}
+function todayIdx(){if(!S.plan) return -1; const t=day0(NOW()).getTime(); return S.plan.days.findIndex(d=>day0(d.date).getTime()===t)}
+function dateLabel(iso,long){const d=new Date(iso); return long?`${DOWL[d.getDay()]}, ${d.getDate()} ${MON[d.getMonth()]}`:`${DOW[d.getDay()]}, ${d.getDate()} ${MONS[d.getMonth()]}`}
+const SLOT_END={b:11,l:15.5,s:17.5,d:21.5,z:23,k:24};
+function nextSlotKey(day){const sl=S.plan.days[day].slots,h=NOW().getHours()+NOW().getMinutes()/60;
+  const keys=SLOTS.filter(k=>sl[k]&&k!=='k');
+  const k=keys.find(k=>SLOT_END[k]>h&&!S.eaten[eatKey(day,k)]); return k||keys.find(k=>!S.eaten[eatKey(day,k)])||keys[keys.length-1]||mainSlotKey(day)}
 function mainSlotKey(day){const s=S.plan.days[day].slots; return s.d?'d':(s.l?'l':(s.b?'b':Object.keys(s)[0]))}
 function dayKcal(di){return Object.keys(S.plan.days[di].slots).reduce((s,k)=>{const r=slotRecipe(di,k);return s+(r?r.kcal:0)},0)}
 const eatKey=(di,k)=>S.plan.days[di].date.slice(0,10)+':'+k;
@@ -232,13 +239,14 @@ function welcome(){
 }
 function chips(list,sel,act,cls=''){return `<div class="chips">${Object.entries(list).map(([k,l])=>`<button class="chip ${cls}" data-act="${act}" data-v="${esc(k)}" aria-pressed="${sel.includes(k)}">${l}</button>`).join('')}</div>`}
 function memberCard(m,i){
+  if(!KC()) return memberLite(m,i);
   const n=need(m),pf=pfactor(m);
   const sexC=`<div class="chips">${[['f','Ж'],['m','М']].map(([k,l])=>`<button class="chip" data-act="mset" data-v="${i}:sex:${k}" aria-pressed="${m.sex===k}">${l}</button>`).join('')}</div>`;
   return `<div class="card member">
    <div class="row"><input type="text" id="mn_${m.id}" value="${esc(m.name)}" data-act="mname" data-v="${i}" aria-label="Имя" style="flex:1;min-width:0;font-weight:600">
     <div class="chips" style="flex:none">${[['adult','Взр.'],['child','Реб.']].map(([k,l])=>`<button class="chip" data-act="mset" data-v="${i}:kind:${k}" aria-pressed="${m.kind===k}">${l}</button>`).join('')}</div>
     ${S.profile.members.length>1?`<button class="iconbtn" data-act="mdel" data-v="${i}" aria-label="Удалить">✕</button>`:''}</div>
-   <div class="row between"><span class="small"><b>≈ ${num(n.kcal)} ккал/день</b> · порция ×${dec(pf)}</span><button class="btn ghost small" data-act="mopen" data-v="${i}">${m.open?'Скрыть':'Подробнее'}</button></div>
+   <div class="row between"><span class="small">${m.kind==='child'?`порция ×${dec(pf)}`:`<b>≈ ${num(n.kcal)} ккал/день</b> · порция ×${dec(pf)}`}</span><button class="btn ghost small" data-act="mopen" data-v="${i}">${m.open?'Скрыть':'Подробнее'}</button></div>
    ${n.custom?'<p class="small muted">Норма задана вручную</p>':''}${!n.exact&&!m.open?`<p class="small muted">${m.kind==='child'?'Укажите возраст, чтобы точнее посчитать норму':'Примерно. Укажите пол, возраст, вес и рост — посчитаем точнее'}</p>`:''}
    ${m.open?`<div class="stack"><span class="small muted">Пол</span>${sexC}</div>
     <div class="grid2">
@@ -256,7 +264,7 @@ function memberCard(m,i){
 function famFields(){const p=S.profile;return `
   <div class="stack">${p.members.map(memberCard).join('')}</div>
   <div class="row"><button class="btn secondary small" data-act="madd" data-v="adult">+ Взрослый</button><button class="btn secondary small" data-act="madd" data-v="child">+ Ребёнок</button></div>
-  <p class="small muted">Готовим на ${portions()} ${plural(portions(),'порцию','порции','порций')} за приём пищи — по нормам калорий членов семьи. Вес и рост можно не указывать.</p>`}
+  <p class="small muted">Готовим на ${portions()} ${plural(portions(),'порцию','порции','порций')} за приём пищи: детская порция меньше взрослой.</p>`}
 function likeGroups(){const p=S.profile;return LIKE_GROUPS.map(([title,items],gi)=>{const sel=Object.keys(items).filter(k=>p.likes.includes(k)).length;const open=!!UI.open[gi];
   return `<div class="group"><button data-act="grp" data-v="${gi}" aria-expanded="${open}"><span>${title}${sel?` <span class="pill">${sel}</span>`:''}</span><span class="plus" aria-hidden="true">${open?'−':'+'}</span></button>${open?chips(items,p.likes,'like'):''}</div>`}).join('')}
 function dislikeFields(){const p=S.profile;const q=UI.dq.trim().toLowerCase();
@@ -273,7 +281,7 @@ function restrFields(){const p=S.profile;return `
   <div class="stack"><h3>Тип питания</h3><p class="small muted">Строгое правило для всего меню</p>
    <div class="chips">${Object.entries(DIETS).map(([k,[l,d]])=>`<button class="chip" data-act="diet" data-v="${k}" aria-pressed="${p.diet===k}" title="${esc(d)}">${l}</button>`).join('')}</div>
    ${DIETS[p.diet][1]?`<p class="small muted">${esc(DIETS[p.diet][1])}</p>`:''}</div>
-  <div class="stack"><h3>Цель питания</h3><p class="small muted">Мягкое правило: подходящие блюда будут чаще</p>${chips(GOALS,p.goals,'goal')}</div>
+  ${KC()?`<div class="stack"><h3>Цель питания</h3><p class="small muted">Мягкое правило: подходящие блюда будут чаще</p>${chips(GOALS,p.goals,'goal')}</div>`:''}
   <div class="note"><b>!</b><span>Мы исключаем блюда по составу рецепта. Состав конкретного продукта в магазине проверяйте по упаковке. При медицинской диете согласуйте меню с врачом.</span></div>`}
 function weekFields(){const p=S.profile;return `
   <div class="card"><label class="field" for="city">Город — по нему считаем цены<select id="city" data-act="city">${Object.entries(CITIES).map(([k,[l]])=>`<option value="${k}" ${p.city===k?'selected':''}>${l}</option>`).join('')}</select></label>
@@ -282,7 +290,7 @@ function weekFields(){const p=S.profile;return `
   <input type="range" id="budget" min="2000" max="30000" step="500" value="${p.budget}" data-act="budget" aria-label="Бюджет в неделю">
   <p class="small muted">Цены — ориентир по каталогу магазина, без акций</p></div>
   <div class="stack"><h3>Сколько готовить в будни</h3>${chips({30:'до 30 мин',45:'до 45 мин',60:'до часа',0:'не важно'},[String(p.maxTime)],'time')}<p class="small muted">В выходные допускаем на 30 минут дольше</p></div>
-  <div class="stack"><h3>Что планируем</h3>${chips(SLOT_NAMES,SLOTS.filter(k=>p.meals[k]),'meal')}
+  <div class="stack"><h3>Что планируем</h3>${chips(mealNames(),SLOTS.filter(k=>p.meals[k]),'meal')}${UL('extras')?'':'<p class="small muted">Перекусы, десерты и напитки откроются со второй недели.</p>'}
   <p class="small muted">На обед — супы, на ужин — второе: мясо или рыба с гарниром.</p>
   ${p.meals.l?`<label class="toggle"><span>Суп варить на два дня</span><input type="checkbox" class="switch" id="soupBatch" data-act="soupBatch" ${p.soupBatch?'checked':''}></label>`:''}</div>`}
 function priceNote(){const c=S.profile.city||'msk';return c==='msk'?`Цены — ${PRICE_SOURCE}, обычные цены без акций.`:`Цены — ${PRICE_SOURCE}, пересчитаны для города: ×${dec(CITIES[c][1])} по разнице стоимости продуктовой корзины (Руспродсоюз, май 2026).`}
@@ -306,13 +314,13 @@ function slotRow(di,sk,compact){
   const handle=compact?'':(s&&!s.left?`<button class="drag" data-drag="${di}:${sk}" aria-label="Перетащить блюдо" title="Перетащите в другой приём пищи или день">⠿</button>`:'<span class="drag ghost" aria-hidden="true"></span>');
   if(!r) return `<div class="slot" data-slot="${di}:${sk}">${handle}<span class="meal">${SLOT_NAMES[sk]}</span><div class="grow small muted">Не нашли подходящее блюдо. Ослабьте ограничения в профиле.</div></div>`;
   const eatBtn=compact?`<button class="eat" data-act="eat" data-v="${di}:${sk}" aria-pressed="${!!S.eaten[eatKey(di,sk)]}">${S.eaten[eatKey(di,sk)]?'Съели ✓':'Съели'}</button>`:'';
-  if(s.left) return `<div class="slot" data-slot="${di}:${sk}" data-left="1">${handle}<div class="thumb">${dishArt(r)}</div><button class="open" data-act="recipe" data-v="${srcRef(di,sk)}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span class="pill grey">остатки со вчера</span><span>${r.kcal} ккал</span></span></button>${eatBtn}</div>`;
+  if(s.left) return `<div class="slot" data-slot="${di}:${sk}" data-left="1">${handle}<div class="thumb">${dishArt(r)}</div><button class="open" data-act="recipe" data-v="${srcRef(di,sk)}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span class="pill grey">остатки со вчера</span>${KC()?`<span>${r.kcal} ккал</span>`:''}</span></button>${eatBtn}</div>`;
   return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${di}:${sk}">${handle}<div class="thumb">${dishArt(r)}</div>
-   <button class="open" data-act="recipe" data-v="${di}:${sk}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span>${r.t} мин</span><span>${r.kcal} ккал</span><span>${s.serv} ${plural(s.serv,'порция','порции','порций')}</span>${s.cooked?'<span class="pill">приготовлено</span>':''}</span></button>
+   <button class="open" data-act="recipe" data-v="${di}:${sk}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span>${r.t} мин</span>${KC()?`<span>${r.kcal} ккал</span>`:''}<span>${s.serv} ${plural(s.serv,'порция','порции','порций')}</span>${s.cooked?'<span class="pill">приготовлено</span>':''}</span></button>
    ${compact?eatBtn:`<button class="iconbtn" data-act="replace" data-v="${di}:${sk}" aria-label="Заменить блюдо">↻</button>`}</div>`;
 }
 function kcalCard(ti){
-  const ms=S.profile.members; if(!UI.member||!ms.find(m=>m.id===UI.member)) UI.member=ms[0].id;
+  const ms=S.profile.members.filter(m=>m.kind==='adult'); if(!UI.member||!ms.find(m=>m.id===UI.member)) UI.member=ms[0].id;
   const m=ms.find(x=>x.id===UI.member),n=need(m),pf=pfactor(m),dk=S.plan.days[ti].date.slice(0,10),ex=((S.extra[dk]||{})[m.id])||[],exs=ex.reduce((a,b)=>a+(typeof b==='number'?b:b.kcal),0),plan=dayKcal(ti)*pf,eat=eatenKcal(ti)*pf+exs;
   const max=Math.max(n.kcal,plan)*1.05,diff=n.kcal-plan;
   let hint=''; if(diff>n.kcal*.15) hint=`Меню даёт меньше нормы на ≈${num(diff)} ккал — добавьте перекус: фрукты, йогурт, орехи.`; else if(-diff>n.kcal*.15) hint=`Меню даёт больше нормы на ≈${num(-diff)} ккал — можно взять порцию поменьше.`; else hint='Меню на сегодня близко к норме.';
@@ -327,24 +335,25 @@ function kcalCard(ti){
 }
 function scrToday(){
   if(!S.plan) return `<div class="screen"><div class="empty"><h2>Меню ещё нет</h2><p>Составим меню на неделю по профилю семьи.</p><button class="btn" data-act="regen">Составить меню</button></div></div>`;
-  const ti=todayIdx(),now=new Date();
-  if(ti<0) return `<div class="screen"><p class="eyebrow">${dateLabel(now.toISOString(),true)}</p><div class="card"><h2>Неделя закончилась</h2><p class="muted">Составим новое меню с теми же настройками и учётом того, что понравилось.</p><button class="btn" data-act="regen">Составить новое меню</button></div></div>`;
-  const mk=mainSlotKey(ti),r=slotRecipe(ti,mk),s=S.plan.days[ti].slots[mk];
+  const ti=todayIdx(),now=NOW();
+  if(ti<0) return `<div class="screen"><p class="eyebrow">${dateLabel(now.toISOString(),true)}</p>${weekEndCard()}</div>`;
+  const mk=nextSlotKey(ti),r=slotRecipe(ti,mk),s=S.plan.days[ti].slots[mk];
   const others=SLOTS.filter(k=>S.plan.days[ti].slots[k]&&k!==mk);
   const sh=shopping(),toBuy=sh.items.filter(i=>!i.covered),bought=toBuy.filter(i=>i.bought).length;
   const tmr=ti+1<7?ti+1:null,rt=tmr!==null?slotRecipe(tmr,mainSlotKey(tmr)):null;
   return `<div class="screen">
-   <div class="row between"><div><p class="eyebrow">Сегодня</p><h1>${dateLabel(S.plan.days[ti].date,true)}</h1></div>${S.plan.status==='draft'?'<span class="pill warn">меню не утверждено</span>':''}</div>
+   <div class="row between"><div><p class="eyebrow">Сегодня</p><h1 style="text-transform:capitalize">${dateLabel(S.plan.days[ti].date,true)}</h1></div>${S.plan.status==='draft'?'<span class="pill warn">меню не утверждено</span>':''}</div>
+   ${v4Top()}
    ${r?`<div class="hero"><div class="heroimg">${dishArt(r)}</div><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}${s.left?' · остатки со вчера':''}</p><p class="dish">${esc(r.n)}</p>
-     <div class="meta"><span>${r.t} мин</span><span>${r.kcal} ккал на порцию</span><span>${s.left?'разогреть':s.serv+' '+plural(s.serv,'порция','порции','порций')}</span></div>
+     <div class="meta"><span>${r.t} мин</span>${KC()?`<span>${r.kcal} ккал на порцию</span>`:''}<span>${s.left?'разогреть':s.serv+' '+plural(s.serv,'порция','порции','порций')}</span></div>
      <div class="row"><button class="btn grow" data-act="cook" data-v="${srcRef(ti,mk)}">${s.cooked?'Открыть рецепт':'Готовить'}</button><button class="eat" style="background:transparent;color:inherit;border-color:currentColor" data-act="eat" data-v="${ti}:${mk}" aria-pressed="${!!S.eaten[eatKey(ti,mk)]}">${S.eaten[eatKey(ti,mk)]?'Съели ✓':'Съели'}</button></div></div>`:''}
    ${others.length?`<div class="day">${others.map(k=>slotRow(ti,k,true)).join('')}</div>`:''}
-   ${kcalCard(ti)}
+   ${KC()?kcalCard(ti):''}
    ${S.profile.reminder.on&&rt?`<div class="card"><div class="row"><span class="appicon" style="width:34px;height:34px">${IC.bell}</span><div class="grow"><h3>Сегодня в ${S.profile.reminder.time}</h3><p class="small muted">Проверить продукты для завтрашнего блюда: «${esc(rt.n)}»</p></div></div><button class="btn secondary small" data-act="pushNow">Показать напоминание сейчас</button></div>`:''}
    <div class="card"><div class="row between"><h3>Покупки на неделю</h3><button class="btn ghost small" data-act="tab" data-v="shop">Открыть</button></div>
      <div class="progress"><i style="width:${toBuy.length?Math.round(bought/toBuy.length*100):100}%"></i></div>
      <p class="small muted">Куплено ${bought} из ${toBuy.length} · осталось ≈${rub(toBuy.filter(i=>!i.bought).reduce((a,i)=>a+i.cost,0))}</p></div>
-   <p class="proto">Прототип · меню подбирается из базы ${R.length} рецептов по правилам профиля</p>
+   <p class="proto">Прототип v4 · меню подбирается из базы ${R.length} рецептов по правилам профиля</p>
   </div>`;
 }
 function scrMenu(){
@@ -354,11 +363,12 @@ function scrMenu(){
   return `<div class="screen">
    <div class="row between"><div><p class="eyebrow">Меню на неделю</p><h1>${d0.getDate()} ${MONS[d0.getMonth()]} — ${d6.getDate()} ${MONS[d6.getMonth()]}</h1></div>
    ${S.plan.status==='draft'?'<span class="pill warn">черновик</span>':'<span class="pill">утверждено</span>'}</div>
-   <div class="card"><div class="row between"><h3>Оценка покупок</h3><span class="qty">≈${rub(sh.cost)} / ${rub(b)}</span></div>
+   ${S.profile.budgetSet?`<div class="card"><div class="row between"><h3>Оценка покупок</h3><span class="qty">≈${rub(sh.cost)} / ${rub(b)}</span></div>
     <div class="progress ${over?'over':''}"><i style="width:${pct}%"></i></div>
-    <p class="small muted">${over?'Выше бюджета. Замените дорогие блюда или отметьте, что есть дома. ':''}Оценка по средним ценам без учёта фасовок и акций, за вычетом продуктов «Дома».</p></div>
-   ${S.plan.days.map((d,di)=>`<div class="day ${di===ti?'today':''}"><header><b>${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}≈${num(dayKcal(di))} ккал</span></header>${SLOTS.filter(k=>d.slots[k]).map(k=>slotRow(di,k)).join('')}</div>`).join('')}
-   <p class="small muted">Калории дня — на одну стандартную порцию каждого блюда. Потяните за ⠿, чтобы поменять блюда местами между приёмами пищи и днями.</p>
+    <p class="small muted">${over?'Выше бюджета. Замените дорогие блюда или отметьте, что есть дома. ':''}Оценка по ценам магазина на ${PRICE_DATE}, без учёта фасовок и акций.</p></div>`:`<div class="card"><div class="row between"><h3>Покупки на неделю</h3><span class="qty">≈${rub(sh.cost)}</span></div><p class="small muted">По ценам ${STORES[S.store||'vv']} на ${PRICE_DATE}. Бюджет можно задать в «Семье и настройках».</p></div>`}
+   ${S.plan.status!=='draft'?`<button class="btn secondary block" data-act="share">${IC.share} Отправить меню семье</button>`:''}
+   ${S.plan.days.map((d,di)=>`<div class="day ${di===ti?'today':''}"><header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}${KC()?'≈'+num(dayKcal(di))+' ккал':''}</span></header>${SLOTS.filter(k=>d.slots[k]).map(k=>slotRow(di,k)).join('')}</div>`).join('')}
+   <p class="small muted">${KC()?'Калории дня — на одну стандартную порцию каждого блюда. ':''}Потяните за ⠿, чтобы поменять блюда местами между приёмами пищи и днями.</p>
    <div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать список</button>':''}
    <button class="btn ghost block" data-act="regen">Пересобрать всю неделю</button></div>
   </div>`;
@@ -378,7 +388,8 @@ function scrShop(){
    ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
    <div class="card"><div class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></div>
    <div class="seg small" role="tablist" aria-label="Магазин">${Object.entries(STORES).map(([k,l])=>`<button role="tab" aria-selected="${(S.store||'vv')===k}" data-act="store" data-v="${k}">${l} · ${rub(basketBy(k))}</button>`).join('')}</div>
-   <p class="small muted">Одинаковые продукты из разных блюд объединены. «${(S.store||'vv')==='lavka'?'Лавка':'ВВ'} ↗» открывает продукт в магазине, «есть» переносит его в раздел «Дома». <button class="linkbtn" data-act="navPrices">Сравнить магазины</button></p></div>
+   ${left.length?`<button class="btn block" data-act="cartStart">${IC.cart} Собрать корзину по шагам</button>`:''}
+   <p class="small muted">Одинаковые продукты из разных блюд объединены. Цены на ${PRICE_DATE} — в магазине могут отличаться. «есть» — продукт уже дома, купить не нужно.${UL('promo')?' <button class="linkbtn" data-act="navPrices">Сравнить магазины</button>':''}</p></div>
    ${cats.map(c=>`<section class="cat"><h3>${c}</h3>${need_.filter(i=>i.cat===c).map(row).join('')}</section>`).join('')}
    ${sh.spices.length?`<section class="cat"><h3>Специи — проверьте, есть ли дома</h3><div class="card small">${esc(sh.spices.join(', '))}<p class="muted">Количество «по вкусу», в список не суммируем.</p></div></section>`:''}
    ${home.length?`<section class="cat"><h3>Уже есть дома</h3>${home.map(i=>`<div class="item done"><span class="grow nm">${esc(i.name)}</span><span class="small muted">${fromList(i.k)?'отмечено «есть»':'хватает запаса'}</span>${fromList(i.k)?`<button class="iconbtn" data-act="have" data-v="${i.k}">вернуть</button>`:''}</div>`).join('')}</section>`:''}
@@ -401,6 +412,7 @@ function scrProfile(){const p=S.profile;return `<div class="screen">
    ${famFields()}${tasteFields()}${restrFields()}${weekFields()}
    <div class="card"><label class="toggle"><span><b>Напоминание накануне</b><br><span class="small muted">Проверить продукты для завтрашнего блюда</span></span><input type="checkbox" class="switch" id="remOn" data-act="remOn" ${p.reminder.on?'checked':''}></label>
    ${p.reminder.on?`<label class="field" for="remT">Время<select id="remT" data-act="remT">${['18:00','19:00','20:00','21:00','22:00'].map(t=>`<option ${t===p.reminder.time?'selected':''}>${t}</option>`).join('')}</select></label>`:''}</div>
+   ${kcalToggle()}
    <button class="btn block" data-act="regen">Сохранить и пересобрать меню</button>
    ${S.history.blocked.length?`<div class="card"><h3>Скрытые блюда</h3>${S.history.blocked.map(id=>`<div class="row between"><span>${esc(RBY[id].n)}</span><button class="iconbtn" data-act="unblock" data-v="${id}">вернуть</button></div>`).join('')}</div>`:''}
    <button class="btn ghost block" data-act="reset">Сбросить все данные прототипа</button>
@@ -409,7 +421,7 @@ function scrProfile(){const p=S.profile;return `<div class="screen">
 /* ============ SHEETS ============ */
 function renderSheet(){
   const L=$('#layer'),sh=UI.sheet; if(!sh){L.innerHTML='';return}
-  const html=sh.type==='recipe'?sheetRecipe(sh):sh.type==='replace'?sheetReplace(sh):sh.type==='move'?sheetMove(sh):sheetRemind(sh);
+  const html=sh.type==='share'?sheetShare(sh):sh.type==='recipe'?sheetRecipe(sh):sh.type==='replace'?sheetReplace(sh):sh.type==='move'?sheetMove(sh):sheetRemind(sh);
   L.innerHTML=`<div class="scrim" data-act="close"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
 }
 function sheetRecipe({day,slot,done=[]}){
@@ -421,8 +433,7 @@ function sheetRecipe({day,slot,done=[]}){
    <div class="cover">${dishArt(r)}</div>
    <h1 class="dish" style="font-size:26px">${esc(r.n)}</h1>
    <div class="meta" style="font-size:14px"><span>${r.t} мин</span><span>≈${rub(rc(r)*s.serv)} за блюдо</span>${slot==='l'&&S.profile.soupBatch&&s.serv>portions()?'<span class="pill grey">на два дня</span>':''}</div>
-   <div class="stack"><h3>На одну порцию</h3><div class="macros"><div class="macro"><b>${r.kcal}</b><span>ккал</span></div><div class="macro"><b>${r.P} г</b><span>белки</span></div><div class="macro"><b>${r.F} г</b><span>жиры</span></div><div class="macro"><b>${r.C} г</b><span>углеводы</span></div></div>
-    <p class="small muted">${S.profile.members.map(m=>`${esc(m.name)}: ×${dec(pfactor(m))} ≈ ${num(r.kcal*pfactor(m))} ккал`).join(' · ')}</p></div>
+   ${KC()?`<div class="stack"><h3>На одну порцию</h3><div class="macros"><div class="macro"><b>${r.kcal}</b><span>ккал</span></div><div class="macro"><b>${r.P} г</b><span>белки</span></div><div class="macro"><b>${r.F} г</b><span>жиры</span></div><div class="macro"><b>${r.C} г</b><span>углеводы</span></div></div></div>`:''}
    <div class="card"><div class="row between"><h3>Порции</h3><div class="stepper"><button data-act="serv" data-v="-1" aria-label="Меньше порций">−</button><span>${s.serv}</span><button data-act="serv" data-v="1" aria-label="Больше порций">+</button></div></div>
     <div>${r.i.map(([k,q])=>`<div class="ingr"><span>${esc(ING[k][0])}</span><span class="qty">${fmtQty(k,q*f)}</span></div>`).join('')}
     ${r.sp&&r.sp.length?`<div class="ingr"><span>${esc(r.sp.join(', '))}</span><span class="muted">по вкусу</span></div>`:''}</div>
@@ -505,11 +516,11 @@ function sheetReplace({day,slot,reason='none',open=null}){
   return `<div class="grab"></div>
    <div class="row between"><p class="eyebrow">Замена · ${SLOT_NAMES[slot]}, ${dateLabel(S.plan.days[day].date)}</p><button class="iconbtn" data-act="close" aria-label="Закрыть">✕</button></div>
    <h2>Чем заменить «${esc(cur.n)}»?</h2>
-   <div class="stack"><p class="small muted">Почему меняем</p>${chips(REASONS,[reason],'reason')}</div>
+   <div class="stack"><p class="small muted">Почему меняем</p>${chips(KC()?REASONS:Object.fromEntries(Object.entries(REASONS).filter(([k])=>k!=='light')),[reason],'reason')}</div>
    ${alts.length?alts.map(r=>{const d=open===r.id?diffFor(day,slot,r.id):null,inW=S.plan.days.some(x=>Object.values(x.slots).some(z=>z&&z.rid===r.id)); return `<div class="card alt">
      <button data-act="altOpen" data-v="${r.id}" style="border:0;background:none;text-align:left;padding:0" aria-expanded="${open===r.id}"><div class="row" style="align-items:flex-start"><div class="thumb">${dishArt(r)}</div><div class="stack" style="gap:4px">
        <span class="dish" style="font-size:17px">${esc(r.n)}</span>
-       <span class="meta"><span>${r.t} мин${r.t<cur.t?` <b style="color:var(--accent)">−${cur.t-r.t}</b>`:''}</span><span>${r.kcal} ккал${r.kcal<cur.kcal?` <b style="color:var(--accent)">−${cur.kcal-r.kcal}</b>`:''}</span><span>≈${rub(rc(r)*s.serv)}${rc(r)<rc(cur)?' <b style="color:var(--accent)">дешевле</b>':''}</span></span>
+       <span class="meta"><span>${r.t} мин${r.t<cur.t?` <b style="color:var(--accent)">−${cur.t-r.t}</b>`:''}</span>${KC()?`<span>${r.kcal} ккал${r.kcal<cur.kcal?` <b style="color:var(--accent)">−${cur.kcal-r.kcal}</b>`:''}</span>`:''}<span>≈${rub(rc(r)*s.serv)}${rc(r)<rc(cur)?' <b style="color:var(--accent)">дешевле</b>':''}</span></span>
        <span class="meta">${inW?'<span class="pill warn">уже есть в меню</span>':''}${r.t>(S.profile.maxTime||999)?'<span class="pill grey">дольше обычного</span>':''}${likeHits(r).slice(0,2).map(t=>`<span class="pill">${(LIKE_GROUPS.map(g=>g[1][t]).find(Boolean))||''}</span>`).join('')}</span></div></div></button>
      ${d?`<div class="diff"><b class="small">Что изменится в списке покупок</b>${d.slice(0,10).join('')}${d.length>10?`<span class="muted">и ещё ${d.length-10}</span>`:''}</div><button class="btn block" data-act="doReplace" data-v="${r.id}">Заменить</button>`:`<span class="small muted">Нажмите, чтобы увидеть изменения в списке</span>`}
    </div>`}).join(''):`<div class="empty">С текущими ограничениями замен нет: все подходящие блюда исключены аллергиями, типом питания или списком «не едите». <button class="btn ghost small" data-act="tab" data-v="profile">Открыть ограничения</button></div>`}`;
@@ -604,7 +615,7 @@ function act(a,v,el){
    case 'remOpen': document.querySelectorAll('.push').forEach(x=>x.remove()); UI.sheet={type:'remind',day:todayIdx()+1}; break;
    case 'remHave': if(el.checked) markHave(v,needMap(S.plan).m[v].qty); else unmarkHave(v); break;
    case 'close': UI.sheet=null; break;
-   case 'reset': S=blank(); UI={sheet:null,open:{},q:'',dq:'',member:null}; try{localStorage.removeItem(KEY)}catch(e){} break;
+   case 'reset': S=blank(); try{history.replaceState(null,'',location.pathname+location.search)}catch(e){} UI={sheet:null,open:{},q:'',dq:'',member:null}; try{localStorage.removeItem(KEY)}catch(e){} break;
    default: if(!shellAct(a,v,el)) return;
   }
   save(); render();
@@ -660,7 +671,7 @@ document.addEventListener('change',e=>{const t=e.target; if(!t.dataset||!t.datas
 });
 function refocus(id){const i=document.getElementById(id); if(i){i.focus(); i.setSelectionRange(i.value.length,i.value.length)}}
 document.addEventListener('input',e=>{const t=e.target;
-  if(t.dataset.act==='budget'){S.profile.budget=+t.value; const b=$('#budgetv'); if(b) b.textContent=rub(S.profile.budget); save()}
+  if(t.dataset.act==='budget'){S.profile.budget=+t.value; S.profile.budgetSet=true; const b=$('#budgetv'); if(b) b.textContent=rub(S.profile.budget); save()}
   if(t.dataset.act==='search'){UI.q=t.value; render(); refocus('pq')}
   if(t.dataset.act==='dsearch'){UI.dq=t.value; render(); refocus('dq')}
 });

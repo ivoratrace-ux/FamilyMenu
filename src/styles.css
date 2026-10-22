@@ -243,3 +243,55 @@ html.cooking body{overflow:hidden}
 .screen{padding-top:14px}
 .togglecard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 .seg{flex-wrap:nowrap}
+.ditem.locked{opacity:.75}
+.ditem.locked svg{color:var(--muted)}
+.ditem .pill{flex:none}
+.newcard{border-color:var(--accent);background:var(--accent-soft)}
+.newic{flex:none;width:36px;height:36px;border-radius:10px;background:var(--card);color:var(--accent);display:grid;place-items:center}
+.newic svg{width:22px;height:22px}
+.lockcard{background:transparent;border-style:dashed}
+.lockcard svg{color:var(--muted);flex:none}
+.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.statgrid>div{display:flex;flex-direction:column;gap:2px;background:var(--bg);border-radius:10px;padding:8px 10px}
+.statgrid b{font-size:24px;font-variant-numeric:tabular-nums}
+.statgrid span{font-size:12px;color:var(--muted)}
+.tariff[aria-pressed="true"] b{color:var(--accent)}
+.cartqty{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;margin:0;line-height:1.1}
+.sharepre{white-space:pre-wrap;font:13px/1.45 var(--ui);background:var(--bg);border-radius:10px;padding:10px 12px;max-height:200px;overflow:auto;margin:0}
+.protobox{margin:8px 12px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;display:flex;flex-direction:column;gap:8px}
+.btn svg{width:18px;height:18px;flex:none}
+.famview .slot{cursor:default}
+a.btn{text-decoration:none}
+
+/* ============ v8 «Frigo» ============ */
+.splash8{position:fixed;inset:0;background:#7fc95a url(frigo.jpg) center/cover no-repeat;z-index:100}
+.oneline{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.bigsearch{min-height:54px!important;font-size:16px;border-radius:12px!important}
+.phototiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.phototile{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:14px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;overflow:hidden;padding:0}
+.phototile img{width:100%;height:100%;object-fit:cover}
+.plusbig{width:44px;height:44px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:26px;line-height:1}
+.photodel{position:absolute;top:6px;right:6px}
+.group8{display:flex;flex-direction:column;gap:8px}
+.navcard{padding:4px 0;gap:0}
+.navcard .ditem{padding:12px 14px;width:100%}
+.navcard .ditem+.ditem{border-top:1px solid var(--line)}
+.navcard .ditem svg{color:var(--accent);flex:none;width:22px;height:22px}
+.lockcard8{border-color:var(--saffron)}
+.lockcard8 .ditem svg{color:var(--saffron)}
+.pricecard{text-align:left;cursor:pointer;color:inherit;font:inherit}
+.for8{font-size:12px;color:var(--muted)}
+.recrow{text-align:left;color:inherit;font:inherit;cursor:pointer}
+.plain8{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.mealsel{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;color:var(--fg)}
+.mealsel span{width:84px;flex:none;font-weight:600}
+.mealsel select{flex:1}
+textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 12px;font:inherit;color:inherit;resize:vertical;min-height:44px}
+.savebar{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:6px;z-index:10}
+.preview8{padding-bottom:24px}
+.logo8{width:min(80%,300px);aspect-ratio:720/666;object-fit:cover;border-radius:20px}
+.fill8>i{width:0;animation:fill8 2s linear forwards}
+@keyframes fill8{to{width:100%}}
+@media (prefers-reduced-motion: reduce){.fill8>i{animation:none;width:100%}}
+.chip[hidden]{display:none}
+.chips .morechip{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent);font-weight:600}
