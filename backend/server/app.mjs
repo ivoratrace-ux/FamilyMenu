@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {createStoreCartRouter,buildVkusvillCart} from './store-cart.mjs';
 import { readFile } from 'node:fs/promises';
 import {createSupabaseAuth,AuthError} from './auth.mjs';
 import {bearer} from './auth-routes.mjs';
@@ -22,7 +23,8 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
 }
 
-export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
+export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, buildStoreCart = buildVkusvillCart, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
+  const storeCartRouter=createStoreCartRouter({catalog,apiKey,build:buildStoreCart,hourlyLimit});
   const userStateRouter=createUserStateRouter(userState);
   const inventoryRouter = createInventoryRouter({inventory,catalog});
   const fridgeRouter = createFridgeRouter({ apiKey, analyze, catalog, hourlyLimit });
@@ -34,7 +36,7 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
     };
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
+    if (path === '/api/stores/vkusvill/cart' || path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
       const origin = req.headers.origin;
       if (origin && !allowedOrigins.includes(origin) && origin !== `http://${req.headers.host}` && origin !== `https://${req.headers.host}`) return send(403, { error: 'Этот сайт не подключён к API.' });
       if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
@@ -42,10 +44,11 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Expose-Headers', 'Retry-After');
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-      if(['/api/user-state','/api/preferences','/api/menu','/api/inventory','/api/inventory/item','/api/ingredients','/api/fridge/scan','/api/meals'].includes(path)) {
+      if(['/api/stores/vkusvill/cart','/api/user-state','/api/preferences','/api/menu','/api/inventory','/api/inventory/item','/api/ingredients','/api/fridge/scan','/api/meals'].includes(path)) {
         try {req.accessToken=bearer(req);req.user=await auth.getUser(req.accessToken);}
         catch(error) {return send(error instanceof AuthError?error.status:503,{error:error instanceof AuthError?error.message:'Сервис входа временно недоступен.'});}
       }
+      if(path==='/api/stores/vkusvill/cart')return storeCartRouter(req,res,send);
       if(['/api/user-state','/api/preferences','/api/menu'].includes(path)) return userStateRouter(req,path,send,res);
       if (path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients') return inventoryRouter(req,path,send,res);
       if (path === '/api/catalog') {

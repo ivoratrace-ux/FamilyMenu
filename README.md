@@ -76,3 +76,6 @@ Android/iOS/Gradle не запускаются. Адрес:
 Backend по-прежнему запускается `npm start`, его тесты — `npm test`.
 Миграции запускаются отдельно и не выполняются при старте API.
 Инструкции: [docs/backend.md](docs/backend.md), [docs/database.md](docs/database.md).
+
+Интеграция публичной корзины ВкусВилла, её ограничения и диагностика подключения:
+[docs/store-integrations.md](docs/store-integrations.md).

@@ -24,6 +24,7 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
 let ws,send,chromeError;chrome.on('error',e=>chromeError=e);
 const catalog=JSON.parse(await readFile('backend/data/catalog.seed.json','utf8'));
 const documents=new Map(),stocks=new Map(['a','b'].map(id=>[id,{revision:0,userLogin:'@'+id,userApplication:'telegram',items:[]}]))
+let cartCalls=0;
 let approved=false,user='a',scanCalls=0,catalogCalls=0,searchCalls=0,privateCalls=0,refreshCalls=0,failSave=false;
 const bundle=(id=user)=>({user:{id,application:'telegram',providerUserId:id,login:'@'+id,displayName:id},session:{accessToken:id+'-access',refreshToken:id+'-refresh',expiresAt:Math.floor(Date.now()/1000)+3600}});
 const bodyText=`(document.body?.innerText || '')`;
@@ -56,6 +57,10 @@ try {
    if(path==='/api/auth/me'){await respond({user:bundle(owner).user});return;}
    if(path==='/api/auth/logout'){await respond(null,204);return;}
    privateCalls++;
+   if(path==='/api/stores/vkusvill/cart'){
+    cartCalls++;assert.ok(data.items.length>0);assert.ok(data.items.every(i=>catalog.ingredients.some(c=>c.id===i.ingredientId) && i.quantity>0));
+    await respond(cartCalls===1?{error:'ВкусВилл отклонил подключение'}:{store:'vkusvill',carts:[{url:'https://vkusvill.ru/?share_basket=smoke',productCount:data.items.length}],ingredientCount:data.items.length},cartCalls===1?502:200);return;
+   }
    if(path==='/api/ingredients'){searchCalls++;const q=url.searchParams.get('q');assert.ok(q.length>=3);await respond({ingredients:catalog.ingredients.filter(i=>i.name.toLowerCase().includes(q.toLowerCase())).map(({id,name,unit})=>({id,name,unit}))});return;}
    if(path==='/api/user-state'){
     let document=documents.get(owner) || {revision:0,preferences:null,menu:null};
@@ -119,9 +124,16 @@ try {
  await click('.hero [data-act="cook"]');await wait('!!document.querySelector(\'[data-act="cclose"]\')','Cooking missing');await click('[data-act="cclose"]');await wait('!UI.cook','Cooking did not close');
  await click('[data-act="tab"][data-v="shop"]');await wait(has('Список покупок'),'Shopping missing');await shot('06-shop');
  assert.equal(await evaluate('document.querySelectorAll(".screen a[href*=\\"vkusvill\\"], .screen a[href*=\\"lavka\\"]").length'),0,'No store links in the list');
+ // Public cart opens directly, preserves the shopping state, and offers a link when popup blocked.
+ await evaluate('window.open=()=>null;window.boughtBeforeCart=JSON.stringify(S.bought)');
+ await click('[data-act="vkusvillCart"]');await wait(has('ВкусВилл отклонил подключение'),'Store connection error missing');
+ await click('[data-act="vkusvillCart"]');await wait('!!document.querySelector("[data-store-cart-link]")','Ready basket link missing');
+ assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").href'),'https://vkusvill.ru/?share_basket=smoke');
+ assert.equal(await evaluate('JSON.stringify(S.bought)===window.boughtBeforeCart'),true,'Cart creation must not mark groceries as bought');
+ assert.equal(await evaluate('!!UI.cart'),false,'No per-product wizard for VkusVill');
  await click('.pricecard');await wait(has('Что входит в Premium'),'Premium offer missing');await click('[data-act="subscribe8"]');
  await wait(has('Утвердить меню'),'Auto cart needs an approved menu');await click('[data-act="approve8"]');
- await click('[data-act="cartStart"]');await wait('!!document.querySelector(\'[data-act="cartAdd"]\')','Cart missing');await click('[data-act="cartAdd"]');await click('[data-act="cartClose"]');
+ await click('[data-act="store"][data-v="lavka"]');await click('[data-act="cartStart"]');await wait('!!document.querySelector(\'[data-act="cartAdd"]\')','Cart missing');await click('[data-act="cartAdd"]');await click('[data-act="cartClose"]');
  await click('[data-act="back8"]');await wait(`S.tab==='profile'`,'Back from a page');
  await click('[data-act="tab"][data-v="home"]');await wait(has('Что есть дома'),'Home missing');
  await evaluate(`fetch('src/frigo-logo.jpg').then(r=>r.blob()).then(b=>photoFiles8([new File([b],'f.jpg',{type:'image/jpeg'})]))`);

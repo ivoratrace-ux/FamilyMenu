@@ -8,9 +8,9 @@
     session=value;epoch++;
     try {value?localStorage.setItem(key,JSON.stringify(value)):localStorage.removeItem(key);}catch{}
   }
-  async function send(path,{method='GET',body,token}={}) {
+  async function send(path,{method='GET',body,token,timeoutMs=30000}={}) {
     let response;
-    try {response=await fetch(base+path,{method,headers:{...(body!==undefined?{'Content-Type':'application/json'}:{}),...(token?{Authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(30000),cache:'no-store'});}
+    try {response=await fetch(base+path,{method,headers:{...(body!==undefined?{'Content-Type':'application/json'}:{}),...(token?{Authorization:'Bearer '+token}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(timeoutMs),cache:'no-store'});}
     catch {throw new ApiError(0,'Нет связи с сервером. Проверьте интернет.');}
     if(response.status===204)return null;
     const data=await response.json().catch(()=>({}));
