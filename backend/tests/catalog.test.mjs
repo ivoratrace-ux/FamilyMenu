@@ -8,9 +8,9 @@ import {seedSql,ART_BASE} from '../../scripts/catalog-seed.mjs';
 const seed=JSON.parse(await readFile(new URL('../data/catalog.seed.json',import.meta.url)));
 const doc={...seed,recipes:seed.recipes.map(r=>({...r,imageUrl:`${ART_BASE}/${r.id}.png`,stepImageUrls:r.steps.map((_,n)=>`${ART_BASE}/${r.id}-step-${n}.png`)}))};
 test('import retains all recipe relations, timings, tips and image references',async()=>{
- assert.equal(seed.recipes.length,144);assert.equal(seed.ingredients.length,86);
- assert.equal(seed.recipes.reduce((n,r)=>n+r.steps.length,0),588);
- assert.equal(seed.recipes.reduce((n,r)=>n+r.ingredients.length,0),812);
+ assert.equal(seed.recipes.length,175);assert.equal(seed.ingredients.length,86);
+ assert.equal(seed.recipes.reduce((n,r)=>n+r.steps.length,0),700);
+ assert.equal(seed.recipes.reduce((n,r)=>n+r.ingredients.length,0),930);
  for(const r of doc.recipes) {
   assert.ok(r.steps.length>0);assert.equal(r.steps.length,r.stepSeconds.length);assert.equal(r.steps.length,r.stepTips.length);
   assert.ok(r.ingredients.every(q=>seed.ingredients.some(i=>i.id===q.id)&&q.quantity>0));

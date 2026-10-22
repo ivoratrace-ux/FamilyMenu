@@ -62,3 +62,16 @@ jobs:
       - name: Stop test container
         if: always()
         run: docker rm -f family-menu-api || true
+  deploy:
+    # Triggers the Render deploy hook after green checks on main. Needs repository secret RENDER_DEPLOY_HOOK.
+    needs: api
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "RENDER_DEPLOY_HOOK is not set; skipping deploy."; exit 0; fi
+          curl -fsS -X POST "$HOOK" -o /dev/null && echo "Render deploy triggered."

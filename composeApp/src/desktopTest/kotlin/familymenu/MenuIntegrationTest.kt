@@ -9,9 +9,9 @@ class MenuIntegrationTest {
     private val catalog = runBlocking {appJson.decodeFromString<Catalog>(javaClass.getResourceAsStream("/catalog.seed.json")!!.bufferedReader().use { it.readText() })}
     private val engine = MenuEngine(catalog)
     @Test fun originalCatalogIsCompleteAndAllReferencesResolve() {
-        assertEquals(144,catalog.recipes.size)
+        assertEquals(175,catalog.recipes.size)
         assertEquals(86,catalog.ingredients.size)
-        assertEquals(144,catalog.recipes.map {it.id}.toSet().size)
+        assertEquals(175,catalog.recipes.map {it.id}.toSet().size)
         catalog.recipes.forEach {r ->
             assertTrue(r.steps.isNotEmpty());assertEquals(r.steps.size,r.stepSeconds.size)
             assertEquals(r.steps.size,r.stepTips.size)

@@ -8,9 +8,9 @@ insert into auth.users(id,email) values
 insert into public.cooking_history(user_id,dish_id,rating) values
  (current_setting('familymenu.other_user')::uuid,'b1',5);
 do $$ begin
- if (select count(*) from public.dishes)<>144 then raise exception 'Wrong dish count'; end if;
- if (select count(*) from public.dish_steps)<>588 then raise exception 'Wrong step count'; end if;
- if (select count(*) from public.dish_ingredients)<>812 then raise exception 'Wrong ingredient relation count'; end if;
+ if (select count(*) from public.dishes)<>175 then raise exception 'Wrong dish count'; end if;
+ if (select count(*) from public.dish_steps)<>700 then raise exception 'Wrong step count'; end if;
+ if (select count(*) from public.dish_ingredients)<>930 then raise exception 'Wrong ingredient relation count'; end if;
  if exists(select 1 from public.dishes d where not exists(select 1 from public.dish_steps s where s.dish_id=d.id)) then raise exception 'Dish without steps'; end if;
  begin
   insert into public.dishes(id,name,cooking_minutes,meal) values('schema-test-empty','Test',1,'b');
@@ -20,7 +20,7 @@ do $$ begin
 end $$;
 set local role anon;
 do $$ begin
- if jsonb_array_length(public.get_catalog()->'recipes')<>144 then raise exception 'Public catalog unavailable'; end if;
+ if jsonb_array_length(public.get_catalog()->'recipes')<>175 then raise exception 'Public catalog unavailable'; end if;
  begin
   insert into public.ingredients(id,name,category,unit,price,nutrition) values('forbidden','Test','Test','g',1,array[1,1,1,1]);
   raise exception 'Anonymous catalog write permitted';
