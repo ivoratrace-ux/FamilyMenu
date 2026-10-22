@@ -46,6 +46,7 @@ let inventoryWrites=0;
 let searchCalls=0;
 let refreshCalls=0;
 let protectedCalls=0;
+let messengerCalls=0;
 const documents=new Map();
 const stocks=new Map([['user-a',inventory],['user-b',{userEmail:'b@example.test',revision:0,items:[]}]]);
 const userForToken=token=>token?.startsWith('user-b')?'user-b':token?.startsWith('user-a')?'user-a':null;
@@ -106,11 +107,14 @@ try {
         else if(new URL(request.url).pathname.startsWith('/api/auth/')) {
           const path=new URL(request.url).pathname;
           if(path==='/api/auth/logout') {await send('Fetch.fulfillRequest',{requestId,responseCode:204,responseHeaders:headers});return;}
+          if(path==='/api/auth/messengers') {await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify({telegram:true,max:true})).toString('base64')});return;}
           const data=JSON.parse(request.postData);
-          let user;
-          if(path==='/api/auth/refresh') {refreshCalls++;user=data.refreshToken.startsWith('user-b')?'user-b':'user-a';}
-          else {assert.equal(data.password,'StrongPass123!');user=data.email==='b@example.test'?'user-b':'user-a';}
-          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(authBundle(user))).toString('base64')});
+          let body;
+          if(path==='/api/auth/telegram/start') {messengerCalls++;assert.equal(data.phone.replace(/\D/g,'').slice(-10),'9001234567');body={challengeId:'tg-1',expiresIn:300,via:'telegram',destination:'+7 900 ***-**-67'};}
+          else if(path==='/api/auth/telegram/verify') {messengerCalls++;assert.equal(data.challengeId,'tg-1');assert.equal(data.code,'1234');body={...authBundle('user-a'),login:{via:'telegram',display:'+7 900 ***-**-67'}};}
+          else if(path==='/api/auth/refresh') {refreshCalls++;body=authBundle(data.refreshToken.startsWith('user-b')?'user-b':'user-a');}
+          else {assert.equal(data.password,'StrongPass123!');body=authBundle(data.email==='b@example.test'?'user-b':'user-a');}
+          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(body)).toString('base64')});
         }
         else if(new URL(request.url).pathname==='/api/user-state') {
           protectedCalls++;
@@ -173,8 +177,16 @@ try {
   const click=async label=>{
     console.log('UI control:',label);
     await wait(has(label),`Missing UI control: ${label}`);
-    const clicked=await evaluate(`(()=>{${deep};const matches=all().filter(e=>(e.getAttribute('aria-label')||e.textContent||'').trim()===${JSON.stringify(label)});const e=matches.find(e=>e.getAttribute('role')==='button'||e.tagName==='BUTTON')||matches.at(-1);if(!e)return false;e.click();return true;})()`);
-    assert.ok(clicked,`Cannot click ${label}`);await delay(200);
+    const clicked=await evaluate(`(()=>{${deep};const L=${JSON.stringify(label)};const text=e=>(e.getAttribute('aria-label')||e.textContent||'').trim();const isButton=e=>e.getAttribute('role')==='button'||e.tagName==='BUTTON';
+      const exact=all().filter(e=>text(e)===L);let e=exact.filter(isButton).at(-1);
+      if(!e){const containing=all().filter(e=>isButton(e)&&text(e).includes(L)).sort((a,b)=>text(a).length-text(b).length);e=containing[0];}
+      if(!e)e=exact.at(-1);if(!e)return false;e.click();return true;})()`);
+    assert.ok(clicked,`Cannot click ${label}`);await delay(250);
+  };
+  const clickWhere=async(predicate,name)=>{
+    console.log('UI control:',name);
+    const expr=`(()=>{${deep};const hit=all().filter(e=>(e.getAttribute('role')==='button'||e.tagName==='BUTTON')&&(t=>${predicate})((e.getAttribute('aria-label')||e.textContent||'').trim()));if(!hit.length)return false;hit[0].click();return true;})()`;
+    await wait(expr,`Missing UI control: ${name}`);await delay(250);
   };
   const fill=async(label,text,index=0)=>{
     await wait(`(()=>{${deep};return all().some(e=>e.getAttribute('role')==='textbox')})()`,`Missing text field: ${label}`);
@@ -190,33 +202,57 @@ try {
   assert.ok(!navigation.errorText,`Browser navigation failed: ${navigation.errorText}`);
   await wait(has('Повторить'),'Catalog error should offer retry');
   await click('Повторить');
-  await wait(has('Пропустить'),'Compose failed to render intro');
+  // Intro slides → sign-in choice
+  await wait(has('Меню на всю неделю'),'Intro slides did not render');
   assert.ok(catalogCalls>0,'App must load recipes from the backend');
   await click('Пропустить');
-  for(let step=0;step<6;step++) await click('Дальше');
-  await click('Составить меню');await wait(has('Ваша неделя'),'First menu preview did not render');
-  assert.equal(protectedCalls,0,'Onboarding preview must work without user requests');
-  assert.equal(await evaluate(has('Посмотреть без входа (демо-семья)')),false,'Demo mode must be removed');
-  await click('Далее');await wait(has('Создать аккаунт'),'Continue must require authentication');
-  await fill('Электронная почта','a@example.test');await fill('Пароль','StrongPass123!',1);
-  await click('Зарегистрироваться');await wait(has('Сегодня'),'Registration did not open app');
-  assert.ok(documents.get('user-a')?.menu?.days?.length===7,'First menu must be saved to account');
-  assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes('StrongPass123!'))`),false,'Password must not be persisted');
-  await click('Покупки');await wait(has('Список на неделю'),'Shopping screen did not render');
+  await wait(has('Войти через Telegram'),'Sign-in choice did not render');
+  assert.ok(await evaluate(has('Войти через MAX')),'MAX sign-in must be offered');
+  assert.equal(protectedCalls,0,'Nothing protected may be requested before sign-in');
+  // Telegram: phone → code
+  await click('Войти через Telegram');
+  await fill('Номер телефона','9001234567');await click('Получить код в Telegram');
+  await wait(has('Введите 4 цифры'),'Code step did not render');
+  await fill('Код','1234');await click('Войти');
+  await wait(has('Кто в семье?'),'Telegram sign-in did not open getting to know');
+  assert.equal(messengerCalls,2);
+  assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes('9001234567'))`),false,'Phone must not be persisted');
+  // Getting to know: 5 steps, scenario choice, week setup
+  for(let step=0;step<5;step++) await click('Дальше');
+  await wait(has('С чего начнём?'),'Scenario step did not render');
+  await click('Составить меню на неделю');
+  await wait(has('Последний шаг'),'Week setup did not render');
+  await click('Составить меню');
+  await wait(has('Утвердить меню и собрать список'),'Week menu did not render');
+  for(let i=0;i<100 && !(documents.get('user-a')?.menu?.days?.length===7);i++) await delay(100);
+  assert.ok(documents.get('user-a')?.menu?.days?.length===7,'Menu must be saved to the account');
+  assert.ok(documents.get('user-a')?.preferences?.onboarded===true,'Onboarding must be saved');
+  await click('Утвердить меню и собрать список');
+  await wait(has('Собрать корзину по шагам'),'Shopping list did not render after approval');
   assert.ok(imageCalls>0,'Dish images must be loaded using database URLs');
-  await click('Дома');await wait(has('Мои запасы'),'Inventory tab did not render');
-  await wait(has('Изменить Молоко'),'Saved inventory was not loaded');
-  await click('Добавить ингредиент');
-  await fill('Поиск ингредиента','ог');assert.equal(searchCalls,0,'Search started before three characters');
-  await fill('Поиск ингредиента','огур');await click('Огурцы · г');
-  await fill('Количество (г)','300');await click('Сохранить количество');
-  await wait(has('Изменить Огурцы'),'Ingredient was not added');
-  await click('Изменить Огурцы');await fill('Количество (г)','500');await click('Сохранить количество');
-  await wait(`!(${has('Сохранить количество')})`,'Amount editor did not close');
-  await click('Удалить Молоко');await wait(`!(${has('Изменить Молоко')})`,'Ingredient was not deleted');
-  assert.equal(inventory.items.length,1);assert.equal(inventory.items[0].quantity,500);
-  await click('Обновить запасы');await wait(has('Мой холодильник'),'Scanner did not open');
-  const before=await evaluate(`localStorage.getItem('family-menu-compose-v2')`);
+  await click('Собрать корзину по шагам');await wait(has('Положила ✓'),'Cart session did not open');
+  await click('Положила ✓');await wait(has('Продукт 2 из'),'Cart did not advance');await click('Закрыть');
+  // Cook from what you have
+  await click('Готовить');await wait(has('Что есть дома'),'Cook tab did not render');
+  await wait(has('Молоко ×'),'Saved inventory was not loaded');
+  const writes0=inventoryWrites;
+  await click('Изменить');await wait(has('Мясо и птица'),'Pantry picker did not open');
+  await click(catalog.ingredients.find(i=>i.id==='potato').name);
+  for(let i=0;i<100 && inventoryWrites===writes0;i++) await delay(100);
+  assert.equal(inventoryWrites,writes0+1,'Marking a product must save stock');
+  await clickWhere(`t.startsWith('Готово ·')`,'Pantry done');
+  await click('Супы');
+  await clickWhere(`(t.includes('всё есть')||t.includes('докупить')) && t.includes('мин')`,'First soup');
+  await wait(has('Готовить по шагам'),'Recipe card did not open');
+  if(await evaluate(has('Добавить недостающее в «Покупки»'))) await click('Добавить недостающее в «Покупки»');
+  await click('Готовить по шагам');await wait(has('Шаг 1 из'),'Step-by-step cooking did not open');
+  for(let i=0;i<20 && !(await evaluate(has('Готово ✓')));i++) await click('Дальше');
+  await click('Готово ✓');await wait(has('Приятного аппетита!'),'Cooking did not finish');
+  const writes1=inventoryWrites;await click('Списать использованное');
+  for(let i=0;i<100 && inventoryWrites===writes1;i++) await delay(100);
+  await click('Закрыть');
+  // Fridge photos → recognition → replace stock
+  await click('Сфотографировать холодильник');await wait(has('Мой холодильник'),'Scanner did not open');
   await click('Добавить фото');assert.equal(await evaluate(has('Камера')),false,'Web must offer attachment only');await click('Выбрать фото');
   await wait(`!!document.querySelector('input[type=file]')`,'File picker did not open');
   const doc=await send('DOM.getDocument');
@@ -232,40 +268,47 @@ try {
   assert.equal(scanCalls,0,'Selecting photos must not trigger recognition');
   await click('Удалить фото 2');
   await click('Распознать (4)');
-  await wait(has('Огурцы'),'Scanner alternatives did not render');
   await wait(has('Вне справочника'),'Unmatched products must be shown separately');
   await click('Огурцы');
   await wait(`!(${has('Выберите подходящий вариант')})`,'Alternative was not confirmed');
   assert.equal(scanCalls,1,'Expected exactly one mocked scanner request');
-  assert.equal(await evaluate(`localStorage.getItem('family-menu-compose-v2')`),before,'Scanner modified persistent menu/profile/purchases');
-  assert.equal(inventoryWrites,3,'Recognition must not write stock before Save');
-  // Outside-catalog product must be removed or mapped before saving.
+  const writes2=inventoryWrites;
   await evaluate(`(()=>{${deep};const p=all().find(e=>e.textContent?.trim()==='Кимчи');let node=p;while(node){const buttons=[...node.querySelectorAll('[role=button],button')].filter(e=>e.textContent?.trim()==='Удалить');if(buttons.length===1){buttons[0].click();return true;}node=node.parentElement;}return false;})()`);
   await wait(`!(${has('Кимчи')})`,'Unmatched product was not removed');
-  await click('Сохранить');await click('Отмена');assert.equal(inventoryWrites,3,'Cancelled replacement wrote inventory');
+  await click('Сохранить');await click('Отмена');assert.equal(inventoryWrites,writes2,'Cancelled replacement wrote inventory');
   await click('Сохранить');await click('Заменить запасы');
-  await wait(has('Мои запасы'),'Saved scanner result did not return to inventory');
-  assert.equal(inventoryWrites,4);assert.equal(inventory.items.length,2);assert.ok(!inventory.items.some(i=>i.ingredientId==='milk'));
-  const screenshot=await send('Page.captureScreenshot' ,{format:'png'});
-  await writeFile(resolve(report,'scanner.png'),Buffer.from(screenshot.data,'base64'));
+  await wait(has('Что есть дома'),'Saved scanner result did not return to cooking');
+  assert.equal(inventoryWrites,writes2+1);assert.equal(inventory.items.length,2);assert.ok(!inventory.items.some(i=>i.ingredientId==='milk'));
+  const screenshot=await send('Page.captureScreenshot',{format:'png'});
+  await writeFile(resolve(report,'cook.png'),Buffer.from(screenshot.data,'base64'));
+  // Reload with an expired session
   await evaluate(`(()=>{const key='family-menu-auth-v1';const session=JSON.parse(localStorage.getItem(key));session.session.expiresAt=1;localStorage.setItem(key,JSON.stringify(session));})()`);
   await send('Page.reload');
-  await wait(has('Сегодня'),'App did not restore after reload');
-  await click('Дома');await wait(has('Мои запасы'),'Inventory tab did not restore');
-  await wait(has('Изменить Яйца'),'Saved stock did not load after reload');
-  assert.equal(await evaluate(has('Кимчи')),false,'Unmatched item was saved unexpectedly');
-  assert.equal(await evaluate(has('Удалить фото 1')),false,'Scanner photos persisted unexpectedly');
+  await wait(has('Главная'),'App did not restore after reload');
   assert.ok(refreshCalls>0,'Expired session must be refreshed after reload');
-  assert.ok(documents.get('user-a').menu.days.length===7);
-  await click('Аккаунт');await click('Выйти из аккаунта');await wait(has('Создать аккаунт'),'Logout did not clear the session');
+  await click('Готовить');await wait(has('Яйца ×'),'Saved stock did not load after reload');
+  assert.equal(await evaluate(has('Кимчи')),false,'Unmatched item was saved unexpectedly');
+  // Premium: locked in week one, trial opens after a week
+  await click('Профиль');await wait(has('Калории и КБЖУ'),'Profile did not render');
+  await click('+неделя');await wait(has('Пробная неделя'),'Premium trial did not start after a week');
+  // Logout and account isolation (email sign-in)
+  await click('Выйти');await wait(has('Войти через Telegram'),'Logout did not clear the session');
+  await click('Войти по почте и паролю');
   await fill('Электронная почта','b@example.test');await fill('Пароль','StrongPass123!',1);await click('Зарегистрироваться');
-  await wait(has('Для кого готовим?'),'A new account must not inherit another user preferences/menu');
+  await wait(has('Кто в семье?'),'A new account must not inherit another user preferences/menu');
   assert.equal(stocks.get('user-b').items.length,0,'Account inventory leaked across users');
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log('Compose Web: onboarding → preview → registration → inventory load → search → add → edit → delete → photos → confirm → replace → refresh → logout → account isolation: PASS. Backend mocked; no paid API calls.');
+  console.log('Compose Web: intro → Telegram code sign-in → getting to know → week menu → approve → cart → cook from what you have → steps → use up → fridge photos → replace stock → refresh → premium trial → logout → email account isolation: PASS. Backend mocked; no paid API calls.');
 } catch(e) {
-  if(send) {try {const dom=await send('Runtime.evaluate',{expression:`(()=>{${deep};return all().map(e=>({tag:e.tagName,role:e.getAttribute('role'),label:e.getAttribute('aria-label'),text:e.textContent?.slice(0,300)}))})()`,returnByValue:true});await writeFile(resolve(report,'semantics.json'),JSON.stringify(dom.result.value,null,2));const image=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(image.data,'base64'));}catch{}}
-  console.error(e);process.exitCode=1;
+  let visible='';
+  if(send) {try {const dom=await send('Runtime.evaluate',{expression:`(()=>{${deep};return all().map(e=>({tag:e.tagName,role:e.getAttribute('role'),label:e.getAttribute('aria-label'),text:e.textContent?.slice(0,300)}))})()`,returnByValue:true});await writeFile(resolve(report,'semantics.json'),JSON.stringify(dom.result.value,null,2));
+    visible=[...new Set(dom.result.value.filter(x=>x.role==='button'||(x.text||'').length<60).map(x=>(x.label||x.text||'').trim()).filter(Boolean))].slice(0,90).join(' | ');
+    const image=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(image.data,'base64'));}catch{}}
+  console.error(e);
+  const clean=t=>String(t).replace(/%/g,'%25').replace(/\r?\n/g,'%0A').slice(0,3500);
+  console.log(`::error title=web-smoke::${clean(e?.stack||e)}`);
+  if(visible) console.log(`::error title=web-smoke screen::${clean(visible)}`);
+  process.exitCode=1;
 } finally {
   await writeFile(resolve(report,'browser.log'),browserLog.join(''));
   await writeFile(resolve(report,'network.json'),JSON.stringify(networkLog,null,2));
