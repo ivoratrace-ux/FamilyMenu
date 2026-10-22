@@ -9,7 +9,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.*
@@ -54,18 +53,15 @@ private data class Slide(val title: String,val text: String,val image: String?,v
 /** Sign-in: a 4-digit code from the Telegram or MAX bot, with email and password as a fallback. */
 @Composable internal fun AuthenticationScreen(m: AppModel) {
     val scope=rememberCoroutineScope()
-    val uri=LocalUriHandler.current
     var mode by remember {mutableStateOf("choose")}
     var phone by remember {mutableStateOf("")}
     var code by remember {mutableStateOf("")}
-    var challenge by remember {mutableStateOf<MessengerChallenge?>(null)}
+    var codeSent by remember {mutableStateOf(false)}
     var email by remember {mutableStateOf("")}
     var password by remember {mutableStateOf("")}
     var register by remember {mutableStateOf(true)}
     var busy by remember {mutableStateOf(false)}
     var error by remember {mutableStateOf<String?>(null)}
-    var status by remember {mutableStateOf<MessengerStatus?>(null)}
-    LaunchedEffect(Unit) {status=Account.messengers()}
     fun run(action: suspend ()->Unit) {
         busy=true;error=null
         scope.launch {
@@ -75,36 +71,28 @@ private data class Slide(val title: String,val text: String,val image: String?,v
             finally {busy=false}
         }
     }
-    val via=if(mode=="max" || challenge?.via=="max") "MAX" else "Telegram"
+    fun masked(): String {val d=phone.filter(Char::isDigit).takeLast(10);return if(d.length<10) phone else "+7 ${d.take(3)} ***-**-${d.takeLast(2)}"}
+    val via=if(mode=="max") "MAX" else "Telegram"
     Page {
         when(mode) {
             "choose" -> {
                 Heading("Семейное меню","Вход")
-                Note("Аккаунт сохранит семью, меню и подписку, даже если вы смените телефон. А партнёр увидит тот же список покупок.")
-                Primary("Войти через Telegram",!busy) {mode="telegram";code="";challenge=null;error=null}
-                Secondary("Войти через MAX",!busy) {mode="max";code="";challenge=null;error=null;run {challenge=Account.maxStart()}}
+                Note("Аккаунт сохранит семью, меню и подписку. А партнёр увидит тот же список покупок.")
+                Primary("Войти через Telegram",!busy) {mode="telegram";code="";codeSent=false;error=null}
+                Secondary("Войти через MAX",!busy) {mode="max";code="";codeSent=false;error=null}
                 Note("Пришлём 4-значный код в мессенджер от бота «Семейное меню». Рекламу и рассылки без вашего согласия не отправляем.")
-                if(status!=null && status?.telegram==false && status?.max==false) Note("Вход через мессенджеры ещё настраивается — пока можно войти по почте.")
                 TextButton(onClick={mode="email";error=null}) {Text("Войти по почте и паролю")}
             }
-            "telegram" -> if(challenge==null) {
-                Heading("Вход через Telegram","Номер телефона")
-                Note("Номер, на который зарегистрирован ваш Telegram. Код придёт туда от бота «Семейное меню».")
+            "telegram","max" -> if(!codeSent) {
+                Heading("Вход через $via","Номер телефона")
+                Note("Номер, на который зарегистрирован ваш $via. Код придёт туда от бота «Семейное меню».")
                 OutlinedTextField(phone,{phone=it.filter {c -> c.isDigit() || c in "+ ()-"}.take(20)},label={Text("Номер телефона")},placeholder={Text("+7 900 000-00-00")},singleLine=true,enabled=!busy,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Phone),modifier=Modifier.fillMaxWidth())
-                Primary("Получить код в Telegram",!busy && phone.count {it.isDigit()}>=10) {run {challenge=Account.telegramStart(phone)}}
-            } else CodeStep(code,{code=it},busy,"Бот «Семейное меню» отправил 4 цифры в Telegram на номер ${challenge?.destination ?: phone}.") {
-                run {Account.verifyCode("telegram",challenge!!.challengeId,code);code=""}
-            }
-            "max" -> {
-                Heading("Вход через MAX","Код от бота")
-                val link=challenge?.link
-                if(link==null && busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if(link!=null) {
-                    Note("1. Откройте бота «Семейное меню» в MAX и нажмите «Начать».")
-                    Secondary("Открыть бота в MAX") {uri.openUri(link)}
-                    Note("2. Бот пришлёт 4 цифры — введите их здесь.")
-                    CodeStep(code,{code=it},busy,null) {run {Account.verifyCode("max",challenge!!.challengeId,code);code=""}}
-                } else if(!busy) Primary("Попробовать ещё раз") {run {challenge=Account.maxStart()}}
+                Primary("Получить код в $via",!busy && phone.count {it.isDigit()}>=10) {codeSent=true;code=""}
+            } else {
+                CodeStep(code,{code=it},busy,"Бот «Семейное меню» отправил 4 цифры в $via на номер ${masked()}.") {
+                    run {Account.fakeMessengerLogin(mode,masked());code=""}
+                }
+                Note("Тестовый вход: сообщение в мессенджер пока не отправляется, подойдёт любой код из 4 цифр.")
             }
             else -> {
                 Heading("Вход по почте",if(register) "Создать аккаунт" else "Войти в аккаунт")
@@ -115,10 +103,9 @@ private data class Slide(val title: String,val text: String,val image: String?,v
                 TextButton(onClick={register=!register;error=null},enabled=!busy) {Text(if(register) "Уже есть аккаунт? Войти" else "Создать новый аккаунт")}
             }
         }
-        if(busy && mode!="max") LinearProgressIndicator(Modifier.fillMaxWidth())
+        if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let {Text(it,color=MaterialTheme.colorScheme.error)}
-        if(mode!="choose") TextButton(onClick={if(mode=="telegram" && challenge!=null) {challenge=null;code=""} else {mode="choose";challenge=null};error=null},enabled=!busy) {Text("‹ Назад")}
-        if(mode=="telegram" && challenge!=null) TextButton(onClick={mode="max";challenge=null;code="";run {challenge=Account.maxStart()}},enabled=!busy) {Text("Не пришёл код? Войти через MAX")}
+        if(mode!="choose") TextButton(onClick={if(mode!="email" && codeSent) {codeSent=false;code=""} else mode="choose";error=null},enabled=!busy) {Text("‹ Назад")}
     }
 }
 @Composable private fun CodeStep(code: String,onCode:(String)->Unit,busy: Boolean,hint: String?,onSubmit:()->Unit) {

@@ -1,11 +1,8 @@
 import { AuthError, invalidSession, createSupabaseAuth } from './auth.mjs';
-import { createMessengerAuth, normalizePhone } from './messenger-auth.mjs';
 
 const routes = new Map([
   ['/api/auth/register','POST'], ['/api/auth/login','POST'], ['/api/auth/refresh', 'POST'],
-  ['/api/auth/logout', 'POST'], ['/api/auth/me', 'GET'], ['/health/auth', 'GET'],
-  ['/api/auth/telegram/start', 'POST'], ['/api/auth/telegram/verify', 'POST'], ['/api/auth/max/start', 'POST'], ['/api/auth/max/verify', 'POST'],
-  ['/api/auth/messengers', 'GET']
+  ['/api/auth/logout', 'POST'], ['/api/auth/me', 'GET'], ['/health/auth', 'GET']
 ]);
 const invalid = message => new AuthError(400, 'INVALID_INPUT', message);
 function emailAddress(value) {
@@ -17,7 +14,7 @@ export function bearer(req) {
   if (typeof header !== 'string' || header.length > 8192 || !/^Bearer [A-Za-z0-9._~-]+$/i.test(header)) throw invalidSession();
   return header.slice(7);
 }
-export async function jsonBody(req, allowedFields) {
+async function jsonBody(req, allowedFields) {
   if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json') throw new AuthError(415, 'JSON_REQUIRED', 'Нужен запрос в формате JSON.');
   let size = 0;
   const chunks = [];
@@ -43,14 +40,11 @@ function limiter(limit, windowMs, now) {
     entry.count++; entries.set(key, entry);
   };
 }
-export function createAuthRouter({ auth = createSupabaseAuth(), now = () => Date.now(), otpHourlyLimit = 2, messenger = createMessengerAuth({ auth, now }) } = {}) {
+export function createAuthRouter({ auth = createSupabaseAuth(), now = () => Date.now(), otpHourlyLimit = 2 } = {}) {
   const allRequests = limiter(120, 60000, now);
   const emailCooldown = limiter(1, 60000, now);
   const emailBudget = limiter(otpHourlyLimit, 3600000, now);
   const verificationAttempts = limiter(5, 60000, now);
-  const phoneCooldown = limiter(1, 60000, now);
-  const phoneBudget = limiter(5, 3600000, now);
-  const codeChecks = limiter(20, 60000, now);
   return async (req, path, send, res) => {
     const method = routes.get(path);
     if (!method) return send(404, { error: 'Не найдено.', code: 'NOT_FOUND' });
@@ -60,19 +54,6 @@ export function createAuthRouter({ auth = createSupabaseAuth(), now = () => Date
       if (path === '/health/auth') {
         const report = await auth.checkConfiguration();
         return send(report.status === 'ok' ? 200 : 503, report);
-      }
-      if (path === '/api/auth/messengers') return send(200, { telegram: messenger.configured.telegram, max: messenger.configured.max });
-      if (path === '/api/auth/telegram/start') {
-        const body = await jsonBody(req, ['phone']);
-        const phone = normalizePhone(body.phone);
-        phoneCooldown(phone); phoneBudget(phone);
-        return send(200, await messenger.telegramStart({ phone }));
-      }
-      if (path === '/api/auth/max/start') { await jsonBody(req, []); return send(200, await messenger.maxStart()); }
-      if (path === '/api/auth/telegram/verify' || path === '/api/auth/max/verify') {
-        const body = await jsonBody(req, ['challengeId', 'code']);
-        codeChecks('global');
-        return send(200, await (path === '/api/auth/telegram/verify' ? messenger.telegramVerify(body) : messenger.maxVerify(body)));
       }
       if (path === '/api/auth/me') return send(200, { user: await auth.getUser(bearer(req)) });
       if (path === '/api/auth/logout') { await auth.signOut(bearer(req)); return send(204); }

@@ -15,10 +15,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class AccountTokens(val accessToken: String,val refreshToken: String,val expiresAt: Long,val expiresIn: Long=3600,val tokenType: String="bearer")
 @Serializable data class AccountLogin(val via: String,val display: String)
 @Serializable data class AccountSession(val user: AccountUser,val session: AccountTokens,val login: AccountLogin?=null)
-@Serializable data class MessengerChallenge(val challengeId: String,val expiresIn: Int=300,val via: String,val destination: String?=null,val link: String?=null)
-@Serializable data class MessengerStatus(val telegram: Boolean=false,val max: Boolean=false)
-@Serializable private data class PhoneInput(val phone: String)
-@Serializable private data class CodeInput(val challengeId: String,val code: String)
+const val FAKE_LOGIN_DOMAIN="users.familymenu.invalid"
 @Serializable private data class PasswordInput(val email: String,val password: String)
 @Serializable private data class RefreshInput(val refreshToken: String)
 @Serializable private data class ApiError(val error: String="Сервис временно недоступен.")
@@ -38,17 +35,17 @@ object Account {
         check(response.status.isSuccess()) {runCatching {appJson.decodeFromString<ApiError>(text).error}.getOrDefault("Не удалось войти. Попробуйте позже.")}
         install(appJson.decodeFromString(text))
     }
-    private suspend fun postJson(path: String,body: String): String {
-        val response=client.post("$SCAN_API_BASE$path") {contentType(ContentType.Application.Json);setBody(body)}
-        val text=response.bodyAsText()
-        check(response.status.isSuccess()) {runCatching {appJson.decodeFromString<ApiError>(text).error}.getOrDefault("Сервис входа временно недоступен.")}
-        return text
-    }
-    suspend fun messengers(): MessengerStatus = runCatching {appJson.decodeFromString<MessengerStatus>(client.get("$SCAN_API_BASE/api/auth/messengers").bodyAsText())}.getOrDefault(MessengerStatus())
-    suspend fun telegramStart(phone: String)=appJson.decodeFromString<MessengerChallenge>(postJson("/api/auth/telegram/start",appJson.encodeToString(PhoneInput(phone))))
-    suspend fun maxStart()=appJson.decodeFromString<MessengerChallenge>(postJson("/api/auth/max/start","{}"))
-    suspend fun verifyCode(via: String,challengeId: String,code: String) {
-        install(appJson.decodeFromString<AccountSession>(postJson("/api/auth/${if(via=="max") "max" else "telegram"}/verify",appJson.encodeToString(CodeInput(challengeId,code)))))
+    /**
+     * Temporary "messenger" sign-in for the pilot: no request goes to Telegram or MAX, any 4-digit code is accepted.
+     * The device registers a regular account with random credentials, so the menu, stock and purchases still
+     * sync through the backend. The phone number is only shown in the profile and never leaves the device.
+     */
+    suspend fun fakeMessengerLogin(via: String,display: String) {
+        val alphabet="abcdefghijklmnopqrstuvwxyz0123456789"
+        fun random(n: Int)=(1..n).map {alphabet[kotlin.random.Random.nextInt(alphabet.length)]}.joinToString("")
+        try {login("$via-${random(20)}@$FAKE_LOGIN_DOMAIN",random(32),register=true)}
+        catch(e: IllegalStateException) {throw IllegalStateException("Не получилось войти через ${if(via=="max") "MAX" else "Telegram"}. Войдите по почте и паролю.")}
+        current?.let {install(it.copy(login=AccountLogin(via,display)))}
     }
     suspend fun token(previous: String?=null): String = lock.withLock {
         val session=current ?: throw SignInRequired()

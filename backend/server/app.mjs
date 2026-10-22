@@ -2,7 +2,6 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import {createSupabaseAuth,AuthError} from './auth.mjs';
 import {bearer} from './auth-routes.mjs';
-import {createMessengerAuth} from './messenger-auth.mjs';
 import {createUserStateRepository,createUserStateRouter} from './user-state.mjs';
 import { createInventoryRepository, createInventoryRouter } from './inventory.mjs';
 import { createCatalogRepository } from './catalog.mjs';
@@ -22,7 +21,7 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
 }
 
-export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), messenger = createMessengerAuth({auth}), authRouter = createAuthRouter({auth,messenger}) } = {}) {
+export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), authRouter = createAuthRouter({auth}) } = {}) {
   const userStateRouter=createUserStateRouter(userState);
   const inventoryRouter = createInventoryRouter({inventory,catalog});
   const fridgeRouter = createFridgeRouter({ apiKey, analyze, catalog, hourlyLimit });
@@ -34,17 +33,6 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
     };
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (path.startsWith('/api/max/webhook/')) {
-      // Server-to-server bot updates from MAX; the unguessable path segment authenticates the caller.
-      if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return send(405, { error: 'Метод не поддерживается.' }); }
-      try {
-        let size = 0; const chunks = [];
-        for await (const chunk of req) { size += chunk.length; if (size > 65536) { req.resume(); return send(413, { error: 'Слишком большой запрос.' }); } chunks.push(chunk); }
-        let update; try { update = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return send(400, { error: 'Некорректный JSON.' }); }
-        return send(200, await messenger.maxWebhook(path.slice('/api/max/webhook/'.length), update));
-      }
-      catch (error) { return send(error instanceof AuthError ? error.status : 503, { error: error instanceof AuthError ? error.message : 'Временно недоступно.' }); }
-    }
     if (path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
       const origin = req.headers.origin;
       if (origin && !allowedOrigins.includes(origin) && origin !== `http://${req.headers.host}` && origin !== `https://${req.headers.host}`) return send(403, { error: 'Этот сайт не подключён к API.' });
@@ -72,7 +60,7 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
           return send(report.status === 'ok' ? 200 : 503, report);
         } catch { return send(503, { status: 'error', database: 'unavailable', storage: 'unavailable' }); }
       }
-      if (path === '/health' && req.method === 'GET') return send(apiKey ? 200 : 503, { status: apiKey ? 'ok' : 'missing_api_key', apiVersion: 2, generationMode: 'per-meal', service: 'family-menu-api', revision, messengers: messenger.configured });
+      if (path === '/health' && req.method === 'GET') return send(apiKey ? 200 : 503, { status: apiKey ? 'ok' : 'missing_api_key', apiVersion: 2, generationMode: 'per-meal', service: 'family-menu-api', revision });
       if (path !== '/api/meals' || req.method !== 'POST') { res.setHeader('Allow', path.startsWith('/health') ? 'GET, OPTIONS' : 'POST, OPTIONS'); return send(405, { error: 'Метод не поддерживается.' }); }
       if (!apiKey) return send(503, { error: 'Сервис ещё не настроен. Попробуйте позже.' });
       if (req.headers['content-type']?.split(';')[0].trim() !== 'application/json') return send(415, { error: 'Нужен запрос в формате JSON.' });

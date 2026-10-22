@@ -18,11 +18,3 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         value: https://ivoratrace-ux.github.io
-      - key: MESSENGER_AUTH_SECRET
-        sync: false
-      - key: TELEGRAM_GATEWAY_TOKEN
-        sync: false
-      - key: MAX_BOT_TOKEN
-        sync: false
-      - key: MAX_BOT_NAME
-        sync: false

@@ -107,11 +107,9 @@ try {
         else if(new URL(request.url).pathname.startsWith('/api/auth/')) {
           const path=new URL(request.url).pathname;
           if(path==='/api/auth/logout') {await send('Fetch.fulfillRequest',{requestId,responseCode:204,responseHeaders:headers});return;}
-          if(path==='/api/auth/messengers') {await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify({telegram:true,max:true})).toString('base64')});return;}
           const data=JSON.parse(request.postData);
           let body;
-          if(path==='/api/auth/telegram/start') {messengerCalls++;assert.equal(data.phone.replace(/\D/g,'').slice(-10),'9001234567');body={challengeId:'tg-1',expiresIn:300,via:'telegram',destination:'+7 900 ***-**-67'};}
-          else if(path==='/api/auth/telegram/verify') {messengerCalls++;assert.equal(data.challengeId,'tg-1');assert.equal(data.code,'1234');body={...authBundle('user-a'),login:{via:'telegram',display:'+7 900 ***-**-67'}};}
+          if(path==='/api/auth/register' && data.email.endsWith('@users.familymenu.invalid')) {messengerCalls++;assert.match(data.email,/^telegram-[a-z0-9]{20}@/);assert.ok(data.password.length>=32);body=authBundle('user-a');}
           else if(path==='/api/auth/refresh') {refreshCalls++;body=authBundle(data.refreshToken.startsWith('user-b')?'user-b':'user-a');}
           else {assert.equal(data.password,'StrongPass123!');body=authBundle(data.email==='b@example.test'?'user-b':'user-a');}
           await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(body)).toString('base64')});
@@ -213,13 +211,13 @@ try {
   await wait(has('Войти через Telegram'),'Sign-in choice did not render');
   assert.ok(await evaluate(has('Войти через MAX')),'MAX sign-in must be offered');
   assert.equal(protectedCalls,0,'Nothing protected may be requested before sign-in');
-  // Telegram: phone → code
+  // Telegram (test sign-in, no messenger request): phone → any code → device account
   await click('Войти через Telegram');
   await fill('Номер телефона','9001234567');await click('Получить код в Telegram');
   await wait(has('Введите 4 цифры'),'Code step did not render');
   await fill('Код','1234');await click('Войти');
   await wait(has('Кто в семье?'),'Telegram sign-in did not open getting to know');
-  assert.equal(messengerCalls,2);
+  assert.equal(messengerCalls,1,'Test messenger sign-in must register one device account');
   assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes('9001234567'))`),false,'Phone must not be persisted');
   // Getting to know: 5 steps, scenario choice, week setup
   for(let step=0;step<5;step++) await click('Дальше');
@@ -302,7 +300,7 @@ try {
   await wait(has('Кто в семье?'),'A new account must not inherit another user preferences/menu');
   assert.equal(stocks.get('user-b').items.length,0,'Account inventory leaked across users');
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log('Compose Web: intro → Telegram code sign-in → getting to know → week menu → approve → cart → cook from what you have → steps → use up → fridge photos → replace stock → refresh → premium trial → logout → email account isolation: PASS. Backend mocked; no paid API calls.');
+  console.log('Compose Web: intro → test Telegram sign-in → getting to know → week menu → approve → cart → cook from what you have → steps → use up → fridge photos → replace stock → refresh → premium trial → logout → email account isolation: PASS. Backend mocked; no paid API calls.');
 } catch(e) {
   let visible='';
   if(send) {try {const dom=await send('Runtime.evaluate',{expression:`(()=>{${deep};return all().map(e=>({tag:e.tagName,role:e.getAttribute('role'),label:e.getAttribute('aria-label'),text:e.textContent?.slice(0,300)}))})()`,returnByValue:true});await writeFile(resolve(report,'semantics.json'),JSON.stringify(dom.result.value,null,2));
