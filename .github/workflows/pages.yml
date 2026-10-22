@@ -1,4 +1,4 @@
-name: Publish Compose Web to GitHub Pages
+name: Publish Web to GitHub Pages
 on:
   workflow_call:
 permissions:

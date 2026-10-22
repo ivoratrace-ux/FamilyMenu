@@ -1,11 +1,6 @@
-.gradle/
-.kotlin/
 **/build/
 local.properties
 .env
 .DS_Store
 _site/
 node_modules/
-iosApp/Pods/
-iosApp/*.xcworkspace/
-iosApp/FamilyMenu.xcodeproj/
