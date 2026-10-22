@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -143,7 +142,7 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
     }
 }
 @Composable private fun PickRow(x: Ranked,selected: Boolean=false,note: String?=null,onClick:()->Unit) {
-    Panel(Modifier.clickable(onClick=onClick),accent=if(selected) Green else null) {
+    Panel(Modifier.clickable(role=androidx.compose.ui.semantics.Role.Button,onClick=onClick),accent=if(selected) Green else null) {
         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Picture(x.recipe.imageUrl,Modifier.size(width=72.dp,height=52.dp))
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -158,7 +157,7 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
 @Composable internal fun PantryPicker(m: AppModel,scope: CoroutineScope) {
     var query by remember {mutableStateOf("")}
     val have=m.have()
-    Dialog(onDismissRequest={m.pantryPicker=false}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.92f),shape=RoundedCornerShape(20.dp)) {Page {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {Page {
         Row(verticalAlignment=Alignment.CenterVertically) {Text("Что есть дома",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.pantryPicker=false}) {Text("Готово")}}
         Note("Отметьте продукты. Количество поправите потом, а фото холодильника распознает всё сразу.")
         if(m.inventoryBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -172,14 +171,14 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
             FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {ids.mapNotNull {m.catalog.byIngredient[it]}.forEach {i -> Choice(i.name,i.id in have) {m.togglePantry(scope,i.id)}}}
         }
         Primary("Готово · ${have.size} ${plural(have.size,"продукт","продукта","продуктов")}") {m.pantryPicker=false}
-    }}}
+    }}
 }
-@Composable internal fun NowDialog(m: AppModel,recipe: Recipe) {
+@Composable internal fun NowRecipeScreen(m: AppModel,recipe: Recipe) {
     val servings=m.portionsNow();val have=m.have();val missing=missingIngredients(recipe,have)
     val factor=servings.toDouble()/recipe.servings
     val cost=missing.sumOf {q -> price(m.catalog.byIngredient.getValue(q.id),m.state.store,m.state.profile.city)*q.quantity*factor}
     val inList=missing.isNotEmpty() && missing.all {it.id in m.state.extraBuy}
-    Dialog(onDismissRequest={m.nowRecipe=null}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.94f),shape=RoundedCornerShape(20.dp)) {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment=Alignment.CenterVertically) {Text("Из того, что есть · ${servingsText(servings)}",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=Muted);TextButton(onClick={m.nowRecipe=null}) {Text("Закрыть")}}
             Picture(recipe.imageUrl,Modifier.fillMaxWidth().aspectRatio(400f/260))
@@ -204,11 +203,11 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
             Primary("Готовить по шагам") {m.cooking=CookTarget(recipe,servings);m.nowRecipe=null;m.track("now_cook_started",recipe.id)}
             if(recipe.meal=="c" || recipe.meal=="p") TextButton(onClick={m.nowRecipe=null}) {Text("Выбрать другой гарнир")}
         }
-    }}
+    }
 }
 
 // ---------- Cooking (menu slot or "from what you have") ----------
-@Composable internal fun CookDialog(m: AppModel,scope: CoroutineScope,target: CookTarget,now: Long) {
+@Composable internal fun CookingScreen(m: AppModel,scope: CoroutineScope,target: CookTarget,now: Long) {
     val recipe=target.recipe;val slot=target.slot?.let {m.state.plan?.days?.getOrNull(it.first)?.slots?.getOrNull(it.second)}
     var cooking by remember(recipe.id) {mutableStateOf(target.slot==null)}
     var step by remember(recipe.id) {mutableStateOf(0)}
@@ -216,86 +215,84 @@ private fun rank(list: List<Recipe>,have: Set<String>)=list.map {r -> Ranked(r,m
     var usedUp by remember(recipe.id) {mutableStateOf(false)}
     fun close() {m.selectedSlot=null;m.cooking=null}
     val factor=target.servings.toDouble()/recipe.servings
-    Dialog(onDismissRequest={close()}) {
-        Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.94f),shape=RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment=Alignment.CenterVertically) {Text(if(finished) "Готово" else if(cooking) "Шаг ${step+1} из ${recipe.steps.size}" else "Рецепт",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={close()}) {Text("Закрыть")}}
-                Picture(if(cooking && !finished) recipe.stepImageUrls.getOrNull(step) else recipe.imageUrl,Modifier.fillMaxWidth().aspectRatio(400f/260))
-                Text(recipe.name,fontFamily=DishFont.current,style=MaterialTheme.typography.headlineSmall)
-                val nutrition=m.catalog.nutrition(recipe)
-                Note("${recipe.minutes} мин · ${servingsText(target.servings)}"+if(m.state.kcalVisible()) " · ${nutrition[0].roundToInt()} ккал на порцию" else "")
-                if(m.state.kcalVisible() && !cooking) Note("Б ${nutrition[1].roundToInt()} · Ж ${nutrition[2].roundToInt()} · У ${nutrition[3].roundToInt()}")
-                if(finished) {
-                    Text("Приятного аппетита!",style=MaterialTheme.typography.titleMedium)
-                    if(target.slot==null) {
-                        Note("Уберём из «Что есть дома» то, что ушло в блюдо.")
-                        Primary(if(usedUp) "Списали ✓" else "Списать использованное",!usedUp && m.inventory!=null) {m.useUp(scope,recipe,target.servings);usedUp=true}
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {
+        Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically) {Text(if(finished) "Готово" else if(cooking) "Шаг ${step+1} из ${recipe.steps.size}" else "Рецепт",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={close()}) {Text("Закрыть")}}
+            Picture(if(cooking && !finished) recipe.stepImageUrls.getOrNull(step) else recipe.imageUrl,Modifier.fillMaxWidth().aspectRatio(400f/260))
+            Text(recipe.name,fontFamily=DishFont.current,style=MaterialTheme.typography.headlineSmall)
+            val nutrition=m.catalog.nutrition(recipe)
+            Note("${recipe.minutes} мин · ${servingsText(target.servings)}"+if(m.state.kcalVisible()) " · ${nutrition[0].roundToInt()} ккал на порцию" else "")
+            if(m.state.kcalVisible() && !cooking) Note("Б ${nutrition[1].roundToInt()} · Ж ${nutrition[2].roundToInt()} · У ${nutrition[3].roundToInt()}")
+            if(finished) {
+                Text("Приятного аппетита!",style=MaterialTheme.typography.titleMedium)
+                if(target.slot==null) {
+                    Note("Уберём из «Что есть дома» то, что ушло в блюдо.")
+                    Primary(if(usedUp) "Списали ✓" else "Списать использованное",!usedUp && m.inventory!=null) {m.useUp(scope,recipe,target.servings);usedUp=true}
+                }
+                FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                    Choice("Понравилось",recipe.id in m.state.liked) {m.update(m.state.copy(liked=m.state.liked.toggle(recipe.id),disliked=m.state.disliked-recipe.id))}
+                    Choice("Не понравилось",recipe.id in m.state.disliked) {m.update(m.state.copy(disliked=m.state.disliked.toggle(recipe.id),liked=m.state.liked-recipe.id))}
+                }
+                Secondary("Закрыть") {close()}
+            } else if(cooking) {
+                Text(recipe.steps[step],style=MaterialTheme.typography.titleMedium)
+                recipe.stepTips.getOrNull(step)?.takeIf {it.isNotBlank()}?.let {Note(it)}
+                val seconds=recipe.stepSeconds.getOrElse(step) {0};val key="${recipe.id}:$step";val timer=m.timers[key]
+                if(seconds>0) {
+                    Text(timeText(timer?.remaining(now) ?: seconds),style=MaterialTheme.typography.headlineSmall)
+                    Row {
+                        TextButton(onClick={
+                            when {
+                                timer==null || timer.done -> m.startTimer(key,seconds)
+                                timer.paused==null -> m.timers[key]=timer.copy(paused=timer.remaining(now))
+                                else -> m.timers[key]=timer.copy(endAt=now+timer.paused*1000L,paused=null)
+                            }
+                        }) {Text(if(timer?.done==true) "Ещё раз" else if(timer!=null && timer.paused==null) "Пауза" else "Старт таймера")}
+                        TextButton(onClick={m.timers.remove(key)}) {Text("Сброс")}
+                        TextButton(onClick={if(timer!=null) m.timers[key]=timer.copy(endAt=timer.endAt+60000,paused=timer.paused?.plus(60),done=false)}) {Text("+1 мин")}
                     }
+                }
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick={step--},enabled=step>0) {Text("Назад")}
+                    Button(onClick={if(step<recipe.steps.lastIndex) step++ else {
+                        target.slot?.let {(d,i) -> m.changeSlot(d,i) {it.copy(cooked=true)};m.track("dish_cooked",recipe.id)} ?: m.track("now_cooked",recipe.id)
+                        finished=true
+                    }}) {Text(if(step<recipe.steps.lastIndex) "Дальше" else "Готово ✓")}
+                }
+                TextButton(onClick={cooking=false}) {Text("Все ингредиенты и шаги")}
+            } else {
+                Text("Ингредиенты",style=MaterialTheme.typography.titleMedium)
+                recipe.ingredients.forEach {q -> val i=m.catalog.byIngredient.getValue(q.id);Text("${i.name} — ${quantity(i,q.quantity*factor)}")}
+                if(recipe.spices.isNotEmpty()) Note("По вкусу: ${recipe.spices.joinToString()}")
+                val allergens=m.catalog.allergens(recipe).mapNotNull {allergies[it]}
+                if(allergens.isNotEmpty()) Note("По рецепту содержит: ${allergens.joinToString()}. Состав конкретных продуктов проверяйте по упаковке.")
+                Primary("Готовить по шагам с таймером") {cooking=true;m.track("cook_started",recipe.id)}
+                recipe.steps.forEachIndexed {i,text -> Text("${i+1}. $text")}
+                if(target.slot!=null && slot!=null) {
+                    val position=target.slot
                     FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                         Choice("Понравилось",recipe.id in m.state.liked) {m.update(m.state.copy(liked=m.state.liked.toggle(recipe.id),disliked=m.state.disliked-recipe.id))}
                         Choice("Не понравилось",recipe.id in m.state.disliked) {m.update(m.state.copy(disliked=m.state.disliked.toggle(recipe.id),liked=m.state.liked-recipe.id))}
                     }
-                    Secondary("Закрыть") {close()}
-                } else if(cooking) {
-                    Text(recipe.steps[step],style=MaterialTheme.typography.titleMedium)
-                    recipe.stepTips.getOrNull(step)?.takeIf {it.isNotBlank()}?.let {Note(it)}
-                    val seconds=recipe.stepSeconds.getOrElse(step) {0};val key="${recipe.id}:$step";val timer=m.timers[key]
-                    if(seconds>0) {
-                        Text(timeText(timer?.remaining(now) ?: seconds),style=MaterialTheme.typography.headlineSmall)
-                        Row {
-                            TextButton(onClick={
-                                when {
-                                    timer==null || timer.done -> m.startTimer(key,seconds)
-                                    timer.paused==null -> m.timers[key]=timer.copy(paused=timer.remaining(now))
-                                    else -> m.timers[key]=timer.copy(endAt=now+timer.paused*1000L,paused=null)
-                                }
-                            }) {Text(if(timer?.done==true) "Ещё раз" else if(timer!=null && timer.paused==null) "Пауза" else "Старт таймера")}
-                            TextButton(onClick={m.timers.remove(key)}) {Text("Сброс")}
-                            TextButton(onClick={if(timer!=null) m.timers[key]=timer.copy(endAt=timer.endAt+60000,paused=timer.paused?.plus(60),done=false)}) {Text("+1 мин")}
-                        }
-                    }
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick={step--},enabled=step>0) {Text("Назад")}
-                        Button(onClick={if(step<recipe.steps.lastIndex) step++ else {
-                            target.slot?.let {(d,i) -> m.changeSlot(d,i) {it.copy(cooked=true)};m.track("dish_cooked",recipe.id)} ?: m.track("now_cooked",recipe.id)
-                            finished=true
-                        }}) {Text(if(step<recipe.steps.lastIndex) "Дальше" else "Готово ✓")}
-                    }
-                    TextButton(onClick={cooking=false}) {Text("Все ингредиенты и шаги")}
-                } else {
-                    Text("Ингредиенты",style=MaterialTheme.typography.titleMedium)
-                    recipe.ingredients.forEach {q -> val i=m.catalog.byIngredient.getValue(q.id);Text("${i.name} — ${quantity(i,q.quantity*factor)}")}
-                    if(recipe.spices.isNotEmpty()) Note("По вкусу: ${recipe.spices.joinToString()}")
-                    val allergens=m.catalog.allergens(recipe).mapNotNull {allergies[it]}
-                    if(allergens.isNotEmpty()) Note("По рецепту содержит: ${allergens.joinToString()}. Состав конкретных продуктов проверяйте по упаковке.")
-                    Primary("Готовить по шагам с таймером") {cooking=true;m.track("cook_started",recipe.id)}
-                    recipe.steps.forEachIndexed {i,text -> Text("${i+1}. $text")}
-                    if(target.slot!=null && slot!=null) {
-                        val position=target.slot
-                        FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                            Choice("Понравилось",recipe.id in m.state.liked) {m.update(m.state.copy(liked=m.state.liked.toggle(recipe.id),disliked=m.state.disliked-recipe.id))}
-                            Choice("Не понравилось",recipe.id in m.state.disliked) {m.update(m.state.copy(disliked=m.state.disliked.toggle(recipe.id),liked=m.state.liked-recipe.id))}
-                        }
-                        TextButton(onClick={close();m.replacement=position}) {Text("Заменить блюдо")}
-                        TextButton(onClick={m.update(m.state.copy(blocked=m.state.blocked+recipe.id));close();m.replacement=position}) {Text("Больше не предлагать")}
-                        Primary(if(slot.cooked) "Приготовлено ✓" else "Отметить: приготовлено") {m.changeSlot(position.first,position.second) {it.copy(cooked=!it.cooked)};close()}
-                    }
+                    TextButton(onClick={close();m.replacement=position}) {Text("Заменить блюдо")}
+                    TextButton(onClick={m.update(m.state.copy(blocked=m.state.blocked+recipe.id));close();m.replacement=position}) {Text("Больше не предлагать")}
+                    Primary(if(slot.cooked) "Приготовлено ✓" else "Отметить: приготовлено") {m.changeSlot(position.first,position.second) {it.copy(cooked=!it.cooked)};close()}
                 }
             }
         }
     }
 }
-@Composable internal fun ReplacementDialog(m: AppModel,position: Pair<Int,Int>) {
+@Composable internal fun ReplacementScreen(m: AppModel,position: Pair<Int,Int>) {
     val slot=m.state.plan?.days?.getOrNull(position.first)?.slots?.getOrNull(position.second) ?: return
     val choices=m.engine.pool(slot.meal,m.state).sortedByDescending {m.engine.score(it,m.state)}
-    Dialog(onDismissRequest={m.replacement=null}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.9f),shape=RoundedCornerShape(18.dp)) {Page {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(18.dp)) {Page {
         Heading("Замена блюда",mealName(slot.meal))
         TextButton(onClick={m.replacement=null}) {Text("Отмена")}
         if(choices.isEmpty()) Note("Подходящих блюд нет. Ослабьте ограничения в профиле.")
         choices.forEach {r -> Row(Modifier.fillMaxWidth().clickable {m.replace(position.first,position.second,r)}.padding(vertical=6.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Picture(r.imageUrl,Modifier.size(60.dp));Column(Modifier.weight(1f)) {Text(r.name,fontFamily=DishFont.current);Note("${r.minutes} мин"+(if(m.state.kcalVisible()) " · ${m.catalog.nutrition(r)[0].roundToInt()} ккал" else "")+(if(m.state.premiumOn()) " · ≈${money(m.catalog.cost(r,m.state.store,m.state.profile.city))}" else ""))}
         }}
-    }}}
+    }}
 }
 
 // ---------- Week menu ----------
@@ -412,12 +409,12 @@ private fun storeUrl(i: Ingredient,store: String)=if(store=="lavka" && i.lavkaPa
         if(spices.isNotEmpty()) Panel {Text("Специи — проверьте, есть ли дома");Note(spices.joinToString())}
     }
 }
-@Composable internal fun CartDialog(m: AppModel,session: CartSession,scope: CoroutineScope) {
+@Composable internal fun CartScreen(m: AppModel,session: CartSession,scope: CoroutineScope) {
     val uri=LocalUriHandler.current
     val store=m.state.store;val storeName=if(store=="lavka") "Лавке" else "ВкусВилле"
     val rows=shoppingRows(m).associateBy {it.item.ingredient.id}
     val items=session.items.mapNotNull {rows[it]}
-    Dialog(onDismissRequest={m.cart=null}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.9f),shape=RoundedCornerShape(20.dp)) {Page {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {Page {
         Row(verticalAlignment=Alignment.CenterVertically) {Text("Корзина в $storeName",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.cart=null}) {Text("Закрыть")}}
         LinearProgressIndicator(progress={if(items.isEmpty()) 1f else session.index.coerceAtMost(items.size)/items.size.toFloat()},modifier=Modifier.fillMaxWidth())
         val row=items.getOrNull(session.index)
@@ -442,7 +439,7 @@ private fun storeUrl(i: Ingredient,store: String)=if(store=="lavka" && i.lavkaPa
             }
             if(session.index>0) TextButton(onClick={m.cart=session.copy(index=session.index-1)}) {Text("‹ Назад")}
         }
-    }}}
+    }}
 }
 
 // ---------- Family ----------
@@ -454,16 +451,16 @@ internal fun shareText(m: AppModel): String {
     lines+="";lines+="Купить: $left ${plural(left,"продукт","продукта","продуктов")}"
     return lines.joinToString("\n")
 }
-@Composable internal fun ShareDialog(m: AppModel) {
+@Composable internal fun ShareScreen(m: AppModel) {
     val clipboard=LocalClipboardManager.current
-    Dialog(onDismissRequest={m.share=false}) {Surface(Modifier.widthIn(max=480.dp).fillMaxHeight(.9f),shape=RoundedCornerShape(20.dp)) {Page {
+    Surface(Modifier.widthIn(max=480.dp).fillMaxSize(),shape=RoundedCornerShape(20.dp)) {Page {
         Row(verticalAlignment=Alignment.CenterVertically) {Text("Меню для семьи",Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={m.share=false}) {Text("Закрыть")}}
         Note("Партнёр посмотрит, что сегодня на ужин, и докупит продукты по общему списку.")
         Panel {Text("Ссылкой",style=MaterialTheme.typography.titleMedium);Note("Откроется страница с меню и списком покупок, отметки «куплено» общие. Ссылки появятся вместе с семейным аккаунтом — пока можно посмотреть, как это будет выглядеть.")
             Secondary("Посмотреть, как увидит семья") {m.share=false;m.open("familyview");m.track("family_view_opened")}}
         Panel {Text("Текстом в мессенджер",style=MaterialTheme.typography.titleMedium);Note(shareText(m))
             Primary("Скопировать") {clipboard.setText(AnnotatedString(shareText(m)));m.track("share_text_copied")}}
-    }}}
+    }}
 }
 @Composable internal fun FamilyViewScreen(m: AppModel) {
     var tab by remember {mutableStateOf("menu")}
