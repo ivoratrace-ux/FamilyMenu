@@ -18,8 +18,8 @@ const server=createServer(async(req,res)=>{try{
 }catch{res.writeHead(404);res.end();}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const base=`http://127.0.0.1:${server.address().port}`,profile=await mkdtemp(resolve(tmpdir(),'familymenu-classic-'));
-const port=9333,chrome=spawn(process.env.CHROME_BIN || 'google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-proxy-server',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:['ignore','ignore','pipe']});
-const browserLog=[],errors=[];chrome.stderr.on('data',x=>browserLog.push(x.toString()));
+const port=9333,chrome=spawn(process.env.CHROME_BIN || 'google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-proxy-server','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:['ignore','ignore','pipe']});
+const browserLog=[],networkLog=[],errors=[];chrome.stderr.on('data',x=>browserLog.push(x.toString()));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 let ws,send,chromeError;chrome.on('error',e=>chromeError=e);
 const catalog=JSON.parse(await readFile('backend/data/catalog.seed.json','utf8'));
@@ -34,6 +34,8 @@ try {
  let id=0;const pending=new Map();send=(method,params={})=>new Promise((resolve,reject)=>{const requestId=++id;const timer=setTimeout(()=>{pending.delete(requestId);reject(Error('CDP timeout: '+method));},30000);pending.set(requestId,r=>{clearTimeout(timer);r.error?reject(Error(JSON.stringify(r.error))):resolve(r.result)});ws.send(JSON.stringify({id:requestId,method,params}));});
  ws.onmessage=async event=>{
   const m=JSON.parse(event.data);if(m.id){pending.get(m.id)?.(m);pending.delete(m.id);return;}
+  if(m.method==='Network.responseReceived')networkLog.push({url:m.params.response.url,status:m.params.response.status});
+  if(m.method==='Network.loadingFailed')networkLog.push({error:m.params.errorText});
   if(m.method==='Runtime.exceptionThrown')errors.push(JSON.stringify(m.params.exceptionDetails));
   if(m.method!=='Fetch.requestPaused')return;
   const {request,requestId}=m.params;
@@ -70,7 +72,7 @@ try {
    throw Error('Unexpected backend route '+path);
   }catch(error){errors.push(error.stack);await respond({error:'Mock failed'},500);}
  };
- await send('Runtime.enable');await send('Page.enable');
+ await send('Runtime.enable');await send('Page.enable');await send('Network.enable');
  await send('Emulation.setDeviceMetricsOverride',{width:480,height:900,deviceScaleFactor:1,mobile:false});
  await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'light'},{name:'prefers-reduced-motion',value:'reduce'}]});
  await send('Fetch.enable',{patterns:[{urlPattern:'https://vibe-coding-sc04.onrender.com/*'},{urlPattern:'https://fonts.googleapis.com/*'},{urlPattern:'https://fonts.gstatic.com/*'}]});
@@ -119,6 +121,6 @@ try {
  await wait(has('Для кого готовим?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
  assert.equal(errors.length,0);console.log('PASS: original intro markup/layout parity; catalog retry; real Telegram contract; original onboarding/menu/shopping/recipes; authenticated server search and stock CRUD; refresh/reload; explicit conflict reload; account isolation. No backend writes or paid calls.');
 }catch(error){
- console.error(error);if(send)try{const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));const r2=await send('Runtime.evaluate',{expression:'document.body.innerText',returnByValue:true});console.error('Screen:',r2.result.value);}catch{}
+ console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
  console.log('::error title=web-smoke::'+String(error.message).replace(/\n/g,'%0A'));process.exitCode=1;
-}finally{await writeFile(resolve(report,'browser.log'),browserLog.join(''));ws?.close();chrome.kill();server.close();await delay(300);await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
+}finally{await writeFile(resolve(report,'network.json'),JSON.stringify(networkLog,null,2));await writeFile(resolve(report,'browser.log'),browserLog.join(''));ws?.close();chrome.kill();server.close();await delay(300);await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
