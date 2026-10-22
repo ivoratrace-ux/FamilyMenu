@@ -34,3 +34,10 @@ actual fun decodePhotoPreview(base64: String): androidx.compose.ui.graphics.Imag
     org.jetbrains.skia.Image.makeFromEncoded(kotlin.io.encoding.Base64.decode(base64)).toComposeImageBitmap()
 
 actual val supportsPhotoCamera: Boolean = false
+
+private fun authFile()=File("${System.getProperty("user.home")}/.familymenu/auth.json")
+actual fun loadAuthSession(): String? = authFile().takeIf {it.exists()}?.readText()
+actual fun saveAuthSession(value: String?) {
+    val file=authFile()
+    if(value==null) file.delete() else {file.parentFile.mkdirs();file.createNewFile();file.setReadable(false,false);file.setWritable(false,false);check(file.setReadable(true,true) && file.setWritable(true,true));file.writeText(value)}
+}

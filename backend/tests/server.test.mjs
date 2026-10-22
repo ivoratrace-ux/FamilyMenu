@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createApp } from '../server/app.mjs';
+import {createApp,fetch} from './auth-fixtures.mjs';
 import { generateMeals as openai } from '../server/openai.mjs';
 import { generateMeals as client } from '../meals.mjs';
 

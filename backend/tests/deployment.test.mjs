@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createApp, configuredOrigins, deploymentRevision, FIRST_PARTY_ORIGIN } from '../server/app.mjs';
+import {createApp,fetch} from './auth-fixtures.mjs';
+import { configuredOrigins, deploymentRevision, FIRST_PARTY_ORIGIN } from '../server/app.mjs';
 
 test('FamilyMenu origin is retained when Render has an existing custom CORS variable', () => {
   const origins=configuredOrigins(' https://retained.example, https://retained.example ');

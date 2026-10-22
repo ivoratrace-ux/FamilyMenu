@@ -7,13 +7,15 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
 class ScannerHttpTest {
+    @BeforeTest fun signIn() {Account.install(AccountSession(AccountUser("user-a","user@example.com"),AccountTokens("test-token","test-refresh",4_000_000_000L)))}
+    @AfterTest fun signOut() {Account.clear()}
     @Test fun sendsExistingApiContractWithoutCredentialsAndFiltersResults() = runTest {
         var calls=0
         val client=HttpClient(MockEngine {request ->
             calls++
             assertEquals("https://vibe-coding-sc04.onrender.com/api/fridge/scan",request.url.toString())
             assertEquals(HttpMethod.Post,request.method)
-            assertNull(request.headers[HttpHeaders.Authorization])
+            assertEquals("Bearer test-token",request.headers[HttpHeaders.Authorization])
             val body=appJson.decodeFromString<ScanRequest>(request.body.toByteArray().decodeToString())
             assertEquals(2,body.images.size);assertTrue(body.images.all {it.image=="/9j/AA==" && it.mimeType=="image/jpeg"})
             respond("""{"products":[{"name":"Яйца","amount":"6 шт","confidence":"high","alternatives":[]},{"name":"Неизвестно","amount":"1 шт","confidence":"low","alternatives":[]}]}""",HttpStatusCode.OK,headersOf(HttpHeaders.ContentType,"application/json"))

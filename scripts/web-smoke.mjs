@@ -41,9 +41,16 @@ const errors=[];
 let scanCalls=0;
 let catalogCalls=0;
 let imageCalls=0;
-let inventory={userEmail:'test@test.com',revision:0,items:[{ingredientId:'milk',name:'Молоко',unit:'ml',quantity:100}]};
+let inventory={userEmail:'a@example.test',revision:0,items:[{ingredientId:'milk',name:'Молоко',unit:'ml',quantity:100}]};
 let inventoryWrites=0;
 let searchCalls=0;
+let refreshCalls=0;
+let protectedCalls=0;
+const documents=new Map();
+const stocks=new Map([['user-a',inventory],['user-b',{userEmail:'b@example.test',revision:0,items:[]}]]);
+const userForToken=token=>token?.startsWith('user-b')?'user-b':token?.startsWith('user-a')?'user-a':null;
+const authBundle=id=>({user:{id,email:id==='user-a'?'a@example.test':'b@example.test'},session:{accessToken:id+'-token',refreshToken:id+'-refresh',expiresAt:Math.floor(Date.now()/1000)+3600,expiresIn:3600,tokenType:'bearer'}});
+
 
 const catalog=JSON.parse(await readFile(resolve('backend/data/catalog.seed.json'),'utf8'));
 const artBase='https://vibe-coding-sc04.onrender.com/assets/art';
@@ -78,7 +85,7 @@ try {
     if(m.method==='Fetch.requestPaused') {
       try {
         const {request,requestId}=m.params;
-        const headers=[{name:'Access-Control-Allow-Origin',value:base},{name:'Access-Control-Allow-Methods',value:'GET, POST, PUT, DELETE, OPTIONS'},{name:'Access-Control-Allow-Headers',value:'content-type'},{name:'Content-Type',value:'application/json'}];
+        const headers=[{name:'Access-Control-Allow-Origin',value:base},{name:'Access-Control-Allow-Methods',value:'GET, POST, PUT, DELETE, OPTIONS'},{name:'Access-Control-Allow-Headers',value:'content-type,authorization'},{name:'Content-Type',value:'application/json'}];
         if(new URL(request.url).pathname.includes('/assets/art/')) {
           imageCalls++;
           const filename=new URL(request.url).pathname.split('/').at(-1);
@@ -96,32 +103,53 @@ try {
           assert.equal(request.method,'GET');
           await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(catalog)).toString('base64')});
         }
+        else if(new URL(request.url).pathname.startsWith('/api/auth/')) {
+          const path=new URL(request.url).pathname;
+          if(path==='/api/auth/logout') {await send('Fetch.fulfillRequest',{requestId,responseCode:204,responseHeaders:headers});return;}
+          const data=JSON.parse(request.postData);
+          let user;
+          if(path==='/api/auth/refresh') {refreshCalls++;user=data.refreshToken.startsWith('user-b')?'user-b':'user-a';}
+          else {assert.equal(data.password,'StrongPass123!');user=data.email==='b@example.test'?'user-b':'user-a';}
+          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(authBundle(user))).toString('base64')});
+        }
+        else if(new URL(request.url).pathname==='/api/user-state') {
+          protectedCalls++;
+          const token=Object.entries(request.headers).find(([k])=>k.toLowerCase()==='authorization')?.[1]?.replace('Bearer ','');
+          const user=userForToken(token);assert.ok(user,'User-state requires bearer token');
+          let doc=documents.get(user) || {revision:0,preferences:null,menu:null};
+          if(request.method==='PUT') {const body=JSON.parse(request.postData);assert.equal(body.revision,doc.revision);doc={...body,revision:doc.revision+1};documents.set(user,doc);}
+          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(doc)).toString('base64')});
+        }
         else if(new URL(request.url).pathname==='/api/ingredients') {
+          assert.ok(Object.keys(request.headers).some(k=>k.toLowerCase()==='authorization'));
           searchCalls++;
           const q=new URL(request.url).searchParams.get('q');assert.ok(q.trim().length>=3);
           const ingredients=catalog.ingredients.filter(i=>i.name.toLowerCase().includes(q.toLowerCase())).slice(0,20).map(({id,name,unit})=>({id,name,unit}));
           await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify({ingredients})).toString('base64')});
         }
         else if(new URL(request.url).pathname.startsWith('/api/inventory')) {
+          protectedCalls++;
+          const token=Object.entries(request.headers).find(([k])=>k.toLowerCase()==='authorization')?.[1]?.replace('Bearer ','');
+          const user=userForToken(token);assert.ok(user,'Inventory requires user token');const stock=stocks.get(user);
           if(request.method!=='GET') {
-            const body=JSON.parse(request.postData);assert.equal(body.revision,inventory.revision);assert.ok(!('userId' in body));
+            const body=JSON.parse(request.postData);assert.equal(body.revision,stock.revision);assert.ok(!('userId' in body));
             inventoryWrites++;
             const items=body.items || [{ingredientId:body.ingredientId,quantity:body.quantity}];
-            if(new URL(request.url).pathname==='/api/inventory') inventory.items=[];
+            if(new URL(request.url).pathname==='/api/inventory') stock.items=[];
             for(const item of items) {
-              inventory.items=inventory.items.filter(i=>i.ingredientId!==item.ingredientId);
-              if(request.method!=='DELETE') {const ingredient=catalog.ingredients.find(i=>i.id===item.ingredientId);assert.ok(ingredient);assert.ok(item.quantity>0);inventory.items.push({...item,name:ingredient.name,unit:ingredient.unit});}
+              stock.items=stock.items.filter(i=>i.ingredientId!==item.ingredientId);
+              if(request.method!=='DELETE') {const ingredient=catalog.ingredients.find(i=>i.id===item.ingredientId);assert.ok(ingredient);assert.ok(item.quantity>0);stock.items.push({...item,name:ingredient.name,unit:ingredient.unit});}
             }
-            inventory.revision++;
+            stock.revision++;
           }
-          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(inventory)).toString('base64')});
+          await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(stock)).toString('base64')});
         }
         else {
           scanCalls++;
           assert.equal(request.method,'POST');
           const data=JSON.parse(request.postData);
           assert.equal(data.images.length,4);assert.ok(data.images.every(i=>i.mimeType==='image/jpeg' && i.image.length>100));
-          assert.ok(!Object.keys(request.headers).some(k=>k.toLowerCase()==='authorization'));
+          assert.ok(Object.keys(request.headers).some(k=>k.toLowerCase()==='authorization'),'Scanner requires authorization');
           const body={products:[{ingredientId:'eggs',name:'Яйца',amount:'6 шт',confidence:'high',alternatives:[]},{ingredientId:null,name:'Овощ',amount:'около 300 г',confidence:'medium',alternatives:[{ingredientId:'zucchini',name:'Кабачок'},{ingredientId:'cucumber',name:'Огурцы'}]},{ingredientId:null,name:'Кимчи',amount:'1 банка',confidence:'high',alternatives:[]}]};
           await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(body)).toString('base64')});
         }
@@ -148,9 +176,9 @@ try {
     const clicked=await evaluate(`(()=>{${deep};const matches=all().filter(e=>(e.getAttribute('aria-label')||e.textContent||'').trim()===${JSON.stringify(label)});const e=matches.find(e=>e.getAttribute('role')==='button'||e.tagName==='BUTTON')||matches.at(-1);if(!e)return false;e.click();return true;})()`);
     assert.ok(clicked,`Cannot click ${label}`);await delay(200);
   };
-  const fill=async(label,text)=>{
+  const fill=async(label,text,index=0)=>{
     await wait(`(()=>{${deep};return all().some(e=>e.getAttribute('role')==='textbox')})()`,`Missing text field: ${label}`);
-    const point=await evaluate(`(()=>{${deep};const box=all().find(e=>e.getAttribute('role')==='textbox');if(!box)return null;const r=box.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    const point=await evaluate(`(()=>{${deep};const box=all().filter(e=>e.getAttribute('role')==='textbox')[${index}];if(!box)return null;const r=box.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
     assert.ok(point,`Missing text field: ${label}`);
     await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});
     await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point});
@@ -164,8 +192,16 @@ try {
   await click('Повторить');
   await wait(has('Пропустить'),'Compose failed to render intro');
   assert.ok(catalogCalls>0,'App must load recipes from the backend');
-  await click('Пропустить');await click('Посмотреть без входа (демо-семья)');
-  await wait(`JSON.parse(localStorage.getItem('family-menu-compose-v1')||'{}').plan?.days?.length===7`,'Demo did not generate seven days');
+  await click('Пропустить');
+  for(let step=0;step<6;step++) await click('Дальше');
+  await click('Составить меню');await wait(has('Ваша неделя'),'First menu preview did not render');
+  assert.equal(protectedCalls,0,'Onboarding preview must work without user requests');
+  assert.equal(await evaluate(has('Посмотреть без входа (демо-семья)')),false,'Demo mode must be removed');
+  await click('Далее');await wait(has('Создать аккаунт'),'Continue must require authentication');
+  await fill('Электронная почта','a@example.test');await fill('Пароль','StrongPass123!',1);
+  await click('Зарегистрироваться');await wait(has('Сегодня'),'Registration did not open app');
+  assert.ok(documents.get('user-a')?.menu?.days?.length===7,'First menu must be saved to account');
+  assert.equal(await evaluate(`Object.values(localStorage).some(v=>v.includes('StrongPass123!'))`),false,'Password must not be persisted');
   await click('Покупки');await wait(has('Список на неделю'),'Shopping screen did not render');
   assert.ok(imageCalls>0,'Dish images must be loaded using database URLs');
   await click('Дома');await wait(has('Мои запасы'),'Inventory tab did not render');
@@ -180,7 +216,7 @@ try {
   await click('Удалить Молоко');await wait(`!(${has('Изменить Молоко')})`,'Ingredient was not deleted');
   assert.equal(inventory.items.length,1);assert.equal(inventory.items[0].quantity,500);
   await click('Обновить запасы');await wait(has('Мой холодильник'),'Scanner did not open');
-  const before=await evaluate(`localStorage.getItem('family-menu-compose-v1')`);
+  const before=await evaluate(`localStorage.getItem('family-menu-compose-v2')`);
   await click('Добавить фото');assert.equal(await evaluate(has('Камера')),false,'Web must offer attachment only');await click('Выбрать фото');
   await wait(`!!document.querySelector('input[type=file]')`,'File picker did not open');
   const doc=await send('DOM.getDocument');
@@ -201,7 +237,7 @@ try {
   await click('Огурцы');
   await wait(`!(${has('Выберите подходящий вариант')})`,'Alternative was not confirmed');
   assert.equal(scanCalls,1,'Expected exactly one mocked scanner request');
-  assert.equal(await evaluate(`localStorage.getItem('family-menu-compose-v1')`),before,'Scanner modified persistent menu/profile/purchases');
+  assert.equal(await evaluate(`localStorage.getItem('family-menu-compose-v2')`),before,'Scanner modified persistent menu/profile/purchases');
   assert.equal(inventoryWrites,3,'Recognition must not write stock before Save');
   // Outside-catalog product must be removed or mapped before saving.
   await evaluate(`(()=>{${deep};const p=all().find(e=>e.textContent?.trim()==='Кимчи');let node=p;while(node){const buttons=[...node.querySelectorAll('[role=button],button')].filter(e=>e.textContent?.trim()==='Удалить');if(buttons.length===1){buttons[0].click();return true;}node=node.parentElement;}return false;})()`);
@@ -212,15 +248,21 @@ try {
   assert.equal(inventoryWrites,4);assert.equal(inventory.items.length,2);assert.ok(!inventory.items.some(i=>i.ingredientId==='milk'));
   const screenshot=await send('Page.captureScreenshot' ,{format:'png'});
   await writeFile(resolve(report,'scanner.png'),Buffer.from(screenshot.data,'base64'));
+  await evaluate(`(()=>{const key='family-menu-auth-v1';const session=JSON.parse(localStorage.getItem(key));session.session.expiresAt=1;localStorage.setItem(key,JSON.stringify(session));})()`);
   await send('Page.reload');
   await wait(has('Сегодня'),'App did not restore after reload');
   await click('Дома');await wait(has('Мои запасы'),'Inventory tab did not restore');
   await wait(has('Изменить Яйца'),'Saved stock did not load after reload');
   assert.equal(await evaluate(has('Кимчи')),false,'Unmatched item was saved unexpectedly');
   assert.equal(await evaluate(has('Удалить фото 1')),false,'Scanner photos persisted unexpectedly');
-  assert.ok(await evaluate(`JSON.parse(localStorage.getItem('family-menu-compose-v1')).plan.days.length===7`));
+  assert.ok(refreshCalls>0,'Expired session must be refreshed after reload');
+  assert.ok(documents.get('user-a').menu.days.length===7);
+  await click('Аккаунт');await click('Выйти из аккаунта');await wait(has('Создать аккаунт'),'Logout did not clear the session');
+  await fill('Электронная почта','b@example.test');await fill('Пароль','StrongPass123!',1);await click('Зарегистрироваться');
+  await wait(has('Для кого готовим?'),'A new account must not inherit another user preferences/menu');
+  assert.equal(stocks.get('user-b').items.length,0,'Account inventory leaked across users');
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log('Compose Web: inventory load → search → add → edit → delete → photos → confirm → replace → reload: PASS. Backend mocked; no paid API calls.');
+  console.log('Compose Web: onboarding → preview → registration → inventory load → search → add → edit → delete → photos → confirm → replace → refresh → logout → account isolation: PASS. Backend mocked; no paid API calls.');
 } catch(e) {
   if(send) {try {const dom=await send('Runtime.evaluate',{expression:`(()=>{${deep};return all().map(e=>({tag:e.tagName,role:e.getAttribute('role'),label:e.getAttribute('aria-label'),text:e.textContent?.slice(0,300)}))})()`,returnByValue:true});await writeFile(resolve(report,'semantics.json'),JSON.stringify(dom.result.value,null,2));const image=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(image.data,'base64'));}catch{}}
   console.error(e);process.exitCode=1;

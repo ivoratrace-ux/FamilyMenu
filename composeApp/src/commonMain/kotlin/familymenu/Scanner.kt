@@ -45,9 +45,11 @@ class ScannerService(private val client: HttpClient = HttpClient { install(HttpT
             require(photo.base64.length <= 5_592_408) { "Фото должно быть не больше 4 МБ." }
         }
         try {
-            val response = client.post("$SCAN_API_BASE/api/fridge/scan") {
+            val response = authenticatedRequest {token -> client.post("$SCAN_API_BASE/api/fridge/scan") {
+                bearerAuth(token)
                 contentType(ContentType.Application.Json)
                 setBody(appJson.encodeToString(ScanRequest(photos.map { ScanImage(it.base64,it.mimeType) })))
+            }
             }
             if(!response.status.isSuccess()) error(when(response.status.value) {
                 400,415 -> "Выберите от 1 до 5 фото JPEG, PNG или WebP, каждое до 4 МБ."

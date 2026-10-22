@@ -14,34 +14,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 @Composable internal fun Welcome(m: AppModel) {
     var slide by remember { mutableStateOf(0) }
     var quizStep by remember { mutableStateOf(0) }
-    var phone by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
-    var codeStage by remember { mutableStateOf(false) }
     Page {
         when(m.state.stage) {
             "intro" -> {
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {TextButton(onClick={m.update(m.state.copy(stage="auth"))}) {Text("Пропустить")}}
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {TextButton(onClick={m.update(m.state.copy(stage="quiz"))}) {Text("Пропустить")}}
                 Spacer(Modifier.height(24.dp))
                 Picture(listOf("m5","b1","m2")[slide],Modifier.fillMaxWidth().aspectRatio(1.25f))
                 Heading("Семейное меню",listOf("Меню на неделю для всей семьи","Список покупок соберётся сам","Готовьте по шагам с таймером")[slide])
                 Note(listOf("Учитываем вкусы, аллергии и нормы калорий каждого. Суп на обед, второе на ужин — как привыкли.","Одинаковые продукты объединены, а цены сравниваются между ВкусВиллом и Яндекс Лавкой.","Картинки и граммовки на каждом шаге, таймеры и подсчёт калорий.")[slide])
                 Text("${slide+1} / 3")
-                Primary(if(slide<2) "Далее" else "Начать") {if(slide<2) slide++ else m.update(m.state.copy(stage="auth"))}
-            }
-            "auth" -> {
-                Heading("Семейное меню",if(codeStage) "Код из СМС" else "Вход")
-                Note("Прототип: СМС не отправляется. Данные сохраняются только на этом устройстве.")
-                if(!codeStage) {
-                    OutlinedTextField(phone,{phone=it.filter(Char::isDigit).take(11)},label={Text("Номер телефона")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Phone),modifier=Modifier.fillMaxWidth())
-                    Primary("Получить демо-код",phone.length in 10..11) {codeStage=true}
-                } else {
-                    Note("Подойдёт любой код из четырёх цифр.")
-                    OutlinedTextField(code,{code=it.filter(Char::isDigit).take(4)},label={Text("Код")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth())
-                    Primary("Войти",code.length==4) {m.update(m.state.copy(stage="quiz"));quizStep=0}
-                    TextButton(onClick={codeStage=false;code=""}) {Text("Изменить номер")}
-                }
-                Primary("Посмотреть без входа (демо-семья)") {m.demo()}
-                OutlinedButton(onClick={m.update(m.state.copy(stage="quiz"));quizStep=0},modifier=Modifier.fillMaxWidth()) {Text("Настроить свою семью без входа")}
+                TextButton(onClick={m.update(m.state.copy(stage="auth"))}) {Text("Уже есть аккаунт? Войти")}
+                Primary(if(slide<2) "Далее" else "Начать") {if(slide<2) slide++ else m.update(m.state.copy(stage="quiz"))}
             }
             else -> {
                 val headings=listOf("Для кого готовим?","Есть ли аллергии?","Как вы питаетесь?","Что планируем?","Вкусы семьи","Цели питания","Время, бюджет и город")
@@ -56,7 +39,7 @@ import androidx.compose.foundation.text.KeyboardOptions
                     else -> WeekEditor(m)
                 }
                 Primary(if(quizStep==headings.lastIndex) "Составить меню" else "Дальше",m.state.profile.members.isNotEmpty() && m.state.profile.meals.isNotEmpty()) {if(quizStep<headings.lastIndex) quizStep++ else m.generate()}
-                TextButton(onClick={if(quizStep>0) quizStep-- else m.update(m.state.copy(stage="auth"))}) {Text("Назад")}
+                TextButton(onClick={if(quizStep>0) quizStep-- else m.update(m.state.copy(stage="quiz"))}) {Text("Назад")}
             }
         }
     }
@@ -78,9 +61,9 @@ import androidx.compose.foundation.text.KeyboardOptions
         }
         if(m.state.blocked.isNotEmpty()) Panel {Text("Скрытые блюда");m.state.blocked.forEach {id -> Row(verticalAlignment=Alignment.CenterVertically) {Text(m.catalog.byRecipe[id]?.name ?: id,Modifier.weight(1f));TextButton(onClick={m.update(m.state.copy(blocked=m.state.blocked-id))}) {Text("Вернуть")}}}}
         Primary("Сохранить и пересобрать меню",m.state.profile.meals.isNotEmpty()) {m.generate()}
-        OutlinedButton(onClick={reset=true},modifier=Modifier.fillMaxWidth()) {Text("Сбросить данные прототипа")}
+        OutlinedButton(onClick={reset=true},modifier=Modifier.fillMaxWidth()) {Text("Начать настройку заново")}
     }
-    if(reset) AlertDialog(onDismissRequest={reset=false},title={Text("Сбросить данные?")},text={Text("Меню, настройки и отметки покупок будут удалены с этого устройства.")},confirmButton={TextButton(onClick={m.update(AppState());m.page=null;m.scannerProducts=emptyList();m.timers.clear();reset=false}) {Text("Сбросить")}},dismissButton={TextButton(onClick={reset=false}) {Text("Отмена")}})
+    if(reset) AlertDialog(onDismissRequest={reset=false},title={Text("Сбросить данные?")},text={Text("Текущее меню и предпочтения аккаунта будут заменены после новой настройки. Запасы сохранятся.")},confirmButton={TextButton(onClick={m.update(AppState(stage="quiz"));m.page=null;m.scannerProducts=emptyList();m.timers.clear();reset=false}) {Text("Сбросить")}},dismissButton={TextButton(onClick={reset=false}) {Text("Отмена")}})
 }
 
 @Composable private fun MembersEditor(m: AppModel) {

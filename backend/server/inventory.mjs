@@ -14,27 +14,29 @@ export function validateInventoryItems(items,action='replace') {
   return items;
 }
 export function createInventoryRepository({url=process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL,apiKey=process.env.SUPABASE_API_KEY,fetchImpl=fetch}={}) {
-  async function rpc(name,body={}) {
+  async function rpc(name,body={},accessToken) {
     if(!apiKey?.trim()) throw new InventoryError(503,'Запасы временно недоступны.');
     const base=new URL(url);
     if(base.protocol!=='https:' || base.username || base.password || base.search || base.hash || !['','/'].includes(base.pathname)) throw Error('Invalid database configuration');
     const headers={apikey:apiKey,'Content-Type':'application/json'};
-    if(apiKey.split('.').length===3) headers.Authorization=`Bearer ${apiKey}`;
+    if(!accessToken) throw new InventoryError(401,'Войдите в аккаунт.');
+    headers.Authorization=`Bearer ${accessToken}`;
     const response=await fetchImpl(`${base.origin}/rest/v1/rpc/${name}`,{method:'POST',headers,body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(15000)});
     if(!response.ok) {
       const error=await response.json().catch(()=>({}));
+      if(response.status===401) throw new InventoryError(401,'Войдите в аккаунт ещё раз.');
       if(response.status===409 || error.code==='PT409' || error.code==='40001') throw new InventoryError(409,'Запасы уже изменились. Обновите список и повторите действие.');
       if(error.code==='22023') throw new InventoryError(400,'Проверьте ингредиенты и количество.');
       throw new InventoryError(503,'Не удалось сохранить или загрузить запасы. Попробуйте ещё раз.');
     }
     const result=await response.json();
-    if(!result || result.userEmail!=='test@test.com' || !Number.isSafeInteger(result.revision) || !Array.isArray(result.items)) throw Error('Invalid inventory response');
+    if(!result || typeof result.userEmail!=='string' || !Number.isSafeInteger(result.revision) || !Array.isArray(result.items)) throw Error('Invalid inventory response');
     return result;
   }
-  return {load:()=>rpc('get_test_inventory'),mutate:async(action,items,revision)=>{
+  return {load:accessToken=>rpc('get_inventory',{},accessToken),mutate:async(action,items,revision,accessToken)=>{
     validateInventoryItems(items,action);
     if(!Number.isSafeInteger(revision) || revision<0) throw new InventoryError(400,'Обновите список запасов перед изменением.');
-    return rpc('mutate_test_inventory',{p_action:action,p_items:items,p_revision:revision});
+    return rpc('mutate_inventory',{p_action:action,p_items:items,p_revision:revision},accessToken);
   }};
 }
 export function createInventoryRouter({inventory,catalog}) {
@@ -47,7 +49,7 @@ export function createInventoryRouter({inventory,catalog}) {
       const ingredients=(await catalog.load()).ingredients.filter(i=>i.name.toLocaleLowerCase('ru').includes(q.toLocaleLowerCase('ru'))).sort((a,b)=>a.name.localeCompare(b.name,'ru')).slice(0,20).map(({id,name,unit})=>({id,name,unit}));
       return send(200,{ingredients});
     }
-    if(path==='/api/inventory' && req.method==='GET') return send(200,await inventory.load());
+    if(path==='/api/inventory' && req.method==='GET') return send(200,await inventory.load(req.accessToken));
     const action=path==='/api/inventory' && req.method==='PUT' ? 'replace' : path==='/api/inventory/item' && req.method==='PUT' ? 'upsert' : path==='/api/inventory/item' && req.method==='DELETE' ? 'delete' : null;
     if(!action) {res.setHeader('Allow',path==='/api/inventory'?'GET, PUT, OPTIONS':'PUT, DELETE, OPTIONS');return send(405,{error:'Метод не поддерживается.'});}
     if(req.headers['content-type']?.split(';')[0].trim()!=='application/json') return send(415,{error:'Нужен JSON.'});
@@ -58,7 +60,7 @@ export function createInventoryRouter({inventory,catalog}) {
     if(!body || typeof body!=='object' || Object.keys(body).some(k=>!keys.includes(k)) || !Number.isSafeInteger(body.revision) || body.revision<0) throw new InventoryError(400,'Неверный запрос запасов.');
     const items=action==='replace'?body.items:action==='delete'?[{ingredientId:body.ingredientId}]:[{ingredientId:body.ingredientId,quantity:body.quantity}];
     validateInventoryItems(items,action);
-    return send(200,await inventory.mutate(action,items,body.revision));
+    return send(200,await inventory.mutate(action,items,body.revision,req.accessToken));
   } catch(error) {return send(error instanceof InventoryError?error.status:503,{error:error instanceof InventoryError?error.message:'Запасы временно недоступны. Повторите попытку.'});}
  };
 }

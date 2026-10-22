@@ -1,42 +1,24 @@
 begin;
 do $$
-declare initial jsonb; result jsonb; version bigint;
+declare a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); result jsonb;
 begin
- initial:=public.get_test_inventory();version:=(initial->>'revision')::bigint;
- if initial->>'userEmail'<>'test@test.com' then raise exception 'Wrong test identity'; end if;
- if has_table_privilege('anon','public.user_ingredients','SELECT') or has_table_privilege('anon','public.user_ingredients','INSERT') then raise exception 'Direct table access granted'; end if;
- if not (select relrowsecurity from pg_class where oid='public.user_ingredients'::regclass) then raise exception 'RLS disabled'; end if;
- result:=public.mutate_test_inventory('replace','[{"ingredientId":"milk","quantity":125.5}]'::jsonb,version);
- if jsonb_array_length(result->'items')<>1 or (result->'items'->0->>'quantity')::numeric<>125.5 then raise exception 'Replace failed'; end if;
- version:=(result->>'revision')::bigint;
- result:=public.mutate_test_inventory('upsert','[{"ingredientId":"eggs","quantity":6}]'::jsonb,version);
- version:=(result->>'revision')::bigint;
- if jsonb_array_length(result->'items')<>2 then raise exception 'Upsert failed'; end if;
- begin
-  perform public.mutate_test_inventory('replace','[{"ingredientId":"not_in_catalog","quantity":1}]'::jsonb,version);
-  raise exception 'Unknown ID accepted';
- exception when invalid_parameter_value then null; end;
- begin
-  perform public.mutate_test_inventory('replace','[{"ingredientId":"milk","quantity":0}]'::jsonb,version);
-  raise exception 'Zero quantity accepted';
- exception when invalid_parameter_value then null; end;
- begin
-  perform public.mutate_test_inventory('replace','[{"ingredientId":"milk","quantity":1},{"ingredientId":"milk","quantity":2}]'::jsonb,version);
-  raise exception 'Duplicate accepted';
- exception when invalid_parameter_value then null; end;
- begin
-  perform public.mutate_test_inventory('replace','[]'::jsonb,version-1);
-  raise exception 'Stale version accepted';
- exception when sqlstate 'PT409' then null; end;
- if public.get_test_inventory()<>result then raise exception 'Failed operation mutated inventory'; end if;
- result:=public.mutate_test_inventory('delete','[{"ingredientId":"milk"}]'::jsonb,version);
- if jsonb_array_length(result->'items')<>1 or result->'items'->0->>'ingredientId'<>'eggs' then raise exception 'Delete failed'; end if;
- version:=(result->>'revision')::bigint;
- result:=public.mutate_test_inventory('replace','[]'::jsonb,version);
- if jsonb_array_length(result->'items')<>0 then raise exception 'Empty replacement failed'; end if;
+ insert into auth.users(id,email) values(a,'ownership-a@example.test'),(b,'ownership-b@example.test');
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'email','ownership-a@example.test','role','authenticated')::text,true);
+ result:=public.mutate_inventory('replace','[{"ingredientId":"milk","quantity":125}]',0);
+ if jsonb_array_length(result->'items')<>1 then raise exception 'Owner A stock not saved'; end if;
+ perform public.save_user_state('{"profile":{"members":[{"name":"Owner A"}]}}','{"days":[]}',0);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',b,'email','ownership-b@example.test','role','authenticated')::text,true);
+ if jsonb_array_length(public.get_inventory()->'items')<>0 then raise exception 'Stock leaked to B'; end if;
+ if public.get_user_state()->'preferences'<>'null'::jsonb then raise exception 'Preferences leaked to B'; end if;
+ perform public.mutate_inventory('upsert','[{"ingredientId":"eggs","quantity":6}]',0);
+ perform public.save_user_state('{"profile":{"members":[{"name":"Owner B"}]}}',null,0);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',a,'email','ownership-a@example.test','role','authenticated')::text,true);
+ if public.get_inventory()->'items'->0->>'ingredientId'<>'milk' then raise exception 'B changed A stock'; end if;
+ if public.get_user_state()->'preferences'->'profile'->'members'->0->>'name'<>'Owner A' then raise exception 'B changed A preferences'; end if;
+ begin perform public.save_user_state('{"profile":{}}',null,0);raise exception 'Stale save accepted';exception when sqlstate 'PT409' then null;end;
+ if to_regprocedure('public.get_test_inventory()') is not null then raise exception 'Shared RPC remains'; end if;
+ if exists(select 1 from auth.users where lower(email)='test@test.com') then raise exception 'Retired account remains'; end if;
+ if has_function_privilege('anon','public.get_inventory()','execute') or has_function_privilege('anon','public.get_user_state()','execute') then raise exception 'Anonymous data access'; end if;
+ if has_table_privilege('authenticated','public.user_ingredients','SELECT') then raise exception 'Direct stock read allowed'; end if;
 end $$;
-set local role anon;
--- The server's existing publishable/anon key can use only the fixed-account RPCs.
-select public.mutate_test_inventory('replace','[]'::jsonb,(public.get_test_inventory()->>'revision')::bigint)->>'userEmail' as test_user;
-reset role;
 rollback;

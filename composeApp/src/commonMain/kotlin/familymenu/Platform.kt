@@ -14,9 +14,12 @@ fun interface PhotoPicker { fun launch(camera: Boolean) }
 expect fun loadState(): String?
 expect fun saveState(value: String)
 expect fun notifyTimer()
-const val STATE_KEY = "family-menu-compose-v1"
+const val STATE_KEY = "family-menu-compose-v2"
 const val SCAN_API_BASE = "https://vibe-coding-sc04.onrender.com"
 
 expect fun decodePhotoPreview(base64: String): androidx.compose.ui.graphics.ImageBitmap
 
 expect val supportsPhotoCamera: Boolean
+
+expect fun loadAuthSession(): String?
+expect fun saveAuthSession(value: String?)

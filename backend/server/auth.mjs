@@ -48,6 +48,7 @@ export function createSupabaseAuth({ url = process.env.SUPABASE_URL || DEFAULT_S
       }
       if (code === 'email_address_not_authorized') throw new AuthError(403, 'EMAIL_NOT_AUTHORIZED', 'Встроенная почта Supabase отправляет письма только участникам команды проекта.');
       if (['signup_disabled', 'email_provider_disabled', 'otp_disabled'].includes(code)) throw new AuthError(503, 'EMAIL_AUTH_DISABLED', 'Вход или регистрация по email отключены в настройках проекта.');
+      if (['signup','password'].includes(operation) && [400,401,403,422].includes(response.status)) throw new AuthError(400,'INVALID_CREDENTIALS',operation==='signup'?'Не удалось зарегистрироваться. Проверьте email и пароль или войдите в существующий аккаунт.':'Неверный email или пароль.');
       if (operation === 'verify' && [400, 401, 403, 422].includes(response.status)) throw new AuthError(401, 'INVALID_CODE', 'Код неверен или истёк. Запросите новый код.');
       if (['refresh', 'user', 'logout'].includes(operation) && [400, 401, 403, 422].includes(response.status)) throw invalidSession();
       throw unavailable();
@@ -57,6 +58,8 @@ export function createSupabaseAuth({ url = process.env.SUPABASE_URL || DEFAULT_S
   }
   let settingsPending, settingsCache, settingsUntil = 0;
   return {
+    async signUp(email,password) {return sessionInfo(await request('/signup',{body:{email,password},operation:'signup'}));},
+    async signIn(email,password) {return sessionInfo(await request('/token?grant_type=password',{body:{email,password},operation:'password'}));},
     async sendCode(email) {
       // Supabase creates a new user on the first request and signs existing users in with the same flow.
       await request('/otp', { body: { email, create_user: true }, operation: 'otp' });

@@ -53,19 +53,16 @@ class InventoryService(private val client: HttpClient=HttpClient {install(HttpTi
         check(response.status.isSuccess()) {"Не удалось загрузить или сохранить запасы. Проверьте интернет и повторите попытку."}
         return response.bodyAsText()
     }
-    suspend fun load()=appJson.decodeFromString<InventorySnapshot>(body(client.get("$SCAN_API_BASE/api/inventory")))
+    private suspend fun request(method: HttpMethod,path: String,payload: String?=null): HttpResponse = authenticatedRequest {token ->
+        client.request("$SCAN_API_BASE$path") {this.method=method;bearerAuth(token);if(payload!=null) {contentType(ContentType.Application.Json);setBody(payload)}}
+    }
+    suspend fun load()=appJson.decodeFromString<InventorySnapshot>(body(request(HttpMethod.Get,"/api/inventory")))
     suspend fun search(query: String): List<IngredientMatch> {
         require(query.trim().length in 3..80)
-        return appJson.decodeFromString<IngredientMatches>(body(client.get("$SCAN_API_BASE/api/ingredients") {parameter("q",query.trim())})).ingredients
+        return appJson.decodeFromString<IngredientMatches>(body(request(HttpMethod.Get,"/api/ingredients?q=${query.trim().encodeURLParameter()}"))).ingredients
     }
-    suspend fun replace(revision: Long,items: List<InventoryInput>)=appJson.decodeFromString<InventorySnapshot>(body(client.put("$SCAN_API_BASE/api/inventory") {
-        contentType(ContentType.Application.Json);setBody(appJson.encodeToString(InventoryReplace(revision,items)))
-    }))
-    suspend fun edit(revision: Long,ingredientId: String,quantity: Double)=appJson.decodeFromString<InventorySnapshot>(body(client.put("$SCAN_API_BASE/api/inventory/item") {
-        contentType(ContentType.Application.Json);setBody(appJson.encodeToString(InventoryEdit(revision,ingredientId,quantity)))
-    }))
-    suspend fun delete(revision: Long,ingredientId: String)=appJson.decodeFromString<InventorySnapshot>(body(client.delete("$SCAN_API_BASE/api/inventory/item") {
-        contentType(ContentType.Application.Json);setBody(appJson.encodeToString(InventoryDelete(revision,ingredientId)))
-    }))
+    suspend fun replace(revision: Long,items: List<InventoryInput>)=appJson.decodeFromString<InventorySnapshot>(body(request(HttpMethod.Put,"/api/inventory",appJson.encodeToString(InventoryReplace(revision,items)))))
+    suspend fun edit(revision: Long,ingredientId: String,quantity: Double)=appJson.decodeFromString<InventorySnapshot>(body(request(HttpMethod.Put,"/api/inventory/item",appJson.encodeToString(InventoryEdit(revision,ingredientId,quantity)))))
+    suspend fun delete(revision: Long,ingredientId: String)=appJson.decodeFromString<InventorySnapshot>(body(request(HttpMethod.Delete,"/api/inventory/item",appJson.encodeToString(InventoryDelete(revision,ingredientId)))))
     fun close()=client.close()
 }

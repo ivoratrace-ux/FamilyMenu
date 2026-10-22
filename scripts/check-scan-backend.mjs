@@ -25,6 +25,6 @@ assert.equal(options.headers.get('access-control-allow-origin'),origin);
 const invalid=await fetch(`${base}/api/fridge/scan`, {
   method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(30000)
 });
-assert.equal(invalid.status,400,`Scanner should reject an empty photo before calling OpenAI; received ${invalid.status}`);
+assert.equal(invalid.status,401,`Scanner should require authorization before reading a photo; received ${invalid.status}`);
 assert.equal(invalid.headers.get('access-control-allow-origin'),origin);
-console.log('Scanner route, validation, and FamilyMenu Pages CORS: OK. No photo or paid generation sent.');
+console.log('Scanner route, authorization, and FamilyMenu Pages CORS: OK. No photo or paid generation sent.');

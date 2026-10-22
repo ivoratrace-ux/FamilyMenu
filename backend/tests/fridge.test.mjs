@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createApp } from '../server/app.mjs';
+import {createApp,fetch} from './auth-fixtures.mjs';
 import { FRIDGE_PROMPT, FRIDGE_SCHEMA } from '../server/fridge-prompt.mjs';
 import { analyzeFridge, createFridgeRouter, validateImage, validateImages, validateProducts } from '../server/fridge.mjs';
 const ingredients=[{id:'milk',name:'Молоко'},{id:'eggs',name:'Яйца'},{id:'soy',name:'Соевый соус'},{id:'balsamic',name:'Бальзамический соус'}];

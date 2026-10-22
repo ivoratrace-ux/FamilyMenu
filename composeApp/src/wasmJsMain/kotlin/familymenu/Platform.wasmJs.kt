@@ -5,8 +5,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import kotlin.js.js
 
-private fun readStorage(): String? = js("window.localStorage.getItem('family-menu-compose-v1')")
-private fun writeStorage(value: String): Unit = js("window.localStorage.setItem('family-menu-compose-v1', value)")
+private fun readStorage(): String? = js("window.localStorage.getItem('family-menu-compose-v2')")
+private fun writeStorage(value: String): Unit = js("window.localStorage.setItem('family-menu-compose-v2', value)")
 actual fun loadState(): String? = readStorage()
 actual fun saveState(value: String) = writeStorage(value)
 private fun beep(): Unit = js("""(() => { try { const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain(); o.connect(g);g.connect(a.destination);o.frequency.value=880;g.gain.value=.15;o.start();o.stop(a.currentTime+.5);o.onended=()=>a.close(); navigator.vibrate?.([300,150,300]); } catch(e) {} })()""")
@@ -57,3 +57,8 @@ actual fun decodePhotoPreview(base64: String): androidx.compose.ui.graphics.Imag
     org.jetbrains.skia.Image.makeFromEncoded(kotlin.io.encoding.Base64.decode(base64)).toComposeImageBitmap()
 
 actual val supportsPhotoCamera: Boolean = false
+
+actual fun loadAuthSession(): String? = readAuthStorage()
+actual fun saveAuthSession(value: String?) = writeAuthStorage(value)
+private fun readAuthStorage(): String? = js("window.localStorage.getItem('family-menu-auth-v1')")
+private fun writeAuthStorage(value: String?): Unit = js("value === null ? window.localStorage.removeItem('family-menu-auth-v1') : window.localStorage.setItem('family-menu-auth-v1', value)")

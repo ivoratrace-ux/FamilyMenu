@@ -3,7 +3,9 @@ package familymenu
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.toComposeImageBitmap
-import kotlinx.cinterop.useContents
+import kotlinx.cinterop.*
+import platform.CoreFoundation.*
+import platform.Security.*
 import platform.Foundation.*
 import platform.UIKit.*
 import platform.PhotosUI.*
@@ -105,3 +107,39 @@ private fun encodeImage(image: UIImage?): PhotoResult.Success {
 }
 
 actual val supportsPhotoCamera: Boolean = true
+
+private inline fun <T> authKeychain(block:(CFMutableDictionaryRef?)->T): T {
+    val query=CFDictionaryCreateMutable(null,0,null,null)
+    val service=CFStringCreateWithCString(null,"FamilyMenu.Auth",kCFStringEncodingUTF8)
+    val account=CFStringCreateWithCString(null,"session",kCFStringEncodingUTF8)
+    try {
+        CFDictionaryAddValue(query,kSecClass,kSecClassGenericPassword)
+        CFDictionaryAddValue(query,kSecAttrService,service)
+        CFDictionaryAddValue(query,kSecAttrAccount,account)
+        return block(query)
+    } finally {CFRelease(query);CFRelease(service);CFRelease(account)}
+}
+actual fun loadAuthSession(): String? = authKeychain {query ->
+    CFDictionaryAddValue(query,kSecReturnData,kCFBooleanTrue)
+    CFDictionaryAddValue(query,kSecMatchLimit,kSecMatchLimitOne)
+    memScoped {
+        val result=alloc<CFTypeRefVar>()
+        if(SecItemCopyMatching(query,result.ptr)!=errSecSuccess) null
+        else {
+            val data: CFDataRef?=result.value?.reinterpret()
+            try {CFDataGetBytePtr(data)?.readBytes(CFDataGetLength(data).toInt())?.decodeToString()} finally {CFRelease(data)}
+        }
+    }
+}
+actual fun saveAuthSession(value: String?) {authKeychain {query ->
+    SecItemDelete(query)
+    if(value!=null) {
+        val bytes=value.encodeToByteArray()
+        val data=bytes.usePinned {CFDataCreate(null,it.addressOf(0).reinterpret(),bytes.size.toLong())}
+        try {
+            CFDictionaryAddValue(query,kSecValueData,data)
+            CFDictionaryAddValue(query,kSecAttrAccessible,kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
+            check(SecItemAdd(query,null)==errSecSuccess)
+        } finally {CFRelease(data)}
+    }
+}}

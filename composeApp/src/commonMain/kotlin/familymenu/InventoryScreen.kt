@@ -65,7 +65,7 @@ import kotlinx.coroutines.*
             onConflict={mustReload=true;message=it;scanning=false},onCancel={scanning=false})
     } else Page {
         Heading("Продукты дома","Мои запасы")
-        Note("Общие тестовые запасы · test@test.com")
+        Note(Account.current?.user?.email ?: "Мои ингредиенты")
         if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         message?.let {Note(it)}
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {

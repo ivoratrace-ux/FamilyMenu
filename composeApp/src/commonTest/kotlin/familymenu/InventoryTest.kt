@@ -7,6 +7,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
 class InventoryTest {
+    @BeforeTest fun signIn() {Account.install(AccountSession(AccountUser("user-a","user@example.com"),AccountTokens("test-token","test-refresh",4_000_000_000L)))}
+    @AfterTest fun signOut() {Account.clear()}
     @Test fun quantitiesAreExplicitPositiveAndRespectUnits() {
         assertEquals(1.25,inventoryQuantity("1,25"))
         listOf("","0","-2","NaN","2 шт","1.1234","1e3").forEach {assertNull(inventoryQuantity(it))}
@@ -29,14 +31,14 @@ class InventoryTest {
         val calls=mutableListOf<HttpMethod>()
         val service=InventoryService(HttpClient(MockEngine {request ->
             calls+=request.method
-            assertNull(request.headers[HttpHeaders.Authorization])
+            assertEquals("Bearer test-token",request.headers[HttpHeaders.Authorization])
             val text=request.body.toByteArray().decodeToString()
             assertFalse(text.contains("userId"))
             if(request.method==HttpMethod.Put) {
                 val replace=appJson.decodeFromString<InventoryReplace>(text)
                 assertEquals(7,replace.revision);assertEquals(listOf(InventoryInput("milk",250.0)),replace.items)
             }
-            respond("""{"userEmail":"test@test.com","revision":8,"items":[{"ingredientId":"milk","name":"Молоко","unit":"ml","quantity":250}]}""",HttpStatusCode.OK,headersOf(HttpHeaders.ContentType,"application/json"))
+            respond("""{"userEmail":"user@example.com","revision":8,"items":[{"ingredientId":"milk","name":"Молоко","unit":"ml","quantity":250}]}""",HttpStatusCode.OK,headersOf(HttpHeaders.ContentType,"application/json"))
         }))
         try {assertEquals(250.0,service.replace(7,listOf(InventoryInput("milk",250.0))).items.single().quantity)} finally {service.close()}
         assertEquals(listOf(HttpMethod.Put),calls)

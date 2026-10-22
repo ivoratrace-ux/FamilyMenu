@@ -38,6 +38,7 @@ private val Amber=Color(0xffc98a10)
 private val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
 
 @Composable fun FamilyMenuApp() {
+    Account.initialize()
     var catalog by remember { mutableStateOf<Catalog?>(null) }
     var failure by remember { mutableStateOf(false) }
     var loadAttempt by remember { mutableStateOf(0) }
@@ -77,6 +78,36 @@ private val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
     val scope=rememberCoroutineScope()
     val scannerService=remember {ScannerService()}
     DisposableEffect(scannerService) {onDispose {scannerService.close()}}
+    val documents=remember {UserDocumentService()}
+    DisposableEffect(documents) {onDispose {documents.close()}}
+    var accountLoadError by remember {mutableStateOf<String?>(null)}
+    var loadRetry by remember {mutableStateOf(0)}
+    val accountId=Account.current?.user?.id
+    LaunchedEffect(accountId,loadRetry) {
+        m.accountReady=false;accountLoadError=null
+        if(accountId==null) {
+            if(m.state.stage=="app") m.resetAccount()
+        } else {
+            try {
+                var doc=documents.load()
+                if(m.onboardingDraft!=null) doc=documents.save(m.onboardingDraft!!,doc.revision)
+                m.applyDocument(doc);m.onboardingDraft=null;saveState("")
+                while(isActive) {
+                    delay(600)
+                    if(!m.syncConflict && m.changeNumber>m.savedNumber) {
+                        val number=m.changeNumber;val state=m.state
+                        try {val saved=documents.save(state,m.remoteRevision);m.remoteRevision=saved.revision;m.savedNumber=number;m.persistenceError=null}
+                        catch(e: CancellationException) {throw e}
+                        catch(e: UserDocumentConflict) {m.syncConflict=true;m.persistenceError=e.message}
+                        catch(e: SignInRequired) {throw e}
+                        catch(e: Exception) {m.persistenceError="Не удалось сохранить изменения. Они остаются на экране; повторим синхронизацию.";delay(4000)}
+                    }
+                }
+            }catch(e: CancellationException) {throw e}
+            catch(e: SignInRequired) {m.resetAccount()}
+            catch(e: Exception) {accountLoadError="Не удалось загрузить личные данные. Проверьте интернет."}
+        }
+    }
     var drawer by remember { mutableStateOf(false) }
     var reminder by remember { mutableStateOf(false) }
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
@@ -92,16 +123,31 @@ private val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
         }
     }
     Column(Modifier.widthIn(max=480.dp).fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        if(m.state.stage!="app") {
+        if(drawer && Account.current!=null) {
+            Page {
+                Heading("Аккаунт",Account.current?.user?.email ?: "Семейное меню")
+                TextButton(onClick={m.page="profile";drawer=false}) {Text("Семья и настройки")}
+                TextButton(onClick={m.tab="home";m.page=null;drawer=false}) {Text("Мои запасы")}
+                TextButton(onClick={drawer=false;scope.launch {try {Account.logout()} catch(_: Exception) {} finally {m.resetAccount()}}}) {Text("Выйти из аккаунта")}
+                TextButton(onClick={drawer=false}) {Text("Закрыть")}
+            }
+        } else if(Account.current!=null && (!m.accountReady || m.loadedAccountId!=accountId)) {
+            Page {Heading("Аккаунт","Загружаем ваши данные")
+                if(accountLoadError==null) CircularProgressIndicator() else {Note(accountLoadError!!);Primary("Повторить загрузку") {loadRetry++}}
+                TextButton(onClick={Account.clear();m.resetAccount()}) {Text("Вернуться ко входу")}
+            }
+        } else if(m.state.stage=="auth") {AuthenticationScreen(m)}
+        else if(m.state.stage=="preview" && Account.current==null) {MenuPreview(m)}
+        else if(m.state.stage!="app") {
             Welcome(m)
         } else {
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
-                TextButton(onClick={drawer=true}) { AppIcon("drawer",MaterialTheme.colorScheme.primary) }
+                TextButton(onClick={drawer=true}) { Text("Аккаунт") }
                 Text(when(m.page) {"profile" -> "Семья и настройки"; "promo" -> "Акции и цены"; else -> when(m.tab) {"today" -> "Сегодня"; "menu" -> "Меню на неделю"; "shop" -> "Покупки"; else -> "Мой холодильник"}},Modifier.weight(1f),style=MaterialTheme.typography.titleMedium)
                 FilledTonalButton(onClick={m.page="profile"},contentPadding=PaddingValues(10.dp)) { Text(m.state.profile.members.firstOrNull()?.name?.take(1) ?: "Я") }
             }
             HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
-            m.persistenceError?.let { Text(it,Modifier.padding(12.dp),color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall) }
+            m.persistenceError?.let { Text(it,Modifier.padding(12.dp),color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall);if(m.syncConflict) TextButton(onClick={loadRetry++}) {Text("Загрузить актуальные данные")} }
             val running=m.timers.filterValues { it.paused==null || it.done }
             if(running.isNotEmpty()) FlowRow(Modifier.padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 running.forEach { (key,t) -> TextButton(onClick={m.timers.remove(key)}) { Text(if(t.done) "Таймер готов ×" else "Таймер ${timeText(t.remaining(now))}") } }
@@ -126,12 +172,6 @@ private val DishFont=staticCompositionLocalOf<FontFamily> { FontFamily.Serif }
             }
         }
     }
-    if(drawer) AlertDialog(onDismissRequest={drawer=false},title={Text("Семейное меню")},text={Column {
-        listOf("Семья и настройки" to "profile","Акции и цены" to "promo").forEach { (label,page) -> TextButton(onClick={m.page=page;drawer=false}) { Text(label) } }
-        TextButton(onClick={m.tab="home";m.page=null;drawer=false}) { Text("Сканировать холодильник") }
-        TextButton(onClick={m.update(m.state.copy(stage="auth"));drawer=false}) { Text("Выйти из демо") }
-        Note("Прототип · ${m.catalog.recipes.size} рецепта")
-    }},confirmButton={TextButton(onClick={drawer=false}) { Text("Закрыть") }})
     if(reminder) AlertDialog(onDismissRequest={reminder=false},title={Text("Проверьте продукты на завтра")},text={Text("Откройте список покупок и подготовьте продукты для следующего дня.")},confirmButton={TextButton(onClick={reminder=false;m.tab="shop";m.page=null}) { Text("Покупки") }},dismissButton={TextButton(onClick={reminder=false}) { Text("Позже") }})
     m.selectedSlot?.let { RecipeDialog(m,it,now) }
     m.replacement?.let { ReplacementDialog(m,it) }
@@ -211,7 +251,7 @@ private fun kotlinx.datetime.Instant.toLocalTimeString(): String {
         day.slots.forEachIndexed { si,slot -> MealCard(m,index,si,slot,true) }
         val shopping=m.engine.shopping(m.state);val left=shopping.filter {it.ingredient.id !in m.state.bought}
         Panel { Text("Покупки к неделе",style=MaterialTheme.typography.titleMedium);Note("Осталось ${left.size} позиций · ≈${money(left.sumOf {it.cost})}");TextButton(onClick={m.tab="shop"}) {Text("Открыть список")} }
-        Note("Прототип · меню подбирается из базы ${m.catalog.recipes.size} рецептов по настройкам семьи")
+        Note("Меню подбирается из каталога ${m.catalog.recipes.size} рецептов по настройкам семьи")
     }
 }
 

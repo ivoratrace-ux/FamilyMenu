@@ -9,6 +9,23 @@ class AppModel(val catalog: Catalog) {
     var persistenceError by mutableStateOf<String?>(null)
     var state by mutableStateOf(runCatching { loadState()?.let { appJson.decodeFromString<AppState>(it) } }.getOrNull() ?: AppState())
         private set
+    var loadedAccountId by mutableStateOf<String?>(null)
+    var accountReady by mutableStateOf(false)
+    var remoteRevision by mutableStateOf(0L)
+    var changeNumber by mutableStateOf(0L)
+    var savedNumber by mutableStateOf(0L)
+    var syncRetry by mutableStateOf(0)
+    var syncConflict by mutableStateOf(false)
+    var onboardingDraft: AppState? = null
+    init {if(Account.current==null && state.plan!=null && state.stage in listOf("preview","auth")) onboardingDraft=state}
+    fun applyDocument(document: UserDocument) {
+        state=document.preferences?.copy(plan=document.menu,stage=if(document.menu==null) "quiz" else "app") ?: onboardingDraft?.copy(stage="app") ?: AppState(stage="quiz")
+        loadedAccountId=Account.current?.user?.id;remoteRevision=document.revision;changeNumber=0;savedNumber=0;accountReady=true;syncConflict=false;persistenceError=null
+    }
+    fun resetAccount() {
+        state=AppState(stage="auth");accountReady=false;loadedAccountId=null;onboardingDraft=null;changeNumber=0;savedNumber=0;persistenceError=null
+        tab="today";page=null;scannerPhotos=emptyList();scannerProducts=emptyList();timers.clear();saveState("")
+    }
     var tab by mutableStateOf("today")
     var page by mutableStateOf<String?>(null)
     var selectedSlot by mutableStateOf<Pair<Int,Int>?>(null)
@@ -21,16 +38,14 @@ class AppModel(val catalog: Catalog) {
     val timers = mutableStateMapOf<String, CookingTimer>()
     fun update(next: AppState) {
         state = next
+        if(Account.current!=null) {if(accountReady) changeNumber++;return}
         runCatching { saveState(appJson.encodeToString(next)) }.onFailure { persistenceError = "Не удалось сохранить данные на устройстве. Они доступны до закрытия приложения." }
     }
     fun profile(profile: Profile) = update(state.copy(profile=profile))
     fun generate() {
-        update(state.copy(stage="app",plan=engine.generate(state),bought=emptySet(),eaten=emptySet()))
+        update(state.copy(stage=if(Account.current==null) "preview" else "app",plan=engine.generate(state),bought=emptySet(),eaten=emptySet()))
+        if(Account.current==null) onboardingDraft=state
         tab="menu"; page=null
-    }
-    fun demo() {
-        profile(Profile(members=listOf(Member("Маша",sex="f",age=34,weight=62,height=166,goal="lose"),Member("Дима",sex="m",age=37,weight=84,height=182,activity="high"),Member("Соня",true,"f",8),Member("Лёва",true,"m",4)),budget=12000,meals=setOf("b","l","s","d","k"),likes=setOf("t:kids","t:quick","t:soup","i:chicken_fillet","i:buckwheat"),dislikes=setOf("mushrooms"),goals=setOf("pp")))
-        generate()
     }
     fun recipePosition(day: Int,index: Int): Pair<Int,Int> {
         val plan=state.plan ?: return day to index

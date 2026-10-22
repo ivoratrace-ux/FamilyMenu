@@ -77,3 +77,27 @@ actual fun decodePhotoPreview(base64: String): androidx.compose.ui.graphics.Imag
 }
 
 actual val supportsPhotoCamera: Boolean = true
+
+private fun authKey(): javax.crypto.SecretKey {
+    val store=java.security.KeyStore.getInstance("AndroidKeyStore").apply {load(null)}
+    (store.getKey("familymenu-auth",null) as? javax.crypto.SecretKey)?.let {return it}
+    return javax.crypto.KeyGenerator.getInstance("AES","AndroidKeyStore").apply {
+        init(android.security.keystore.KeyGenParameterSpec.Builder("familymenu-auth",android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE).build())
+    }.generateKey()
+}
+actual fun loadAuthSession(): String? = runCatching {
+    val encoded=appContext.getSharedPreferences("family-menu-auth",Context.MODE_PRIVATE).getString("session",null) ?: return null
+    val bytes=Base64.decode(encoded,Base64.NO_WRAP)
+    val cipher=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(javax.crypto.Cipher.DECRYPT_MODE,authKey(),javax.crypto.spec.GCMParameterSpec(128,bytes.copyOfRange(0,12)))
+    cipher.doFinal(bytes.copyOfRange(12,bytes.size)).decodeToString()
+}.getOrNull()
+actual fun saveAuthSession(value: String?) {
+    val editor=appContext.getSharedPreferences("family-menu-auth",Context.MODE_PRIVATE).edit()
+    if(value==null) editor.clear() else {
+        val cipher=javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");cipher.init(javax.crypto.Cipher.ENCRYPT_MODE,authKey())
+        editor.putString("session",Base64.encodeToString(cipher.iv+cipher.doFinal(value.encodeToByteArray()),Base64.NO_WRAP))
+    }
+    check(editor.commit())
+}
