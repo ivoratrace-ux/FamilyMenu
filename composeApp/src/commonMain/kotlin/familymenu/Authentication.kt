@@ -13,7 +13,12 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class AccountUser(val id: String,val email: String)
 @Serializable data class AccountTokens(val accessToken: String,val refreshToken: String,val expiresAt: Long,val expiresIn: Long=3600,val tokenType: String="bearer")
-@Serializable data class AccountSession(val user: AccountUser,val session: AccountTokens)
+@Serializable data class AccountLogin(val via: String,val display: String)
+@Serializable data class AccountSession(val user: AccountUser,val session: AccountTokens,val login: AccountLogin?=null)
+@Serializable data class MessengerChallenge(val challengeId: String,val expiresIn: Int=300,val via: String,val destination: String?=null,val link: String?=null)
+@Serializable data class MessengerStatus(val telegram: Boolean=false,val max: Boolean=false)
+@Serializable private data class PhoneInput(val phone: String)
+@Serializable private data class CodeInput(val challengeId: String,val code: String)
 @Serializable private data class PasswordInput(val email: String,val password: String)
 @Serializable private data class RefreshInput(val refreshToken: String)
 @Serializable private data class ApiError(val error: String="Сервис временно недоступен.")
@@ -33,13 +38,25 @@ object Account {
         check(response.status.isSuccess()) {runCatching {appJson.decodeFromString<ApiError>(text).error}.getOrDefault("Не удалось войти. Попробуйте позже.")}
         install(appJson.decodeFromString(text))
     }
+    private suspend fun postJson(path: String,body: String): String {
+        val response=client.post("$SCAN_API_BASE$path") {contentType(ContentType.Application.Json);setBody(body)}
+        val text=response.bodyAsText()
+        check(response.status.isSuccess()) {runCatching {appJson.decodeFromString<ApiError>(text).error}.getOrDefault("Сервис входа временно недоступен.")}
+        return text
+    }
+    suspend fun messengers(): MessengerStatus = runCatching {appJson.decodeFromString<MessengerStatus>(client.get("$SCAN_API_BASE/api/auth/messengers").bodyAsText())}.getOrDefault(MessengerStatus())
+    suspend fun telegramStart(phone: String)=appJson.decodeFromString<MessengerChallenge>(postJson("/api/auth/telegram/start",appJson.encodeToString(PhoneInput(phone))))
+    suspend fun maxStart()=appJson.decodeFromString<MessengerChallenge>(postJson("/api/auth/max/start","{}"))
+    suspend fun verifyCode(via: String,challengeId: String,code: String) {
+        install(appJson.decodeFromString<AccountSession>(postJson("/api/auth/${if(via=="max") "max" else "telegram"}/verify",appJson.encodeToString(CodeInput(challengeId,code)))))
+    }
     suspend fun token(previous: String?=null): String = lock.withLock {
         val session=current ?: throw SignInRequired()
         if(session.session.expiresAt>Clock.System.now().epochSeconds+60 && (previous==null || previous!=session.session.accessToken)) return@withLock session.session.accessToken
         val r=client.post("$SCAN_API_BASE/api/auth/refresh") {contentType(ContentType.Application.Json);setBody(appJson.encodeToString(RefreshInput(session.session.refreshToken)))}
         if(r.status.value in listOf(400,401,403)) {clear();throw SignInRequired()}
         check(r.status.isSuccess()) {"Не удалось обновить сессию. Проверьте интернет."}
-        val refreshed=appJson.decodeFromString<AccountSession>(r.bodyAsText());if(current?.user?.id!=session.user.id || current?.session?.refreshToken!=session.session.refreshToken) throw SignInRequired();install(refreshed);refreshed.session.accessToken
+        val refreshed=appJson.decodeFromString<AccountSession>(r.bodyAsText());if(current?.user?.id!=session.user.id || current?.session?.refreshToken!=session.session.refreshToken) throw SignInRequired();install(refreshed.copy(login=session.login));refreshed.session.accessToken
     }
     suspend fun logout() {val value=current;try {if(value!=null) client.post("$SCAN_API_BASE/api/auth/logout") {bearerAuth(value.session.accessToken)}} finally {clear()}}
 }

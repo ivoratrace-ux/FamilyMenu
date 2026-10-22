@@ -11,62 +11,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 
-@Composable internal fun Welcome(m: AppModel) {
-    var slide by remember { mutableStateOf(0) }
-    var quizStep by remember { mutableStateOf(0) }
-    Page {
-        when(m.state.stage) {
-            "intro" -> {
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {TextButton(onClick={m.update(m.state.copy(stage="quiz"))}) {Text("Пропустить")}}
-                Spacer(Modifier.height(24.dp))
-                Picture(listOf("m5","b1","m2")[slide],Modifier.fillMaxWidth().aspectRatio(1.25f))
-                Heading("Семейное меню",listOf("Меню на неделю для всей семьи","Список покупок соберётся сам","Готовьте по шагам с таймером")[slide])
-                Note(listOf("Учитываем вкусы, аллергии и нормы калорий каждого. Суп на обед, второе на ужин — как привыкли.","Одинаковые продукты объединены, а цены сравниваются между ВкусВиллом и Яндекс Лавкой.","Картинки и граммовки на каждом шаге, таймеры и подсчёт калорий.")[slide])
-                Text("${slide+1} / 3")
-                TextButton(onClick={m.update(m.state.copy(stage="auth"))}) {Text("Уже есть аккаунт? Войти")}
-                Primary(if(slide<2) "Далее" else "Начать") {if(slide<2) slide++ else m.update(m.state.copy(stage="quiz"))}
-            }
-            else -> {
-                val headings=listOf("Для кого готовим?","Есть ли аллергии?","Как вы питаетесь?","Что планируем?","Вкусы семьи","Цели питания","Время, бюджет и город")
-                Heading("Настройка · ${quizStep+1} / ${headings.size}",headings[quizStep])
-                when(quizStep) {
-                    0 -> MembersEditor(m)
-                    1 -> AllergiesEditor(m)
-                    2 -> DietEditor(m)
-                    3 -> MealsEditor(m)
-                    4 -> TastesEditor(m)
-                    5 -> GoalsEditor(m)
-                    else -> WeekEditor(m)
-                }
-                Primary(if(quizStep==headings.lastIndex) "Составить меню" else "Дальше",m.state.profile.members.isNotEmpty() && m.state.profile.meals.isNotEmpty()) {if(quizStep<headings.lastIndex) quizStep++ else m.generate()}
-                TextButton(onClick={if(quizStep>0) quizStep-- else m.update(m.state.copy(stage="quiz"))}) {Text("Назад")}
-            }
-        }
-    }
-}
-
-@Composable internal fun ProfileScreen(m: AppModel) {
-    var reset by remember {mutableStateOf(false)}
-    Page {
-        Heading("Профиль семьи","Семья и настройки")
-        MembersEditor(m);TastesEditor(m);AllergiesEditor(m);DietEditor(m);GoalsEditor(m);MealsEditor(m);WeekEditor(m)
-        Panel {
-            Text("Оформление",style=MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {listOf("system" to "Системное","light" to "Светлое","dark" to "Тёмное").forEach { (key,label) -> Choice(label,m.state.theme==key) {m.update(m.state.copy(theme=key))} }}
-            Row(verticalAlignment=Alignment.CenterVertically) {Text("Напоминание накануне",Modifier.weight(1f));Switch(m.state.profile.reminder,{m.profile(m.state.profile.copy(reminder=it))})}
-            if(m.state.profile.reminder) {
-                FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {listOf("18:00","19:00","20:00","21:00","22:00").forEach {t -> Choice(t,m.state.profile.reminderTime==t) {m.profile(m.state.profile.copy(reminderTime=t))} }}
-                Note("Напоминание отображается, пока приложение открыто.")
-            }
-        }
-        if(m.state.blocked.isNotEmpty()) Panel {Text("Скрытые блюда");m.state.blocked.forEach {id -> Row(verticalAlignment=Alignment.CenterVertically) {Text(m.catalog.byRecipe[id]?.name ?: id,Modifier.weight(1f));TextButton(onClick={m.update(m.state.copy(blocked=m.state.blocked-id))}) {Text("Вернуть")}}}}
-        Primary("Сохранить и пересобрать меню",m.state.profile.meals.isNotEmpty()) {m.generate()}
-        OutlinedButton(onClick={reset=true},modifier=Modifier.fillMaxWidth()) {Text("Начать настройку заново")}
-    }
-    if(reset) AlertDialog(onDismissRequest={reset=false},title={Text("Сбросить данные?")},text={Text("Текущее меню и предпочтения аккаунта будут заменены после новой настройки. Запасы сохранятся.")},confirmButton={TextButton(onClick={m.update(AppState(stage="quiz"));m.page=null;m.scannerProducts=emptyList();m.timers.clear();reset=false}) {Text("Сбросить")}},dismissButton={TextButton(onClick={reset=false}) {Text("Отмена")}})
-}
-
-@Composable private fun MembersEditor(m: AppModel) {
+@Composable internal fun MembersEditor(m: AppModel) {
     val p=m.state.profile
     Panel {
         Text("Кого кормим?",style=MaterialTheme.typography.titleMedium)
@@ -74,7 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
             fun change(next: Member) = m.profile(m.state.profile.copy(members=m.state.profile.members.mapIndexed {j,v -> if(i==j) next else v}))
             var expanded by remember(i) {mutableStateOf(false)}
             Row(verticalAlignment=Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {Text(member.name);Note("${if(member.child) "Ребёнок" else "Взрослый"} · ≈${member.calories()} ккал")}
+                Column(Modifier.weight(1f)) {Text(member.name.ifBlank {if(i==0) "Вы" else "Без имени"});Note("${if(member.child) "Ребёнок" else "Взрослый"} · ≈${member.calories()} ккал")}
                 TextButton(onClick={expanded=!expanded}) {Text(if(expanded) "Свернуть" else "Настроить")}
                 if(p.members.size>1) TextButton(onClick={m.profile(p.copy(members=p.members.filterIndexed {j,_ -> i!=j}))}) {Text("×")}
             }
@@ -95,19 +40,19 @@ import androidx.compose.foundation.text.KeyboardOptions
         Note("Готовим на ${p.portions()} стандартных порций за приём пищи. Нормы калорий приблизительные.")
     }
 }
-@Composable private fun AllergiesEditor(m: AppModel) {Panel {
+@Composable internal fun AllergiesEditor(m: AppModel) {Panel {
     Text("Аллергии и ограничения",style=MaterialTheme.typography.titleMedium)
     FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {allergies.forEach { (key,label) -> Choice(label,key in m.state.profile.allergies) {m.profile(m.state.profile.copy(allergies=m.state.profile.allergies.toggle(key)))} }}
     Note("Блюда с отмеченными аллергенами исключаются из подбора.")
 }}
-@Composable private fun DietEditor(m: AppModel) {Panel {Text("Как вы питаетесь?",style=MaterialTheme.typography.titleMedium);FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {diets.forEach {(key,label) -> Choice(label,m.state.profile.diet==key) {m.profile(m.state.profile.copy(diet=key))}}}}}
-@Composable private fun GoalsEditor(m: AppModel) {Panel {Text("Цели питания",style=MaterialTheme.typography.titleMedium);FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {goals.forEach {(key,label) -> Choice(label,key in m.state.profile.goals) {m.profile(m.state.profile.copy(goals=m.state.profile.goals.toggle(key)))}}}}}
-@Composable private fun MealsEditor(m: AppModel) {Panel {
+@Composable internal fun DietEditor(m: AppModel) {Panel {Text("Как вы питаетесь?",style=MaterialTheme.typography.titleMedium);FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {diets.forEach {(key,label) -> Choice(label,m.state.profile.diet==key) {m.profile(m.state.profile.copy(diet=key))}}}}}
+@Composable internal fun GoalsEditor(m: AppModel) {Panel {Text("Цели питания",style=MaterialTheme.typography.titleMedium);FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {goals.forEach {(key,label) -> Choice(label,key in m.state.profile.goals) {m.profile(m.state.profile.copy(goals=m.state.profile.goals.toggle(key)))}}}}}
+@Composable internal fun MealsEditor(m: AppModel) {Panel {
     Text("Что планируем?",style=MaterialTheme.typography.titleMedium)
     FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {mealLabels.forEach {(key,label) -> Choice(label,key in m.state.profile.meals) {val next=m.state.profile.meals.toggle(key);if(next.isNotEmpty()) m.profile(m.state.profile.copy(meals=next))}}}
     Row(verticalAlignment=Alignment.CenterVertically) {Text("Суп варить на два дня",Modifier.weight(1f));Switch(m.state.profile.soupBatch,{m.profile(m.state.profile.copy(soupBatch=it))})}
 }}
-@Composable private fun TastesEditor(m: AppModel) {
+@Composable internal fun TastesEditor(m: AppModel) {
     var query by remember {mutableStateOf("")}
     Panel {
         Text("Вкусы семьи",style=MaterialTheme.typography.titleMedium)
@@ -124,16 +69,18 @@ import androidx.compose.foundation.text.KeyboardOptions
         }
     }
 }
-@Composable private fun WeekEditor(m: AppModel) {Panel {
+@Composable internal fun WeekEditor(m: AppModel) {Panel {
     Text("Неделя и бюджет",style=MaterialTheme.typography.titleMedium)
     Text("Время в будни: ${m.state.profile.maxTime} мин")
     Slider(m.state.profile.maxTime.toFloat(),{m.profile(m.state.profile.copy(maxTime=it.toInt()))},valueRange=10f..120f,steps=21)
     Note("В выходные допускается на 30 минут больше. Если быстрых блюд нет, выбираем из доступных.")
-    NumberInput("Бюджет на неделю, ₽",m.state.profile.budget,500..200000) {m.profile(m.state.profile.copy(budget=it))}
-    Note("Бюджет влияет на подбор, но не гарантирует точную итоговую сумму.")
+    if(m.state.premiumOn()) {
+        NumberInput("Бюджет на неделю, ₽",m.state.profile.budget,500..200000) {m.profile(m.state.profile.copy(budget=it,budgetSet=true))}
+        Note("Бюджет влияет на подбор, но не гарантирует точную итоговую сумму.")
+    } else NavRow("Бюджет на неделю","Premium: ${premiumNote(m.state)}",locked=true,badge="Premium") {m.open("sub")}
     FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {cityNames.forEach {(key,label) -> Choice(label,m.state.profile.city==key) {m.profile(m.state.profile.copy(city=key))}}}
 }}
-@Composable private fun NumberInput(label: String,value: Int,range: IntRange,onChange:(Int)->Unit) {
+@Composable internal fun NumberInput(label: String,value: Int,range: IntRange,onChange:(Int)->Unit) {
     var text by remember(value) {mutableStateOf(value.toString())}
     OutlinedTextField(text,{next -> if(next.all(Char::isDigit) && next.length<=6) {text=next;next.toIntOrNull()?.takeIf {it in range}?.let(onChange)}},label={Text(label)},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
 }

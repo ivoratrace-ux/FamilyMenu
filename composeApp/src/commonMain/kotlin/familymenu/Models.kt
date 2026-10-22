@@ -79,21 +79,37 @@ fun quantity(i: Ingredient, amount: Double): String = when {
     }
     fun portionFactor() = ((calories() / 2200.0 * 10).roundToInt() / 10.0).coerceIn(.4,1.6)
 }
-@Serializable data class Profile(val members: List<Member> = listOf(Member(), Member("Партнёр"), Member("Ребёнок", true, age=7)),
+@Serializable data class Profile(val members: List<Member> = listOf(Member(name="")),
     val allergies: Set<String> = emptySet(), val diet: String = "all", val likes: Set<String> = setOf("t:kids", "i:chicken_fillet"),
     val dislikes: Set<String> = emptySet(), val goals: Set<String> = emptySet(), val budget: Int = 8000,
-    val city: String = "msk", val maxTime: Int = 45, val meals: Set<String> = setOf("l","d"), val soupBatch: Boolean = true,
-    val reminder: Boolean = true, val reminderTime: String = "20:00") {
+    val city: String = "msk", val maxTime: Int = 45, val meals: Set<String> = setOf("b","l","d"), val soupBatch: Boolean = true,
+    val reminder: Boolean = true, val reminderTime: String = "20:00",
+    val kcalOn: Boolean = false, val budgetSet: Boolean = false, val promoOptIn: Boolean = false) {
     fun portions() = ceil(members.sumOf { it.portionFactor() } - .05).toInt().coerceAtLeast(1)
 }
 @Serializable data class Slot(val meal: String, val recipeId: String? = null, val servings: Int = 1, val leftover: Boolean = false, val cooked: Boolean = false)
 @Serializable data class Day(val date: String, val slots: List<Slot>)
 @Serializable data class Plan(val days: List<Day>, val approved: Boolean = false)
 @Serializable data class ExtraFood(val label: String, val calories: Int)
+/** Missing ingredients the user added to the shopping list from "cook from what you have". Quantity is the dish's full need. */
+@Serializable data class ExtraBuy(val quantity: Double, val dish: String)
+@Serializable data class Subscription(val plan: String, val since: String)
+/** Pilot analytics, kept with the user's preferences document. */
+@Serializable data class AppEvent(val at: String, val name: String, val detail: String = "")
 @Serializable data class AppState(val stage: String = "intro", val profile: Profile = Profile(), val plan: Plan? = null,
     val bought: Set<String> = emptySet(), val eaten: Set<String> = emptySet(), val liked: Set<String> = emptySet(),
     val disliked: Set<String> = emptySet(), val blocked: Set<String> = emptySet(), val extra: Map<String, List<ExtraFood>> = emptyMap(),
-    val store: String = "vv", val theme: String = "system", val reminderShown: String = "")
+    val store: String = "vv", val theme: String = "system", val reminderShown: String = "",
+    val onboarded: Boolean = false, val extraBuy: Map<String, ExtraBuy> = emptyMap(), val premiumStart: String? = null,
+    val subscription: Subscription? = null, val dayShift: Int = 0, val events: List<AppEvent> = emptyList()) {
+    /** Today's date, moved by the pilot's time-travel control so Premium unlocks can be demonstrated. */
+    fun today(): LocalDate = familymenu.today().plus(dayShift, DateTimeUnit.DAY)
+    fun dayNumber(): Int = premiumStart?.let { runCatching { LocalDate.parse(it).daysUntil(today()) }.getOrNull() } ?: 0
+    /** Premium (budget & prices, calories) opens on day 8: one free week, then a paid subscription. */
+    fun premiumState(): String = when { subscription != null -> "paid"; premiumStart == null || dayNumber() < 7 -> "soon"; dayNumber() < 14 -> "trial"; else -> "expired" }
+    fun premiumOn() = premiumState() in setOf("paid", "trial")
+    fun kcalVisible() = profile.kcalOn && premiumOn()
+}
 data class ShoppingItem(val ingredient: Ingredient, val amount: Double, val dishes: Set<String>, val cost: Double)
 
 class MenuEngine(val catalog: Catalog) {
@@ -163,6 +179,10 @@ class MenuEngine(val catalog: Catalog) {
     }
     fun shopping(state: AppState): List<ShoppingItem> {
         val amounts = mutableMapOf<String,Double>(); val dishes = mutableMapOf<String,MutableSet<String>>()
+        state.extraBuy.forEach { (id, extra) -> if (id in catalog.byIngredient) {
+            amounts[id] = (amounts[id] ?: 0.0) + extra.quantity
+            dishes.getOrPut(id) { mutableSetOf() }.add(extra.dish)
+        } }
         state.plan?.days?.flatMap { it.slots }?.filter { !it.leftover }?.forEach { slot ->
             catalog.byRecipe[slot.recipeId]?.let { r -> r.ingredients.forEach { q ->
                 amounts[q.id] = (amounts[q.id] ?: 0.0) + q.quantity * slot.servings / r.servings
@@ -175,3 +195,24 @@ class MenuEngine(val catalog: Catalog) {
         }.sortedWith(compareBy({it.ingredient.category},{it.ingredient.name}))
     }
 }
+
+/** Standalone mains (meal "p") are combined with side dishes (meal "g") into one cookable recipe. */
+fun Catalog.sides() = recipes.filter { it.meal == "g" }
+fun Catalog.mains() = recipes.filter { it.meal == "p" }
+fun Recipe.withPhrase() = tags.firstOrNull { it.startsWith("with:") }?.removePrefix("with:") ?: "с ${name.lowercase()}"
+fun Recipe.pairs() = tags.filter { it.startsWith("pair:") }.map { it.removePrefix("pair:") }
+fun combo(main: Recipe, side: Recipe?): Recipe {
+    if (side == null) return main
+    val amounts = linkedMapOf<String, Double>()
+    (main.ingredients + side.ingredients).forEach { amounts[it.id] = (amounts[it.id] ?: 0.0) + it.quantity }
+    fun <T> sideFirst(list: List<T>, fallback: T) = listOf(list.getOrElse(0) { fallback })
+    return Recipe(id = "c_${main.id}_${side.id}", name = "${main.name} ${side.withPhrase()}", meal = "c", minutes = max(main.minutes, side.minutes) + 5,
+        tags = emptyList(), ingredients = amounts.map { (id, q) -> Quantity(id, q) }, spices = (main.spices + side.spices).distinct(),
+        steps = listOf("Гарнир. " + side.steps.first()) + main.steps + side.steps.drop(1).map { "Гарнир. $it" },
+        stepSeconds = sideFirst(side.stepSeconds, 0) + main.stepSeconds + side.stepSeconds.drop(1),
+        stepTips = sideFirst(side.stepTips, "") + main.stepTips + side.stepTips.drop(1),
+        description = main.description, imageUrl = main.imageUrl,
+        stepImageUrls = sideFirst(side.stepImageUrls, null) + main.stepImageUrls + side.stepImageUrls.drop(1), servings = main.servings)
+}
+val pantryStaples = setOf("oil", "sugar")
+fun missingIngredients(recipe: Recipe, have: Set<String>) = recipe.ingredients.filter { it.id !in pantryStaples && it.id !in have }
