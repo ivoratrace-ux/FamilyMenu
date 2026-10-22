@@ -183,6 +183,10 @@ try {
       if(!e)e=exact.at(-1);if(!e)return false;e.click();return true;})()`);
     assert.ok(clicked,`Cannot click ${label}`);await delay(250);
   };
+  const clickUntil=async(label,condition,message)=>{
+    for(let i=0;i<5;i++){await click(label);for(let j=0;j<10;j++){if(await evaluate(condition))return;await delay(100);}}
+    throw Error(message);
+  };
   const clickWhere=async(predicate,name)=>{
     console.log('UI control:',name);
     const expr=`(()=>{${deep};const hit=all().filter(e=>(e.getAttribute('role')==='button'||e.tagName==='BUTTON')&&(t=>${predicate})((e.getAttribute('aria-label')||e.textContent||'').trim()));if(!hit.length)return false;hit[0].click();return true;})()`;
@@ -231,7 +235,7 @@ try {
   await wait(has('Собрать корзину по шагам'),'Shopping list did not render after approval');
   assert.ok(imageCalls>0,'Dish images must be loaded using database URLs');
   await click('Собрать корзину по шагам');await wait(has('Положила ✓'),'Cart session did not open');
-  await click('Положила ✓');await wait(has('Продукт 2 из'),'Cart did not advance');await click('Закрыть');
+  await click('Положила ✓');await wait(has('Продукт 2 из'),'Cart did not advance');await clickUntil('Закрыть',`!(${has('Положила ✓')})`,'Cart dialog did not close');
   // Cook from what you have
   await click('Готовить');await wait(has('Что есть дома'),'Cook tab did not render');
   await wait(has('Молоко ×'),'Saved inventory was not loaded');
@@ -240,7 +244,7 @@ try {
   await click(catalog.ingredients.find(i=>i.id==='potato').name);
   for(let i=0;i<100 && inventoryWrites===writes0;i++) await delay(100);
   assert.equal(inventoryWrites,writes0+1,'Marking a product must save stock');
-  await clickWhere(`t.startsWith('Готово ·')`,'Pantry done');
+  await clickWhere(`t.startsWith('Готово ·')`,'Pantry done');await wait(`!(${has('Мясо и птица')})`,'Pantry picker did not close');
   await click('Супы');
   await clickWhere(`(t.includes('всё есть')||t.includes('докупить')) && t.includes('мин')`,'First soup');
   await wait(has('Готовить по шагам'),'Recipe card did not open');
@@ -250,7 +254,7 @@ try {
   await click('Готово ✓');await wait(has('Приятного аппетита!'),'Cooking did not finish');
   const writes1=inventoryWrites;await click('Списать использованное');
   for(let i=0;i<100 && inventoryWrites===writes1;i++) await delay(100);
-  await click('Закрыть');
+  await clickUntil('Закрыть',`!(${has('Приятного аппетита!')})`,'Cooking dialog did not close');
   // Fridge photos → recognition → replace stock
   await click('Сфотографировать холодильник');await wait(has('Мой холодильник'),'Scanner did not open');
   await click('Добавить фото');assert.equal(await evaluate(has('Камера')),false,'Web must offer attachment only');await click('Выбрать фото');

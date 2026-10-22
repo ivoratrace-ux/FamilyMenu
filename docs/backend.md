@@ -11,6 +11,7 @@
 - Runtime: Node.js 24; Build Command: `npm ci && npm test`.
 - Start Command: `npm start`; Health Check Path: `/health`.
 - Оставить существующие `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_API_KEY`.
+- Для входа через мессенджеры: `MESSENGER_AUTH_SECRET`, `TELEGRAM_GATEWAY_TOKEN`, `MAX_BOT_TOKEN`, `MAX_BOT_NAME` (см. ниже).
 - Сервис слушает `0.0.0.0` и порт из Render `PORT`.
 
 `render.yaml` документирует эти настройки; смена репозитория сама по себе
@@ -85,3 +86,22 @@ Deploy webhook позволяет запустить деплой, но не ч�
 `GET /api/user-state` → `{revision,preferences,menu}`; `PUT` сохраняет оба документа атомарно с той же структурой. `GET/PUT /api/preferences` и `/api/menu` позволяют получить/сохранить соответствующий документ с `revision`. Все данные принадлежат владельцу JWT; конфликт ревизий возвращает 409.
 
 Клиенты обновляют сессию и загружают документы при входе, сохраняют изменения последовательно. Пароль не хранится. Refresh session хранится в Android Keystore-encrypted preferences, iOS Keychain, browser localStorage (Web) или приватном файле (desktop). Личные документы не смешиваются с анонимным черновиком онбординга.
+
+## Вход через Telegram и MAX
+
+`GET /api/auth/messengers` → `{telegram,max}` — какие способы настроены. Без настроек соответствующие
+маршруты отвечают 503, а клиент предлагает вход по почте.
+
+- **Telegram** (Telegram Gateway API, `TELEGRAM_GATEWAY_TOKEN`): `POST /api/auth/telegram/start {phone}` отправляет
+  4-значный код в Telegram и возвращает `{challengeId,expiresIn,via,destination}` (номер замаскирован);
+  `POST /api/auth/telegram/verify {challengeId,code}` проверяет код через `checkVerificationStatus`.
+- **MAX** (бот, `MAX_BOT_TOKEN`, `MAX_BOT_NAME`): `POST /api/auth/max/start` возвращает ссылку
+  `https://max.ru/<бот>?start=<challengeId>`. Когда пользователь открывает бота, MAX присылает webhook
+  на `/api/max/webhook/<секрет>`, бот отвечает кодом; `POST /api/auth/max/verify {challengeId,code}`.
+  Webhook подписывается один раз: `MESSENGER_AUTH_SECRET=… MAX_BOT_TOKEN=… MAX_BOT_NAME=… node scripts/max-subscribe.mjs https://vibe-coding-sc04.onrender.com`.
+
+Код живёт 5 минут, не больше 5 попыток; лимиты: 1 отправка в минуту и 5 в час на номер, 20 проверок в минуту.
+Пользователь Supabase создаётся автоматически: email `<telegram|max>-<HMAC>@users.familymenu.invalid`,
+пароль — HMAC от `MESSENGER_AUTH_SECRET`; номер телефона и ID в MAX в базе не хранятся.
+**`MESSENGER_AUTH_SECRET` нельзя менять** после запуска: иначе вошедшие через мессенджер потеряют доступ к аккаунтам.
+Ответ verify совпадает с `/api/auth/login` плюс `login:{via,display}`.
