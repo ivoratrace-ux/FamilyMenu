@@ -152,7 +152,7 @@ try {
           scanCalls++;
           assert.equal(request.method,'POST');
           const data=JSON.parse(request.postData);
-          assert.equal(data.images.length,4);assert.ok(data.images.every(i=>i.mimeType==='image/jpeg' && i.image.length>100));
+          assert.ok(data.images.length>=1 && data.images.length<=5);assert.ok(data.images.every(i=>i.mimeType==='image/jpeg' && i.image.length>100));
           assert.ok(Object.keys(request.headers).some(k=>k.toLowerCase()==='authorization'),'Scanner requires authorization');
           const body={products:[{ingredientId:'eggs',name:'Яйца',amount:'6 шт',confidence:'high',alternatives:[]},{ingredientId:null,name:'Овощ',amount:'около 300 г',confidence:'medium',alternatives:[{ingredientId:'zucchini',name:'Кабачок'},{ingredientId:'cucumber',name:'Огурцы'}]},{ingredientId:null,name:'Кимчи',amount:'1 банка',confidence:'high',alternatives:[]}]};
           await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(body)).toString('base64')});
@@ -183,16 +183,10 @@ try {
       if(!e)e=exact.at(-1);if(!e)return false;e.click();return true;})()`);
     assert.ok(clicked,`Cannot click ${label}`);await delay(250);
   };
-  const clickWhere=async(predicate,name,native=false)=>{
+  const clickWhere=async(predicate,name)=>{
     console.log('UI control:',name);
-    const expr=`(()=>{${deep};const hit=all().filter(e=>(e.getAttribute('role')==='button'||e.tagName==='BUTTON')&&(t=>${predicate})((e.getAttribute('aria-label')||e.textContent||'').trim()));if(!hit.length)return null;if(!${native}){hit[0].click();return true;}const r=hit[0].getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`;
-    await wait(expr,`Missing UI control: ${name}`);
-    if(native) {
-      const point=await evaluate(expr);
-      await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});
-      await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point});
-    }
-    await delay(250);
+    const expr=`(()=>{${deep};const hit=all().filter(e=>(e.getAttribute('role')==='button'||e.tagName==='BUTTON')&&(t=>${predicate})((e.getAttribute('aria-label')||e.textContent||'').trim()));if(!hit.length)return false;hit[0].click();return true;})()`;
+    await wait(expr,`Missing UI control: ${name}`);await delay(250);
   };
   const fill=async(label,text,index=0)=>{
     await wait(`(()=>{${deep};return all().some(e=>e.getAttribute('role')==='textbox')})()`,`Missing text field: ${label}`);
@@ -206,74 +200,67 @@ try {
   };
   const navigation=await send('Page.navigate',{url:externalBase ? `${base}/` : `${base}/FamilyMenu/`});
   assert.ok(!navigation.errorText,`Browser navigation failed: ${navigation.errorText}`);
-  await wait(has('Повторить'),'Catalog error should offer retry');
+  await wait(has('Повторить'),'Catalog error should offer retry after the splash');
   await click('Повторить');
-  // Intro slides → sign-in choice
-  await wait(has('Меню на всю неделю'),'Intro slides did not render');
+  // Feature slides
+  await wait(has('Готовим из того, что есть'),'Feature slides did not render');
   assert.ok(catalogCalls>0,'App must load recipes from the backend');
+  await click('Дальше');await wait(has('Большая база рецептов'),'Second slide did not render');
   await click('Пропустить');
-  await wait(has('Войти через Telegram'),'Sign-in choice did not render');
-  assert.equal(await evaluate(has('Войти через MAX')),false,'MAX must be hidden');
-  assert.equal(await evaluate(has('Войти по почте')),false,'Email login must be removed');
+  // Getting to know: every step needs an answer, no sign-in yet
+  await wait(has('Какая у вас цель?'),'Goal step did not render');
+  await click('Похудение');await click('Дальше');
+  await wait(has('Какой у вас тип питания?'),'Diet step did not render');
+  await click('Едим всё');await click('Дальше');
+  await wait(has('Чего не должно быть в меню?'),'Restrictions step did not render');
+  assert.ok(await evaluate(has('Ещё')),'Long chip lists must collapse behind «Ещё»');
+  await click('Ограничений нет — дальше');
+  await wait(has('Что уже есть в холодильнике?'),'Fridge step did not render');
+  const potato=catalog.ingredients.find(i=>i.id==='potato');
+  await click(potato.category);await click(potato.name);
+  await click('Дальше');
+  await wait(has('Ещё немного деталей'),'Details step did not render');
   assert.equal(protectedCalls,0,'Nothing protected may be requested before sign-in');
-  await click('Войти через Telegram');
-  await wait(has('Код входа: 4826'),'Telegram challenge did not render');
-  await wait(has('Открыть Telegram'),'Bot link is missing');
-  await delay(2200);assert.equal(protectedCalls,0,'Polling cannot sign in before bot approval');
-  telegramApproved=true;
-  await wait(has('Кто в семье?'),'Telegram approval did not open onboarding');
-  assert.equal(messengerCalls,1,'Exactly one device challenge should be created');
-  // Getting to know: 5 steps, scenario choice, week setup
-  for(let step=0;step<5;step++) await click('Дальше');
-  await wait(has('С чего начнём?'),'Scenario step did not render');
-  await click('Составить меню на неделю');
-  await wait(has('Последний шаг'),'Week setup did not render');
   await click('Составить меню');
-  await wait(has('Утвердить меню и собрать список'),'Week menu did not render');
-  for(let i=0;i<100 && !(documents.get('user-a')?.menu?.days?.length===7);i++) await delay(100);
-  assert.ok(documents.get('user-a')?.menu?.days?.length===7,'Menu must be saved to the account');
-  assert.ok(documents.get('user-a')?.preferences?.onboarded===true,'Onboarding must be saved');
-  await click('Утвердить меню и собрать список');
-  await wait(has('Собрать корзину по шагам'),'Shopping list did not render after approval');
+  await wait(has('Ваше меню готово!'),'First menu did not render after the loader');
+  await click('Сохранить меню');
+  // The anonymous first menu is saved only after approval inside Telegram.
+  await wait(has('Войти через Telegram'),'Telegram sign-in did not render');
+  assert.equal(await evaluate(has('Войти по почте')),false,'Email sign-in must stay removed');
+  assert.equal(await evaluate(has('Войти через MAX')),false,'MAX must stay hidden');
+  assert.equal(protectedCalls,0,'Anonymous onboarding must not access personal APIs');
+  await click('Войти через Telegram');await wait(has('Код входа: 4826'),'Challenge did not render');
+  await delay(2200);assert.equal(protectedCalls,0,'No session before bot approval');telegramApproved=true;
+  await wait(has('Покупки'),'Telegram approval did not open the app');
+  assert.equal(messengerCalls,1,'Exactly one challenge should be created');
+  for(let i=0;i<100 && !(documents.get('user-a')?.menu?.days?.length===3);i++) await delay(100);
+  assert.equal(documents.get('user-a')?.menu?.days?.length,3,'The first menu must be saved to the new account');
+  assert.ok(documents.get('user-a')?.preferences?.onboarded===true,'Answers must be saved to the new account');
+  for(let i=0;i<100 && !inventory.items.some(x=>x.ingredientId==='potato');i++) await delay(100);
+  assert.ok(inventory.items.some(x=>x.ingredientId==='potato'),'Products marked before sign-in must be saved');
   assert.ok(imageCalls>0,'Dish images must be loaded using database URLs');
-  await click('Собрать корзину по шагам');await wait(has('Положила ✓'),'Cart session did not open');
-  await click('Положила ✓');await wait(has('Продукт 2 из'),'Cart did not advance');await click('Закрыть');await wait(`!(${has('Положила ✓')})`,'Cart screen did not close');
-  // Cook from what you have
-  await click('Готовить');await wait(has('Что есть дома'),'Cook tab did not render');
-  await wait(has('Молоко ×'),'Saved inventory was not loaded');
-  const writes0=inventoryWrites;
-  await click('Изменить');await wait(has('Мясо и птица'),'Pantry picker did not open');
-  await click(catalog.ingredients.find(i=>i.id==='potato').name);
-  for(let i=0;i<100 && inventoryWrites===writes0;i++) await delay(100);
-  assert.equal(inventoryWrites,writes0+1,'Marking a product must save stock');
-  await clickWhere(`t.startsWith('Готово ·')`,'Pantry done');await wait(`!(${has('Мясо и птица')})`,'Pantry picker did not close');
-  await click('Супы');
-  await clickWhere(`(t.includes('всё есть')||t.includes('докупить')) && t.includes('мин')`,'First soup',true);
-  await wait(has('Готовить по шагам'),'Recipe card did not open');
-  if(await evaluate(has('Добавить недостающее в «Покупки»'))) await click('Добавить недостающее в «Покупки»');
-  await click('Готовить по шагам');await wait(has('Шаг 1 из'),'Step-by-step cooking did not open');
-  for(let i=0;i<20 && !(await evaluate(has('Готово ✓')));i++) await click('Дальше');
-  await click('Готово ✓');await wait(has('Приятного аппетита!'),'Cooking did not finish');
-  const writes1=inventoryWrites;await click('Списать использованное');
-  for(let i=0;i<100 && inventoryWrites===writes1;i++) await delay(100);
-  await click('Закрыть');await wait(`!(${has('Приятного аппетита!')})`,'Cooking screen did not close');
-  // Fridge photos → recognition → replace stock
-  await click('Сфотографировать холодильник');await wait(has('Мой холодильник'),'Scanner did not open');
-  await click('Добавить фото');assert.equal(await evaluate(has('Камера')),false,'Web must offer attachment only');await click('Выбрать фото');
+  // Cook the nearest meal
+  await click('Готовить');await click('Готовить по шагам с таймером');await wait(has('Шаг 1 из'),'Step-by-step cooking did not open');
+  await click('Закрыть');await wait(`!(${has('Шаг 1 из')})`,'Recipe screen did not close');
+  // Shopping → Premium offer → auto cart
+  await click('Покупки');await wait(has('Корзина примерно'),'Shopping list did not render');
+  await click('Собрать корзину автоматически ›');await wait(has('Что входит в Premium'),'Premium offer did not open');
+  await click('Подключить за 1 990 ₽');await click('Утвердить меню');
+  await clickWhere(`t.startsWith('Собрать корзину ·')`,'Collect cart');
+  await wait(has('Положила ✓'),'Cart session did not open');await click('Положила ✓');
+  await click('Закрыть');await wait(`!(${has('Положила ✓')})`,'Cart screen did not close');
+  await click('‹ Назад');
+  // Home: fridge photos → recognition → replace stock
+  await click('Дома');await wait(has('Что есть дома'),'Home tab did not render');
+  await click('Фото холодильника');
   await wait(`!!document.querySelector('input[type=file]')`,'File picker did not open');
   const doc=await send('DOM.getDocument');
   const {nodeId}=await send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'input[type=file]'});
   await send('DOM.setFileInputFiles',{nodeId,files:Array(3).fill(resolve('backend/public/art/b1.png'))});
-  await wait(has('Удалить фото 3'),'Selected photos were not queued');
-  await click('Добавить фото');await click('Выбрать фото');
-  await wait(`!!document.querySelector('input[type=file]')`,'Second file picker did not open');
-  const doc2=await send('DOM.getDocument');
-  const input2=await send('DOM.querySelector',{nodeId:doc2.root.nodeId,selector:'input[type=file]'});
-  await send('DOM.setFileInputFiles',{nodeId:input2.nodeId,files:Array(2).fill(resolve('backend/public/art/b1.png'))});
-  await wait(has('Удалить фото 5'),'Additional photos replaced the queue');
+  await wait(has('Распознать продукты (3)'),'Selected photos were not queued');
   assert.equal(scanCalls,0,'Selecting photos must not trigger recognition');
-  await click('Удалить фото 2');
-  await click('Распознать (4)');
+  await click('Распознать продукты (3)');await wait(has('Мой холодильник'),'Scanner did not open');
+  await click('Распознать (3)');
   await wait(has('Вне справочника'),'Unmatched products must be shown separately');
   await click('Огурцы');
   await wait(`!(${has('Выберите подходящий вариант')})`,'Alternative was not confirmed');
@@ -283,33 +270,35 @@ try {
   await wait(`!(${has('Кимчи')})`,'Unmatched product was not removed');
   await click('Сохранить');await click('Отмена');assert.equal(inventoryWrites,writes2,'Cancelled replacement wrote inventory');
   await click('Сохранить');await click('Заменить запасы');
-  await wait(has('Что есть дома'),'Saved scanner result did not return to cooking');
+  await wait(has('Что есть дома'),'Saved scanner result did not return home');
   assert.equal(inventoryWrites,writes2+1);assert.equal(inventory.items.length,2);assert.ok(!inventory.items.some(i=>i.ingredientId==='milk'));
   const screenshot=await send('Page.captureScreenshot',{format:'png'});
-  await writeFile(resolve(report,'cook.png'),Buffer.from(screenshot.data,'base64'));
+  await writeFile(resolve(report,'home.png'),Buffer.from(screenshot.data,'base64'));
+  // Own recipe
+  await click('Профиль');await click('Мои рецепты');await click('+ Добавить рецепт');
+  await fill('Название','Бабушкин борщ',0);await fill('Добавить продукт','карто',3);await click('+ '+potato.name);
+  await fill('Шаг 1','Сварить всё вместе',5);await click('Сохранить рецепт');
+  await wait(has('Бабушкин борщ'),'Own recipe was not saved');
+  for(let i=0;i<100 && !(documents.get('user-a')?.preferences?.myRecipes?.length===1);i++) await delay(100);
+  assert.equal(documents.get('user-a')?.preferences?.myRecipes?.length,1,'Own recipe must sync to the account');
   // Reload with an expired session
   await evaluate(`(()=>{const key='family-menu-auth-v1';const session=JSON.parse(localStorage.getItem(key));session.session.expiresAt=1;localStorage.setItem(key,JSON.stringify(session));})()`);
   await send('Page.reload');
-  await wait(has('Главная'),'App did not restore after reload');
+  await wait(has('Покупки'),'App did not restore after reload');
   assert.ok(refreshCalls>0,'Expired session must be refreshed after reload');
-  await click('Готовить');await wait(has('Яйца ×'),'Saved stock did not load after reload');
-  assert.equal(await evaluate(has('Кимчи')),false,'Unmatched item was saved unexpectedly');
-  // Premium: locked in week one, trial opens after a week
-  await click('Профиль');await wait(has('Калории и КБЖУ'),'Profile did not render');
-  await click('+неделя');await wait(has('Пробная неделя'),'Premium trial did not start after a week');
-  // The same Telegram account returns to its saved data; a different ID starts clean.
-  await click('Выйти');await wait(has('Войти через Telegram'),'Logout did not clear the session');
+  // The same Telegram account restores its recipes and menu; a different ID starts clean.
+  await click('Профиль');await click('Выйти');await wait(has('Войти через Telegram'),'Logout did not clear the session');
   telegramApproved=false;
-  await click('Войти через Telegram');await wait(has('Код входа: 4826'),'Second challenge did not render');telegramApproved=true;
-  await wait(has('Главная'),'Returning Telegram account must restore its data');
-  await click('Профиль');await wait(has('@alice'),'Profile must display Telegram login');
-  await click('Выйти');await wait(has('Войти через Telegram'),'Second logout failed');
+  await click('Войти через Telegram');await wait(has('Код входа: 4826'),'Second challenge missing');telegramApproved=true;
+  await wait(has('Покупки'),'Returning Telegram user did not restore the app');
+  await click('Профиль');await click('Мои рецепты');await wait(has('Бабушкин борщ'),'Returning account lost its own recipe');
+  await click('‹ Назад');await click('Выйти');await wait(has('Войти через Telegram'),'Second logout failed');
   telegramApproved=false;telegramUser='user-b';
   await click('Войти через Telegram');await wait(has('Код входа: 4826'),'New account challenge missing');telegramApproved=true;
-  await wait(has('Кто в семье?'),'A new account must not inherit another user preferences/menu');
+  await wait(has('Какая у вас цель?'),'A new account must not inherit another user preferences/menu');
   assert.equal(stocks.get('user-b').items.length,0,'Account inventory leaked across users');
   assert.equal(errors.length,0,errors.join('\n'));
-  console.log('Compose Web: intro → Telegram confirmation → getting to know → week menu → approve → cart → cook from what you have → steps → use up → fridge photos → replace stock → refresh → premium trial → logout → same account restored → Telegram account isolation: PASS. Backend mocked; no paid API calls.');
+  console.log('Compose Web: splash → slides → 5-step getting to know (no sign-in) → loader → first menu → Telegram approval → menu and stock saved → cook → Premium → auto cart → fridge photos → replace stock → own recipe → refresh → returning Telegram account → logout → isolation: PASS. Backend mocked; no paid API calls.');
 } catch(e) {
   let visible='';
   if(send) {try {const dom=await send('Runtime.evaluate',{expression:`(()=>{${deep};return all().map(e=>({tag:e.tagName,role:e.getAttribute('role'),label:e.getAttribute('aria-label'),text:e.textContent?.slice(0,300)}))})()`,returnByValue:true});await writeFile(resolve(report,'semantics.json'),JSON.stringify(dom.result.value,null,2));

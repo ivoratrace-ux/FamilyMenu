@@ -76,7 +76,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :composeApp:wasmJsBrowserDistribution --stacktrace
+      - name: Build Compose Web
+        run: |
+          set -o pipefail
+          ./gradlew :composeApp:wasmJsBrowserDistribution --stacktrace 2>&1 | tee gradle-web.log || { grep -E "^e: " gradle-web.log | head -30 | sed 's/^/::error::/'; exit 1; }
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

@@ -20,7 +20,7 @@ val appJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 @Serializable data class Food(val stems: List<String>, val kcal: Double, val piece: Double, val portion: Double)
 @Serializable data class Catalog(val ingredients: List<Ingredient>, val recipes: List<Recipe>, val promos: List<Promo>, val foods: List<Food>) {
     val byIngredient by lazy { ingredients.associateBy { it.id } }
-    val byRecipe by lazy { recipes.associateBy { it.id } }
+    val byRecipe by lazy { RecipeIndex(recipes.associateBy { it.id }) }
     fun flags(r: Recipe) = r.ingredients.flatMap { byIngredient.getValue(it.id).flags }.toSet()
     fun allergens(r: Recipe) = r.ingredients.flatMap { byIngredient.getValue(it.id).allergens }.toSet()
     fun nutrition(r: Recipe): List<Double> = (0..3).map { n -> r.ingredients.sumOf {
@@ -45,7 +45,7 @@ val appJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 }
 
 val allergies = linkedMapOf("gluten" to "Глютен", "milk" to "Белок молока", "lactose" to "Лактоза", "egg" to "Яйца", "fish" to "Рыба", "crustacean" to "Креветки", "mollusc" to "Моллюски", "peanut" to "Арахис", "nuts" to "Орехи", "soy" to "Соя", "sesame" to "Кунжут", "mustard" to "Горчица", "celery" to "Сельдерей", "citrus" to "Цитрусовые", "honey" to "Мёд")
-val diets = linkedMapOf("all" to "Обычное", "halal" to "Без свинины", "pesc" to "Без мяса", "veg" to "Вегетарианское", "vegan" to "Веганское", "lent" to "Постное")
+val diets = linkedMapOf("all" to "Едим всё", "halal" to "Без свинины", "pesc" to "Без мяса", "veg" to "Вегетарианское", "vegan" to "Веганское", "lent" to "Постное")
 val goals = linkedMapOf("pp" to "Правильное питание", "protein" to "Белковое", "lose" to "Похудение", "mass" to "Набор массы", "lowcarb" to "Меньше углеводов")
 val mealLabels = linkedMapOf("b" to "Завтрак", "l" to "Обед", "s" to "Перекус", "d" to "Ужин", "z" to "Десерт", "k" to "Напиток")
 val cityNames = linkedMapOf("msk" to "Москва", "mo" to "Московская область", "spb" to "Санкт-Петербург", "kgd" to "Калининград", "kzn" to "Казань", "khv" to "Хабаровск", "oms" to "Омск", "sar" to "Саратов", "other" to "Другой город")
@@ -84,7 +84,8 @@ fun quantity(i: Ingredient, amount: Double): String = when {
     val dislikes: Set<String> = emptySet(), val goals: Set<String> = emptySet(), val budget: Int = 8000,
     val city: String = "msk", val maxTime: Int = 45, val meals: Set<String> = setOf("b","l","d"), val soupBatch: Boolean = true,
     val reminder: Boolean = true, val reminderTime: String = "20:00",
-    val kcalOn: Boolean = false, val budgetSet: Boolean = false, val promoOptIn: Boolean = false) {
+    val kcalOn: Boolean = false, val budgetSet: Boolean = false, val promoOptIn: Boolean = false,
+    val days: Int = 3, val mealSetup: Map<String, String> = defaultMealSetup) {
     fun portions() = ceil(members.sumOf { it.portionFactor() } - .05).toInt().coerceAtLeast(1)
 }
 @Serializable data class Slot(val meal: String, val recipeId: String? = null, val servings: Int = 1, val leftover: Boolean = false, val cooked: Boolean = false)
@@ -101,13 +102,12 @@ fun quantity(i: Ingredient, amount: Double): String = when {
     val disliked: Set<String> = emptySet(), val blocked: Set<String> = emptySet(), val extra: Map<String, List<ExtraFood>> = emptyMap(),
     val store: String = "vv", val theme: String = "system", val reminderShown: String = "",
     val onboarded: Boolean = false, val extraBuy: Map<String, ExtraBuy> = emptyMap(), val premiumStart: String? = null,
-    val subscription: Subscription? = null, val dayShift: Int = 0, val events: List<AppEvent> = emptyList()) {
-    /** Today's date, moved by the pilot's time-travel control so Premium unlocks can be demonstrated. */
+    val subscription: Subscription? = null, val dayShift: Int = 0, val events: List<AppEvent> = emptyList(),
+    val myRecipes: List<Recipe> = emptyList(), val pantryDraft: Set<String> = emptySet()) {
     fun today(): LocalDate = familymenu.today().plus(dayShift, DateTimeUnit.DAY)
     fun dayNumber(): Int = premiumStart?.let { runCatching { LocalDate.parse(it).daysUntil(today()) }.getOrNull() } ?: 0
-    /** Premium (budget & prices, calories) opens on day 8: one free week, then a paid subscription. */
-    fun premiumState(): String = when { subscription != null -> "paid"; premiumStart == null || dayNumber() < 7 -> "soon"; dayNumber() < 14 -> "trial"; else -> "expired" }
-    fun premiumOn() = premiumState() in setOf("paid", "trial")
+    /** Premium (shopping cart assembly with budget, store comparison, promos, calories) is a paid subscription. */
+    fun premiumOn() = subscription != null
     fun kcalVisible() = profile.kcalOn && premiumOn()
 }
 data class ShoppingItem(val ingredient: Ingredient, val amount: Double, val dishes: Set<String>, val cost: Double)
@@ -122,10 +122,23 @@ class MenuEngine(val catalog: Catalog) {
         return catalog.allergens(r).none { it in p.allergies } && flags.none { it in forbidden } &&
             r.ingredients.none { it.id in p.dislikes } && r.id !in state.blocked
     }
+    fun all(state: AppState) = catalog.recipes + state.myRecipes
+    /** Recipes for a slot kind chosen in the profile: breakfast, soup, pair (main + side), dish, dessert, drink, snack. */
+    fun poolKind(kind: String, state: AppState): List<Recipe> = all(state).filter { r -> allowed(r, state) && when (kind) {
+        "breakfast" -> r.meal == "b"; "soup" -> r.meal == "m" && "soup" in r.tags; "dish" -> r.meal == "m" && "soup" !in r.tags
+        "pair" -> r.meal == "p"; "side" -> r.meal == "g"; "dessert" -> r.meal == "z"; "drink" -> r.meal == "k"; "snack" -> r.meal == "s"; else -> false } }
+    fun kindOf(meal: String, state: AppState) = state.profile.mealSetup[meal] ?: defaultMealSetup[meal] ?: "none"
     fun pool(meal: String, state: AppState): List<Recipe> {
-        val type = if (meal in listOf("l","d")) "m" else meal
-        val all = catalog.recipes.filter { it.meal == type && allowed(it,state) }
-        return if (meal in listOf("l","d")) all.filter { ("soup" in it.tags) == (meal == "l") }.ifEmpty { all } else all
+        val kind = kindOf(meal, state)
+        return if (kind == "pair") poolKind("pair", state).flatMap { main -> sideFor(main, state)?.let { listOf(combo(main, it)) } ?: listOf(main) }
+        else poolKind(kind, state)
+    }
+    fun sideFor(main: Recipe, state: AppState, random: Random? = null): Recipe? {
+        val sides = poolKind("side", state)
+        if (sides.isEmpty()) return null
+        val pairs = main.pairs()
+        val preferred = sides.filter { it.id in pairs }.ifEmpty { sides }
+        return if (random == null) preferred.first() else preferred.random(random)
     }
     fun score(r: Recipe, state: AppState, previousProtein: String? = null, meal: String? = null): Double {
         val p = state.profile; val n = catalog.nutrition(r); val factor = if(r.meal == "b") .7 else 1.0
@@ -147,31 +160,26 @@ class MenuEngine(val catalog: Catalog) {
         return score
     }
     fun pick(meal: String, state: AppState, used: MutableMap<String,Int>, weekend: Boolean, random: Random, previousProtein: String? = null): Recipe? {
-        var candidates = pool(meal,state)
+        val kind = kindOf(meal, state)
+        var candidates = poolKind(kind, state)
         if(candidates.isEmpty()) return null
         val timed = candidates.filter { it.minutes <= state.profile.maxTime + if(weekend) 30 else 0 }
         if(timed.isNotEmpty()) candidates = timed
         val minimum = candidates.minOf { used[it.id] ?: 0 }
-        val top = candidates.filter { (used[it.id] ?: 0) == minimum }.map { it to (score(it,state,previousProtein,meal) + random.nextDouble()*1.6) }.sortedByDescending {it.second}.take(3).map {it.first}
+        val have = state.pantryDraft
+        val top = candidates.filter { (used[it.id] ?: 0) == minimum }.map { it to (score(it,state,previousProtein,meal) + it.ingredients.count { q -> q.id in have } * .8 + random.nextDouble()*1.6) }.sortedByDescending {it.second}.take(3).map {it.first}
         val chosen = top.random(random); used[chosen.id] = (used[chosen.id] ?: 0)+1
-        return chosen
+        return if (kind == "pair") sideFor(chosen, state, random)?.let { combo(chosen, it) } ?: chosen else chosen
     }
     fun generate(state: AppState, start: LocalDate = today(), random: Random = Random.Default): Plan {
         val used = mutableMapOf<String,Int>(); var previousProtein: String? = null
         val days = mutableListOf<Day>(); val p = state.profile
-        repeat(7) { index ->
+        repeat(p.days.coerceIn(1, 7)) { index ->
             val date = start.plus(index, DateTimeUnit.DAY)
-            val slots = mealLabels.keys.filter { it in p.meals }.map { meal ->
-                val previous = days.lastOrNull()?.slots?.find { it.meal == "l" }
-                val previousRecipe = previous?.recipeId?.let { catalog.byRecipe[it] }
-                val keep = meal == "l" && p.soupBatch && index % 2 == 1 && previousRecipe?.meal == "m" && "salad" !in previousRecipe.tags
-                if(keep) Slot(meal, previous!!.recipeId,p.portions(),true)
-                else {
-                    val recipe = pick(meal,state,used,date.dayOfWeek in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY),random,if(meal=="d") previousProtein else null)
-                    if(meal=="d") previousProtein = recipe?.let(catalog::protein)
-                    val batch = meal=="l" && p.soupBatch && index%2==0 && index<6 && recipe?.meal=="m" && "salad" !in recipe.tags
-                    Slot(meal,recipe?.id,p.portions() * if(batch) 2 else 1)
-                }
+            val slots = mealOrder.filter { kindOf(it, state) != "none" }.map { meal ->
+                val recipe = pick(meal,state,used,date.dayOfWeek in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY),random,if(meal=="d") previousProtein else null)
+                if(meal=="d") previousProtein = recipe?.let(catalog::protein)
+                Slot(meal,recipe?.id,p.portions())
             }
             days += Day(date.toString(),slots)
         }
@@ -206,7 +214,7 @@ fun combo(main: Recipe, side: Recipe?): Recipe {
     val amounts = linkedMapOf<String, Double>()
     (main.ingredients + side.ingredients).forEach { amounts[it.id] = (amounts[it.id] ?: 0.0) + it.quantity }
     fun <T> sideFirst(list: List<T>, fallback: T) = listOf(list.getOrElse(0) { fallback })
-    return Recipe(id = "c_${main.id}_${side.id}", name = "${main.name} ${side.withPhrase()}", meal = "c", minutes = max(main.minutes, side.minutes) + 5,
+    return Recipe(id = "c:${main.id}:${side.id}", name = "${main.name} ${side.withPhrase()}", meal = "c", minutes = max(main.minutes, side.minutes) + 5,
         tags = emptyList(), ingredients = amounts.map { (id, q) -> Quantity(id, q) }, spices = (main.spices + side.spices).distinct(),
         steps = listOf("Гарнир. " + side.steps.first()) + main.steps + side.steps.drop(1).map { "Гарнир. $it" },
         stepSeconds = sideFirst(side.stepSeconds, 0) + main.stepSeconds + side.stepSeconds.drop(1),
@@ -216,3 +224,34 @@ fun combo(main: Recipe, side: Recipe?): Recipe {
 }
 val pantryStaples = setOf("oil", "sugar")
 fun missingIngredients(recipe: Recipe, have: Set<String>) = recipe.ingredients.filter { it.id !in pantryStaples && it.id !in have }
+
+/** Meal slots in the order of the day and their usual time (minutes since midnight). */
+val mealOrder = listOf("b", "l", "s", "d")
+val mealTimes = mapOf("b" to 8 * 60, "l" to 13 * 60, "s" to 16 * 60 + 30, "d" to 19 * 60)
+val defaultMealSetup = mapOf("b" to "breakfast", "l" to "soup", "s" to "none", "d" to "pair")
+val slotLabels = linkedMapOf("b" to "Завтрак", "l" to "Обед", "s" to "Перекус", "d" to "Ужин")
+val kindLabels = linkedMapOf("breakfast" to "Завтрак: каши, яйца, сырники", "soup" to "Суп", "pair" to "Второе с гарниром", "dish" to "Целое блюдо или салат",
+    "dessert" to "Десерт", "drink" to "Напиток", "snack" to "Перекус", "none" to "Не нужен")
+val kindOptions = mapOf("b" to listOf("breakfast", "none"), "l" to listOf("soup", "pair", "dish", "none"), "s" to listOf("none", "dessert", "drink", "snack"), "d" to listOf("pair", "dish", "soup", "none"))
+/** What a user recipe is: maps to the catalog meal code and tags. */
+val myKinds = linkedMapOf("breakfast" to "Завтрак", "soup" to "Суп", "main" to "Основное (мясо, рыба)", "side" to "Гарнир", "dish" to "Целое блюдо или салат",
+    "dessert" to "Десерт", "drink" to "Напиток", "snack" to "Перекус")
+fun myKindMeal(kind: String) = when (kind) { "breakfast" -> "b"; "soup", "dish" -> "m"; "main" -> "p"; "side" -> "g"; "dessert" -> "z"; "drink" -> "k"; else -> "s" }
+fun Recipe.myKind() = when (meal) { "b" -> "breakfast"; "m" -> if ("soup" in tags) "soup" else "dish"; "p" -> "main"; "g" -> "side"; "z" -> "dessert"; "k" -> "drink"; else -> "snack" }
+
+/** Recipe lookup: catalog recipes, the user's own recipes and main+side combinations ("c:<main>:<side>"). */
+class RecipeIndex(private val base: Map<String, Recipe>) {
+    var extra: Map<String, Recipe> = emptyMap()
+    private val combos = mutableMapOf<String, Recipe>()
+    val size get() = base.size
+    operator fun get(id: String?): Recipe? {
+        if (id == null) return null
+        base[id]?.let { return it }; extra[id]?.let { return it }
+        if (!id.startsWith("c:")) return null
+        combos[id]?.let { return it }
+        val parts = id.split(':'); if (parts.size != 3) return null
+        val main = base[parts[1]] ?: extra[parts[1]] ?: return null; val side = base[parts[2]] ?: extra[parts[2]] ?: return null
+        return combo(main, side).also { combos[id] = it }
+    }
+    fun getValue(id: String) = get(id) ?: throw NoSuchElementException(id)
+}

@@ -77,7 +77,7 @@ import androidx.compose.foundation.text.KeyboardOptions
     if(m.state.premiumOn()) {
         NumberInput("Бюджет на неделю, ₽",m.state.profile.budget,500..200000) {m.profile(m.state.profile.copy(budget=it,budgetSet=true))}
         Note("Бюджет влияет на подбор, но не гарантирует точную итоговую сумму.")
-    } else NavRow("Бюджет на неделю","Premium: ${premiumNote(m.state)}",locked=true,badge="Premium") {m.open("sub")}
+    } else NavRow("Бюджет на неделю","Автосборка корзины с бюджетом",locked=true,badge="Premium") {m.open("sub")}
     FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {cityNames.forEach {(key,label) -> Choice(label,m.state.profile.city==key) {m.profile(m.state.profile.copy(city=key))}}}
 }}
 @Composable internal fun NumberInput(label: String,value: Int,range: IntRange,onChange:(Int)->Unit) {
