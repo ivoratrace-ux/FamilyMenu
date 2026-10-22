@@ -3,8 +3,10 @@
   const loaded=new Set();
   async function start() {
     const root=document.getElementById('app');root.replaceChildren();
-    const pending=document.createElement('div');pending.className='splash8';pending.setAttribute('role','img');pending.setAttribute('aria-label','Frigo');root.append(pending);
-    const splash=new Promise(r=>setTimeout(r,1500));
+    // Splash: exactly 2 s; three chef hats above the logo light up one after another.
+    const pending=document.createElement('div');pending.className='splash8';pending.setAttribute('role','img');pending.setAttribute('aria-label','Frigo, загрузка');
+    pending.innerHTML='<div class="hats8">'+'<span class="hat8"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 14.5a4 4 0 0 1-.6-7.9A5 5 0 0 1 12 3a5 5 0 0 1 5.6 3.6 4 4 0 0 1-.6 7.9V20H7z" fill="currentColor" fill-opacity=".9"/><path d="M7 17h10" stroke="#2c6a4c"/></svg></span>'.repeat(3)+'</div>';root.append(pending);
+    const splash=new Promise(r=>setTimeout(r,2000));
     try {
       const [catalog]=await Promise.all([FamilyMenuApi.catalog(),FamilyMenuApi.restore(),splash]);
       if(!Array.isArray(catalog.recipes) || !catalog.recipes.length || !Array.isArray(catalog.ingredients) || !catalog.ingredients.length || !Array.isArray(catalog.foods) || !Array.isArray(catalog.promos))throw new Error('Сервер вернул неполный каталог.');

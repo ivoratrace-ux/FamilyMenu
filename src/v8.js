@@ -92,31 +92,49 @@ const visibleDays=()=>S.plan?S.plan.days.map((d,i)=>[d,i]).filter(([d])=>Object.
 /* ---------- small pieces ---------- */
 const head8=(eyebrow,title,right='')=>`<div class="row between" style="align-items:flex-end"><div class="grow"><p class="eyebrow">${eyebrow}</p><h1>${title}</h1></div>${right}</div>`;
 const navRow8=(act,v,icon,title,sub,lock)=>`<button class="ditem navrow" data-act="${act}" data-v="${v}">${lock?IC.lock:icon}<span class="grow"><b>${title}</b>${sub?`<br><span class="small muted">${sub}</span>`:''}</span><span class="muted" aria-hidden="true">›</span></button>`;
+/* Chip lists show three rows; the rest hides behind «Ещё», which sits on the third row. */
+const CLAMP_ROWS=3;
 function clampChips(){
   document.querySelectorAll('.chips[data-clamp]').forEach(box=>{
     const key=box.dataset.clamp,more=box.querySelector('.morechip'),chips=[...box.querySelectorAll('.chip:not(.morechip)')];
     chips.forEach(c=>c.hidden=false); more.hidden=true;
     if(UI.open8&&UI.open8[key]){more.hidden=false; more.textContent='Свернуть'; return}
-    const tops=[...new Set(chips.map(c=>c.offsetTop))].sort((a,b)=>a-b); if(tops.length<=4) return;
-    const limit=tops[3]; chips.forEach(c=>{if(c.offsetTop>limit) c.hidden=true});
+    const tops=[...new Set(chips.map(c=>c.offsetTop))].sort((a,b)=>a-b); if(tops.length<=CLAMP_ROWS) return;
+    const limit=tops[CLAMP_ROWS-1]; chips.forEach(c=>{if(c.offsetTop>limit) c.hidden=true});
     more.hidden=false; more.textContent='Ещё ▾';
     const vis=chips.filter(c=>!c.hidden); while(more.offsetTop>limit&&vis.length) vis.pop().hidden=true;
   });
 }
-const clampBox8=(key,list,sel,act,cls='')=>`<div class="chips" data-clamp="${key}">${list.map(([k,l])=>`<button class="chip ${cls}" data-act="${act}" data-v="${esc(k)}" aria-pressed="${sel.includes(k)}">${esc(l)}</button>`).join('')}<button class="chip morechip" data-act="more8" data-v="${key}">Ещё ▾</button></div>`;
-const dislikeList8=()=>Object.keys(ING).filter(k=>!['oil','sugar','salt','water'].includes(k)).map(k=>[k,ING[k][0]]).sort((a,b)=>a[1].localeCompare(b[1],'ru'));
-function restr8(){const p=S.profile; return `
-  <div class="card"><h3>Аллергии</h3><p class="small muted">Блюда с этими продуктами исключим полностью.</p>${clampBox8('allerg',Object.entries(ALLERG),p.allergies,'allergy','danger')}</div>
-  <div class="card"><h3>Не нравится</h3><p class="small muted">Такие продукты не попадут в меню.</p>${clampBox8('dislike',dislikeList8(),p.dislikes,'dislike')}</div>`}
+const clampBox8=(key,list,isOn,act,cls='')=>`<div class="chips" data-clamp="${key}">${list.length?list.map(([k,l])=>`<button class="chip ${cls}" data-act="${act}" data-v="${esc(k)}" aria-pressed="${isOn(k)}">${esc(l)}</button>`).join(''):'<span class="small muted">Ничего не нашли</span>'}<button class="chip morechip" data-act="more8" data-v="${key}">Ещё ▾</button></div>`;
+/* One-word labels: allergens and ingredients grouped by their first word (e.g. «Брокколи замороженная» → «Брокколи»). */
+const ALLERG8={gluten:'Глютен',milk:'Молоко',lactose:'Лактоза',egg:'Яйца',fish:'Рыба',crustacean:'Креветки',mollusc:'Моллюски',peanut:'Арахис',nuts:'Орехи',soy:'Соя',sesame:'Кунжут',mustard:'Горчица',celery:'Сельдерей',citrus:'Цитрусовые',honey:'Мёд'};
+const word8=name=>{const w=name.replace(/\(.*?\)/g,'').replace(/[«»"]/g,'').trim().split(/[\s,]+/)[0]||name;return w[0].toUpperCase()+w.slice(1)};
+let DISLIKE8=null;
+function dislikeGroups8(){
+  if(DISLIKE8) return DISLIKE8; const m=new Map();
+  Object.keys(ING).filter(k=>!['oil','sugar','salt','water'].includes(k)).forEach(k=>{const w=word8(ING[k][0]);if(!m.has(w)) m.set(w,[]);m.get(w).push(k)});
+  return DISLIKE8=[...m].sort((a,b)=>a[0].localeCompare(b[0],'ru'));
+}
+const match8=(q,label)=>!q||label.toLowerCase().includes(q.trim().toLowerCase());
+function restr8(){
+  const p=S.profile,qa=(UI.rs8||{}).allerg||'',qd=(UI.rs8||{}).dislike||'';
+  const groups=dislikeGroups8(),byWord=Object.fromEntries(groups);
+  return `<div class="card eqcard"><h3>Аллергии</h3><p class="small muted oneline">Такие блюда исключим полностью</p>
+    <input type="search" class="minisearch" id="rs8_allerg" data-act="rsearch8" data-v="allerg" value="${esc(qa)}" placeholder="Найти: молоко, орехи…" autocomplete="off" aria-label="Поиск аллергии">
+    ${clampBox8('allerg',Object.entries(ALLERG8).filter(([,l])=>match8(qa,l)),k=>p.allergies.includes(k),'allergy','danger')}</div>
+   <div class="card eqcard"><h3>Не нравится</h3><p class="small muted oneline">Эти продукты не попадут в меню</p>
+    <input type="search" class="minisearch" id="rs8_dislike" data-act="rsearch8" data-v="dislike" value="${esc(qd)}" placeholder="Найти: лук, грибы…" autocomplete="off" aria-label="Поиск продукта">
+    ${clampBox8('dislike',groups.filter(([w])=>match8(qd,w)).map(([w])=>[w,w]),w=>byWord[w].every(k=>p.dislikes.includes(k)),'dislike8')}</div>`;
+}
 const stepper8=(act,val,label)=>`<div class="stepper big"><button data-act="${act}" data-v="-1" aria-label="Меньше">−</button><span>${label}</span><button data-act="${act}" data-v="1" aria-label="Больше">+</button></div>`;
 function details8(){
-  const p=P8(),a=p.members.filter(m=>m.kind==='adult').length,c=p.members.length-a;
+  const p=P8(),n=p.members.length;
   return `<div class="card bigcount"><div><h2>Дней в меню</h2><p class="small muted">максимум — неделя</p></div>${stepper8('days8',p.days,p.days)}</div>
-   <div class="card bigcount"><div><h2>Взрослые</h2><p class="small muted">от 14 лет</p></div><div class="stepper big"><button data-act="qcnt" data-v="adult:-1" aria-label="Меньше">−</button><span>${a}</span><button data-act="qcnt" data-v="adult:1" aria-label="Больше">+</button></div></div>
-   <div class="card bigcount"><div><h2>Дети</h2><p class="small muted">до 14 лет</p></div><div class="stepper big"><button data-act="qcnt" data-v="child:-1" aria-label="Меньше">−</button><span>${c}</span><button data-act="qcnt" data-v="child:1" aria-label="Больше">+</button></div></div>
-   <div class="card"><h3>Что готовим</h3>${Object.entries(SLOT8).map(([k,l])=>`<label class="field mealsel" for="kind_${k}"><span>${l}</span><select id="kind_${k}" data-act="kind8" data-v="${k}">${KOPT8[k].map(o=>`<option value="${o}" ${p.mealSetup[k]===o?'selected':''}>${KIND8[o]}</option>`).join('')}</select></label>`).join('')}
-   ${Object.values(p.mealSetup).every(v=>v==='none')?'<p class="small" style="color:var(--danger)">Выберите хотя бы один приём пищи</p>':`<p class="small muted">Готовим на ${portions()} ${plural(portions(),'порцию','порции','порций')} за приём пищи.</p>`}</div>`;
+   <div class="card bigcount"><div><h2>Персон</h2><p class="small muted">сколько человек едят</p></div>${stepper8('persons8',n,n)}</div>
+   <p class="small muted">Что готовить на завтрак, обед и ужин, можно поменять в меню слева сверху → «Дни и приёмы пищи».</p>`;
 }
+function mealKinds8(){const p=P8();return `<div class="card"><h3>Что готовим</h3>${Object.entries(SLOT8).map(([k,l])=>`<label class="field mealsel" for="kind_${k}"><span>${l}</span><select id="kind_${k}" data-act="kind8" data-v="${k}">${KOPT8[k].map(o=>`<option value="${o}" ${p.mealSetup[k]===o?'selected':''}>${KIND8[o]}</option>`).join('')}</select></label>`).join('')}
+   ${Object.values(p.mealSetup).every(v=>v==='none')?'<p class="small" style="color:var(--danger)">Выберите хотя бы один приём пищи</p>':`<p class="small muted">Готовим на ${portions()} ${plural(portions(),'порцию','порции','порций')} за приём пищи.</p>`}</div>`}
 
 /* ---------- pantry block (fridge step and «Дома») ---------- */
 const defQty8=k=>{const u=ING[k][2];return u==='g'?500:u==='ml'?1000:1};
@@ -124,18 +142,20 @@ const hasP8=k=>S.pantry.some(x=>x.key===k);
 function togglePantry8(k){const i=S.pantry.findIndex(x=>x.key===k); if(i>=0) S.pantry=S.pantry.filter(x=>x.key!==k); else S.pantry.push({key:k,qty:defQty8(k)})}
 function pantry8(full){
   const q=(UI.q8||'').trim().toLowerCase(),found=q?Object.keys(ING).filter(k=>ING[k][0].toLowerCase().includes(q)).slice(0,12):[];
-  const cats=CAT_ORDER.filter(c=>Object.keys(ING).some(k=>ING[k][1]===c));
-  const photos=UI.photos||[];
+  const cats=CAT_ORDER.filter(c=>Object.keys(ING).some(k=>ING[k][1]===c)),photos=UI.photos||[],open=UI.cat8;
+  const short={'Овощи и зелень':'Овощи','Фрукты и ягоды':'Фрукты','Мясо и рыба':'Мясо и рыба','Молочное и яйца':'Молочное','Бакалея':'Бакалея','Хлеб':'Хлеб'};
+  const ks=open?Object.keys(ING).filter(k=>ING[k][1]===open&&!['salt','water'].includes(k)).sort((a,b)=>ING[a][0].localeCompare(ING[b][0],'ru')):[];
   return `<input type="search" class="bigsearch" id="pq8" placeholder="Найти продукт: курица, рис, сыр…" value="${esc(UI.q8||'')}" data-act="search8" autocomplete="off" aria-label="Поиск продукта">
-   ${q?(found.length?`<div class="chips">${found.map(k=>`<button class="chip" data-act="pt8" data-v="${k}" aria-pressed="${hasP8(k)}">${hasP8(k)?'✓ ':'+ '}${esc(ING[k][0])}</button>`).join('')}</div>`:'<p class="small muted">Ничего не нашли — попробуйте по-другому.</p>'):''}
+   ${q?(found.length?`<div class="chips">${found.map(k=>`<button class="chip" data-act="pt8s" data-v="${k}" aria-pressed="${hasP8(k)}">${hasP8(k)?'✓ ':'+ '}${esc(ING[k][0])}</button>`).join('')}</div>`:'<p class="small muted">Ничего не нашли — попробуйте по-другому.</p>'):''}
    <div class="phototiles">${[0,1].map(i=>{const ph=photos[i];return ph?`<div class="phototile"><img src="${ph.url}" alt="Фото ${i+1}"><button class="iconbtn photodel" data-act="photoDel" data-v="${i}" aria-label="Удалить фото ${i+1}">✕</button></div>`
      :`<button class="phototile" data-act="photoAdd"><span class="plusbig">+</span><span class="small muted">${i?'Фото полок':'Фото холодильника'}</span></button>`}).join('')}</div>
    ${photos.length>2?`<p class="small muted">Ещё фото: ${photos.length-2}</p>`:''}
-   ${photos.length?(FamilyMenuApi.session?`<button class="btn block" data-act="scan8" ${UI.scanBusy?'disabled':''}>${UI.scanBusy?'Распознаём фото…':`Распознать продукты (${photos.length})`}</button>`:'<p class="small muted">Распознаем продукты на фото после того, как вы сохраните меню.</p>'):'<p class="small muted">Сфотографируйте холодильник — распознаем продукты сами. Или отметьте вручную ниже.</p>'}
+   ${photos.length?(FamilyMenuApi.session?`<button class="btn block" data-act="scan8" ${UI.scanBusy?'disabled':''}>${UI.scanBusy?'Распознаём фото…':`Распознать продукты (${photos.length})`}</button>`:'<p class="small muted">Распознаем продукты на фото после того, как вы сохраните меню.</p>'):''}
    ${UI.scanErr?`<p class="small" role="alert" style="color:var(--danger)">${esc(UI.scanErr)}</p>`:''}
    ${UI.scan?scanResult8():''}
-   <div class="group8">${cats.map(c=>{const ks=Object.keys(ING).filter(k=>ING[k][1]===c&&!['salt','water'].includes(k)).sort((a,b)=>ING[a][0].localeCompare(ING[b][0],'ru')),n=ks.filter(hasP8).length,open=UI.cat8&&UI.cat8[c];
-     return `<div class="group"><button data-act="cat8" data-v="${esc(c)}" aria-expanded="${!!open}"><span>${esc(c)}${n?` <span class="pill">${n}</span>`:''}</span><span class="plus">${open?'−':'+'}</span></button>${open?`<div class="chips">${ks.map(k=>`<button class="chip" data-act="pt8" data-v="${k}" aria-pressed="${hasP8(k)}">${esc(ING[k][0])}</button>`).join('')}</div>`:''}</div>`}).join('')}</div>
+   <div class="cats8">${cats.map(c=>{const n=Object.keys(ING).filter(k=>ING[k][1]===c&&hasP8(k)).length;
+     return `<button class="cat8" data-act="cat8" data-v="${esc(c)}" aria-expanded="${open===c}"><span class="oneline">${short[c]||esc(c)}</span>${n?`<span class="pill">${n}</span>`:''}<span class="plus">${open===c?'−':'+'}</span></button>`}).join('')}</div>
+   ${open?`<div class="card"><h3>${esc(open)}</h3><div class="chips">${ks.map(k=>`<button class="chip" data-act="pt8" data-v="${k}" aria-pressed="${hasP8(k)}">${esc(ING[k][0])}</button>`).join('')}</div></div>`:''}
    ${full&&S.pantry.length?`<h3>Сколько есть</h3>${S.pantry.map((p,i)=>`<div class="card" style="flex-direction:row;align-items:center;padding:10px 12px;gap:8px"><span class="grow">${esc(ING[p.key][0])}${p.src==='list'?'<br><span class="pill grey">из списка покупок</span>':''}</span>
      <input type="number" inputmode="decimal" id="pqty_${i}" value="${p.qty}" min="0" max="1000000000" step="0.001" style="width:84px" data-act="pqty" data-v="${i}" aria-label="Количество: ${esc(ING[p.key][0])}"><span class="small muted" style="width:34px">${unitLabel(p.key)}</span>
      <button class="iconbtn" data-act="delP" data-v="${i}" aria-label="Удалить ${esc(ING[p.key][0])}">✕</button></div>`).join('')}`:''}`;
@@ -173,73 +193,108 @@ async function scan8(){
 
 /* ---------- screens before the app ---------- */
 const SLIDES8=[
- {t:'Готовим из того, что есть',d:'Отметьте продукты из холодильника — подберём блюда и поведём по шагам с таймером.',art:()=>`<div class="heroimg">${stepArt(RBY.m2,3)}</div><div class="card timerbox" style="margin-top:-30px;width:70%;align-self:center"><span class="bigtime" style="font-size:40px">4:59</span></div>`},
- {t:'Большая база рецептов',d:`${R.filter(r=>r.m!=='c').length} блюд с картинками и пошаговыми фото. Пополняем каждую неделю.`,art:()=>`<div class="collage">${['m5','m3','b1','p1'].filter(id=>RBY[id]).map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div><span class="pill" style="align-self:center">+ новые рецепты каждую неделю</span>`},
- {t:'Уложимся в бюджет',premium:true,d:'Соберём корзину на нужную сумму и подскажем, где купить дешевле.',art:()=>`<div class="card"><h3>Корзина на неделю</h3><p><b style="font-size:30px">3 480 ₽</b> <span class="muted">из 4 000 ₽</span></p><div class="progress"><i style="width:87%"></i></div><div class="row"><span class="pill">ВкусВилл · 3 480 ₽</span><span class="pill warn">Лавка · 3 910 ₽</span></div><p class="small muted">Дешевле во ВкусВилле на 430 ₽</p></div>`},
- {t:'Калории и питание',d:'Посчитаем калории для каждого и настроим меню под вашу цель и тип питания.',art:()=>`<div class="card kcal"><h3>Сегодня</h3><p><b style="font-size:30px">1 640</b> <span class="muted">из 2 100 ккал</span></p><div class="kbar"><i style="width:78%"></i></div><div class="macros">${[['82','белки'],['54','жиры'],['190','углеводы']].map(([v,l])=>`<div class="macro"><b>${v}</b><span>${l}, г</span></div>`).join('')}</div><div class="row"><span class="pill">Похудение</span><span class="pill">Без свинины</span></div></div>`},
+ {t:'Готовим из того, что есть',d:'Отметьте продукты дома — подберём блюда и поведём по шагам с таймером.',btn:'А что ещё?',art:()=>`<div class="heroimg">${stepArt(RBY.m2,3)}</div><div class="card timerbox" style="margin-top:-30px;width:70%;align-self:center"><span class="bigtime" style="font-size:40px">4:59</span></div>`},
+ {t:'Большая база рецептов',d:`${R.filter(r=>r.m!=='c').length} блюд с пошаговыми фото. Новые рецепты — каждую неделю.`,btn:'Ух ты, понял',art:()=>`<div class="collage">${['m5','m3','b1','p1'].filter(id=>RBY[id]).map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
+ {t:'Уложимся в бюджет',premium:true,d:'Соберём корзину на нужную сумму и подскажем, где дешевле.',btn:'А что ещё?',art:()=>`<div class="card"><h3>Корзина на неделю</h3><p><b style="font-size:30px">3 480 ₽</b> <span class="muted">из 4 000 ₽</span></p><div class="progress"><i style="width:87%"></i></div><div class="row"><span class="pill">ВкусВилл · 3 480 ₽</span><span class="pill warn">Лавка · 3 910 ₽</span></div><p class="small muted">Дешевле во ВкусВилле на 430 ₽</p></div>`},
+ {t:'Калории и питание',d:'Посчитаем калории и настроим меню под вашу цель.',btn:'Начать',art:()=>`<div class="card kcal"><h3>Сегодня</h3><p><b style="font-size:30px">1 640</b> <span class="muted">из 2 100 ккал</span></p><div class="kbar"><i style="width:78%"></i></div><div class="macros">${[['82','белки'],['54','жиры'],['190','углеводы']].map(([v,l])=>`<div class="macro"><b>${v}</b><span>${l}, г</span></div>`).join('')}</div><div class="row"><span class="pill">Похудение</span><span class="pill">Без свинины</span></div></div>`},
 ];
 function intro8(){
   const i=Math.min(S.introIdx||0,SLIDES8.length-1),s=SLIDES8[i];
   return `<div class="screen onbscreen">
-   <div class="row between"><span style="width:96px"></span><div class="progress grow" style="margin:0 12px"><i style="width:${Math.round((i+1)/SLIDES8.length*100)}%"></i></div><button class="btn ghost small" data-act="introSkip8">Пропустить</button></div>
+   <div class="row between">${i?'<button class="iconbtn" data-act="introBack8" aria-label="Назад">←</button>':'<span style="width:36px"></span>'}<div class="progress grow" style="margin:0 12px"><i style="width:${Math.round((i+1)/SLIDES8.length*100)}%"></i></div><span style="width:36px"></span></div>
    <div class="stack introart">${s.art()}</div>
-   <div class="stack" style="gap:8px"><div class="row"><h1 class="oneline">${s.t}</h1>${s.premium?'<span class="pill warn">Premium</span>':''}</div><p class="muted">${s.d}</p></div>
+   <div class="stack qhead"><div class="row"><h1 class="oneline">${s.t}</h1>${s.premium?'<span class="pill warn">Premium</span>':''}</div><p class="muted oneline2">${s.d}</p></div>
    <div style="flex:1"></div>
-   <button class="btn block" data-act="introNext8">${i<SLIDES8.length-1?'Дальше':'Начать'}</button>
+   <button class="btn block" data-act="introNext8">${s.btn}</button>
    <button class="linkbtn" style="align-self:center" data-act="toAuth8">Уже есть аккаунт? Войти</button></div>`;
 }
-const QUIZ8=['Какая у вас цель?','Какой у вас тип питания?','Чего не должно быть в меню?','Что уже есть в холодильнике?','Ещё немного деталей'];
-const QHINT8=['Под цель подберём блюда и посчитаем порции.','Строгое правило: другие блюда в меню не попадут.','Отметьте аллергии и продукты, которые не любите.','Подберём блюда, где докупать меньше всего.','Сколько дней планируем и что готовим на каждый приём пищи.'];
+const QUIZ8=['Какая у вас цель?','Какой у вас тип питания?','Чего не должно быть в меню?','Что уже есть дома?','Ещё немного деталей'];
+const QHINT8=['Можно выбрать несколько','Строгое правило для всего меню','Аллергии и продукты, которые не любите','Подберём блюда, где докупать меньше всего','Сколько дней и на сколько человек'];
+const DIET8={all:['Едим всё','без ограничений'],halal:['Без свинины','халяль и не только'],pesc:['Пескетарианство','без мяса, рыба есть'],veg:['Вегетарианство','без мяса и рыбы'],vegan:['Веганство','только растительное'],lent:['Постное','без мяса, молочного и яиц']};
 function quiz8(){
-  const i=Math.min(S.qStep||0,4),p=P8(),last=i===4;
+  const i=Math.min(S.qStep||0,4),p=P8(),last=i===4,goals=S.ans.goals||[];
   let body='',btn='Дальше',ok=true;
-  if(i===0){body=`<div class="stack" style="gap:8px">${Object.entries(GOAL8).map(([k,l])=>`<button class="optcard" data-act="goal8" data-v="${k}" aria-pressed="${S.ans.goal===k}"><b>${l}</b></button>`).join('')}</div>`; ok=!!S.ans.goal}
-  else if(i===1){body=`<div class="stack" style="gap:8px">${Object.entries(DIETS).map(([k,[l,d]])=>`<button class="optcard" data-act="diet8" data-v="${k}" aria-pressed="${S.ans.diet&&p.diet===k}"><b>${l}</b>${d?`<span class="small muted">${esc(d)}</span>`:''}</button>`).join('')}</div>`; ok=!!S.ans.diet}
+  if(i===0){body=`<div class="stack" style="gap:8px">${Object.entries(GOAL8).map(([k,l])=>`<button class="optcard opt8" data-act="goal8" data-v="${k}" aria-pressed="${goals.includes(k)}"><b>${l}</b><span class="check8" aria-hidden="true"></span></button>`).join('')}</div>`; ok=goals.length>0}
+  else if(i===1){body=`<div class="stack" style="gap:8px">${Object.entries(DIET8).map(([k,[l,d]])=>`<button class="optcard opt8" data-act="diet8" data-v="${k}" aria-pressed="${!!S.ans.diet&&p.diet===k}"><span class="grow"><b>${l}</b><br><span class="small muted oneline">${d}</span></span></button>`).join('')}</div>`; ok=!!S.ans.diet}
   else if(i===2){body=restr8(); if(!p.allergies.length&&!p.dislikes.length) btn='Ограничений нет — дальше'}
-  else if(i===3){body=pantry8(false); if(!S.pantry.length&&!(UI.photos||[]).length) btn='Холодильник пуст — дальше'}
+  else if(i===3){body=pantry8(false); if(!S.pantry.length&&!(UI.photos||[]).length) btn='Ничего нет — дальше'}
   else {body=details8(); btn='Составить меню'; ok=Object.values(p.mealSetup).some(v=>v!=='none')}
   return `<div class="screen onbscreen">
    <div class="row between"><button class="iconbtn" data-act="qBack8" aria-label="Назад">←</button><div class="progress grow" style="margin:0 12px"><i style="width:${Math.round((i+1)/5*100)}%"></i></div><span style="width:36px"></span></div>
-   <div class="stack" style="gap:6px;margin-top:8px"><p class="eyebrow">Вопрос ${i+1} из 5</p><h1>${QUIZ8[i]}</h1><p class="muted">${QHINT8[i]}</p></div>
+   <div class="stack qhead"><p class="eyebrow">Вопрос ${i+1} из 5</p><h1 class="oneline">${QUIZ8[i]}</h1><p class="muted oneline">${QHINT8[i]}</p></div>
    ${body}
    <div style="flex:1"></div>
    <button class="btn block" data-act="${last?'build8':'qNext8'}" ${ok?'':'disabled'}>${btn}</button></div>`;
 }
 function loader8(){
-  return `<div class="screen onbscreen"><div class="loader"><img class="logo8" src="src/frigo-logo.jpg" alt="Frigo"><div class="progress fill8" style="width:80%"><i></i></div><h2>Подбираем меню</h2><p class="muted small">Учитываем цель, ограничения и то, что есть в холодильнике</p></div></div>`;
+  return `<div class="screen onbscreen"><div class="loader"><img class="logo8" src="src/frigo-logo.jpg" alt="Frigo"><div class="progress fill8" style="width:80%"><i></i></div><h2>Подбираем меню</h2><p class="muted small">Учитываем цель, ограничения и то, что есть дома</p></div></div>`;
 }
 function ready8(){return scrMenu8(true)+`<div class="savebar"><button class="btn block" data-act="toAuth8">Сохранить меню</button><p class="small muted">Войдите, чтобы сохранить меню, список покупок и продукты.</p></div>`}
 function auth8(){
   return auth().replace(/<\/div>\s*$/,`${S.plan?'<button class="btn ghost block" data-act="backReady8">← Вернуться к меню</button>':'<button class="linkbtn" style="align-self:center" data-act="backIntro8">Я здесь впервые</button>'}</div>`);
 }
 
-/* ---------- app screens ---------- */
-function appbar8(){const sub=PAGES8[S.tab];return `<header class="appbar">${sub?`<button class="iconbtn" data-act="back8" aria-label="Назад">←</button>`:''}<b class="grow">${sub||({menu:'Меню',shop:'Покупки',home:'Дома',profile:'Профиль'}[S.tab]||'Меню')}</b></header>`}
-function tabs8(){
-  const left=S.plan?shopping().items.filter(i=>!i.covered&&!i.bought).length:0,cur=PAGES8[S.tab]?'profile':S.tab;
-  return `<div class="tabs"><nav aria-label="Разделы" style="grid-template-columns:repeat(4,1fr)">${[['menu','Меню'],['shop','Покупки'],['home','Дома'],['profile','Профиль']].map(([k,l])=>`<button data-act="tab" data-v="${k}" ${cur===k?'aria-current="page"':''}>${IC[k]}<span>${l}</span>${k==='shop'&&left?`<span class="badge">${left}</span>`:''}</button>`).join('')}</nav></div>`;
+/* ---------- app shell: burger (left), title, cooked-dishes counter (right), three tabs ---------- */
+const cookedTotal8=()=>V().ev.filter(e=>e.n==='dish_cooked').length;
+const HAT8='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 14.5a4 4 0 0 1-.6-7.9A5 5 0 0 1 12 3a5 5 0 0 1 5.6 3.6 4 4 0 0 1-.6 7.9V20H7z"/><path d="M7 17h10"/></svg>';
+function appbar8(){
+  const sub=PAGES8[S.tab];
+  return `<header class="appbar">${sub?`<button class="iconbtn" data-act="back8" aria-label="Назад">←</button>`:`<button class="iconbtn burger" data-act="drawer" aria-label="Открыть меню">${IC.burger}</button>`}
+   <b class="grow">${sub||({menu:'Меню',shop:'Покупки',home:'Дома'}[S.tab]||'Меню')}</b>
+   <button class="cooked8" data-act="board8" aria-label="Приготовлено блюд: ${cookedTotal8()}. Открыть турнирную таблицу">${HAT8}<b>${cookedTotal8()}</b></button></header>`;
 }
+function tabs8(){
+  const left=S.plan?shopping().items.filter(i=>!i.covered&&!i.bought).length:0,cur=PAGES8[S.tab]?'':S.tab;
+  return `<div class="tabs"><nav aria-label="Разделы" style="grid-template-columns:repeat(3,1fr)">${[['menu','Меню'],['shop','Покупки'],['home','Дома']].map(([k,l])=>`<button data-act="tab" data-v="${k}" ${cur===k?'aria-current="page"':''}>${IC[k]}<span>${l}</span>${k==='shop'&&left?`<span class="badge">${left}</span>`:''}</button>`).join('')}</nav></div>`;
+}
+function drawer8(){
+  if(!UI.drawer) return '';
+  const p=P8(),n=p.members.length,it=(v,icon,label,sub,lock)=>`<button class="ditem" data-act="nav8" data-v="${v}">${lock?IC.lock:icon}<span class="grow"><b>${label}</b>${sub?`<br><span class="small muted">${sub}</span>`:''}</span></button>`;
+  return `<div class="dscrim" data-act="drawerClose"><nav class="drawer" aria-label="Главное меню">
+   <div class="duser"><span class="avatar big">${esc(initials())}</span><div><b>${esc((p.members[0]&&p.members[0].name)||'Профиль')}</b><br><span class="small muted">${S.user&&S.user.phone?esc(S.user.phone):'Вход через Telegram'}</span></div></div>
+   ${it('pFamily',IC.profile,'Семья',`${n} ${plural(n,'человек','человека','человек')} · вес, рост, калории`)}
+   ${it('pFood',IC.scale,'Питание и ограничения',`${(p.goals.length?p.goals.map(g=>GOAL8[g]):[GOAL8.none]).join(', ')} · ${DIETS[p.diet][0]}`)}
+   ${it('pDays',IC.menu,'Дни и приёмы пищи',`${p.days} ${plural(p.days,'день','дня','дней')} · ${Object.entries(SLOT8).filter(([k])=>p.mealSetup[k]!=='none').map(([,l])=>l.toLowerCase()).join(', ')}`)}
+   ${it('pRecipes',IC.pot,'Мои рецепты',S.myRecipes.length?`${S.myRecipes.length} — попадают в меню`:'Свои блюда попадут в меню')}
+   ${S.plan&&S.plan.status!=='draft'?`<button class="ditem" data-act="share">${IC.share}<span class="grow"><b>Отправить меню семье</b></span></button>`:''}
+   <p class="eyebrow" style="padding:10px 16px 0">Premium${premium8()?' · подключён':''}</p>
+   ${it('autocart',IC.cart,'Автосборка корзины','Из меню, под ваш бюджет',!premium8())}
+   ${it('promo',IC.tag,'Подборка акций','ВкусВилл и Яндекс Лавка',!premium8())}
+   ${it('kcal',IC.chart,'Калории и КБЖУ',KC()?'Включены':'Норма и дневник',!premium8())}
+   ${it('sub',IC.card,'Подписка',premium8()?'Подключена':'299 ₽ в месяц или 1 990 ₽ в год')}
+   <div style="flex:1"></div>
+   <div class="protobox"><label class="field" for="theme8">Оформление<select id="theme8" data-act="theme8">${[['system','Как в системе'],['light','Светлое'],['dark','Тёмное']].map(([k,l])=>`<option value="${k}" ${(S.theme||'system')===k?'selected':''}>${l}</option>`).join('')}</select></label>
+    <div class="row" style="flex-wrap:wrap"><button class="btn ghost small" data-act="reset">Пройти знакомство заново</button><button class="btn ghost small" data-act="nav8" data-v="metrics">Метрики</button></div></div>
+   <button class="ditem" data-act="logout">${IC.logout}<span class="grow"><b>Выйти</b></span></button>
+  </nav></div>`;
+}
+/* Leaderboard: your count is real; other players are a pilot demo until the server keeps a shared table. */
+const RIVALS8=[['Аня',41],['Марина',33],['Олег',27],['Катя',22],['Дима',18],['Света',14],['Игорь',9],['Лена',6],['Паша',3]];
+function board8(){
+  const me=cookedTotal8(),rows=[...RIVALS8.map(([n,c])=>({n,c})),{n:'Вы',c:me,me:true}].sort((a,b)=>b.c-a.c||(a.me?-1:b.me?1:0)),pos=rows.findIndex(r=>r.me)+1;
+  const ahead=pos>1?rows[pos-2]:null;
+  return `<div class="scrim" data-act="close"><div class="sheet" role="dialog" aria-modal="true" aria-label="Турнирная таблица"><div class="grab"></div>
+   <div class="row between"><div><p class="eyebrow">Турнирная таблица</p><h1>Вы на ${pos}-м месте</h1></div><button class="iconbtn" data-act="close" aria-label="Закрыть">✕</button></div>
+   <p class="muted">Приготовлено блюд из меню: <b>${me}</b>.${ahead?` До ${pos-1}-го места — ${ahead.c-me+1} ${plural(ahead.c-me+1,'блюдо','блюда','блюд')}.`:' Вы впереди всех!'}</p>
+   <div class="day">${rows.map((r,i)=>`<div class="slot ${r.me?'me8':''}"><span class="meal">${i+1}</span><span class="grow">${r.me?'<b>Вы</b>':esc(r.n)}</span><b>${r.c}</b></div>`).join('')}</div>
+   <p class="small muted">Пилот: соперники пока демонстрационные. Ваш счёт настоящий — растёт, когда вы отмечаете блюдо приготовленным.</p></div></div>`;
+}
+/* Menu as in v4: day cards with every meal, drag ⠿ to swap within a day and across days. */
 function scrMenu8(preview){
   const vis=visibleDays();
   if(!vis.length) return `<div class="screen"><div class="empty"><h2>Меню ещё нет</h2><p>Составим по вашим ответам: цель, тип питания, ограничения и продукты дома.</p><button class="btn" data-act="regen">Составить меню</button></div></div>`;
-  const ti=todayIdx(); if(UI.mday==null||!vis.some(([,i])=>i===UI.mday)) UI.mday=vis.some(([,i])=>i===ti)?ti:vis[0][1];
-  const di=UI.mday,d=S.plan.days[di],date=new Date(d.date),keys=SLOTS.filter(k=>d.slots[k]);
-  const mk=di===ti?nextSlotKey(di):keys[0],r=slotRecipe(di,mk),s=d.slots[mk],others=keys.filter(k=>k!==mk);
-  const big=vis.length===1;
+  const ti=todayIdx(),sh=shopping(),d0=new Date(vis[0][0].date),dn=new Date(vis[vis.length-1][0].date);
   return `<div class="screen${preview?' preview8':''}">
    ${preview?'<div class="note"><b>✓</b><span>Ваше меню готово! Сохраните его — и список покупок соберётся сам.</span></div>':''}
-   ${head8(di===ti?'Сегодня':vis.length>1?`Меню на ${vis.length} ${plural(vis.length,'день','дня','дней')}`:'Меню',`<span style="${big?'font-size:30px':''}">${DOWL[date.getDay()][0].toUpperCase()+DOWL[date.getDay()].slice(1)}, ${date.getDate()} ${MON[date.getMonth()]}</span>`,preview?'':S.plan.status==='draft'?'<span class="pill warn">черновик</span>':'<span class="pill">утверждено</span>')}
-   ${vis.length>1?`<div class="weekstrip" style="grid-template-columns:repeat(${vis.length},1fr)">${vis.map(([x,i])=>{const dd=new Date(x.date);return `<button data-act="mday8" data-v="${i}" aria-pressed="${i===di}">${i===ti?'сег.':DOW[dd.getDay()]}<b>${dd.getDate()}</b></button>`}).join('')}</div>`:''}
-   ${r?`<div class="hero"><div class="heroimg">${dishArt(r)}</div><p class="small" style="opacity:.85">${SLOT8[mk]||SLOT_NAMES[mk]}${s.cooked?' · приготовлено ✓':''}</p><p class="dish">${esc(r.n)}</p>
-     <div class="meta"><span>${r.t} мин</span>${KC()?`<span>${r.kcal} ккал на порцию</span>`:''}<span>${s.serv} ${plural(s.serv,'порция','порции','порций')}</span></div>
-     ${preview?'':`<div class="row"><button class="btn grow" data-act="cook" data-v="${di}:${mk}">${s.cooked?'Открыть рецепт':'Готовить'}</button><button class="eat" style="background:transparent;color:inherit;border-color:currentColor" data-act="replace" data-v="${di}:${mk}">Заменить</button></div>`}</div>`
-     :s?`<div class="card"><p class="muted">${SLOT8[mk]}: не нашли подходящее блюдо. Ослабьте ограничения в профиле.</p></div>`:''}
-   ${others.length?`<div class="day ${di===ti?'today':''}"><header><b>Ещё в этот день</b>${di===ti?'<span class="pill">сегодня</span>':''}</header>${others.map(k=>slotRow(di,k,true)).join('')}</div>`:''}
-   ${!preview&&KC()&&di===ti?kcalCard(ti):''}
-   ${preview?'':`<div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать покупки</button>':`<button class="btn secondary block" data-act="share">${IC.share} Отправить меню семье</button>`}
+   ${head8(`Меню на ${vis.length} ${plural(vis.length,'день','дня','дней')}`,vis.length>1?`${d0.getDate()} ${MONS[d0.getMonth()]} — ${dn.getDate()} ${MONS[dn.getMonth()]}`:`${d0.getDate()} ${MON[d0.getMonth()]}`,preview?'':S.plan.status==='draft'?'<span class="pill warn">черновик</span>':'<span class="pill">утверждено</span>')}
+   <div class="card"><div class="row between"><h3>Покупки</h3><span class="qty">≈${rub(sh.cost)}</span></div><p class="small muted">По ценам магазина на ${PRICE_DATE}, примерно.</p></div>
+   ${vis.map(([d,di])=>`<div class="day ${di===ti?'today':''}"><header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}${KC()?'≈'+num(dayKcal(di))+' ккал':''}</span></header>${SLOTS.filter(k=>d.slots[k]).map(k=>slotRow(di,k,!!preview)).join('')}</div>`).join('')}
+   ${preview?'':`<p class="small muted">Потяните за ⠿, чтобы поменять блюда местами в течение дня и между днями.</p>
+   <div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать покупки</button>':`<button class="btn secondary block" data-act="share">${IC.share} Отправить меню семье</button>`}
     <button class="btn ghost block" data-act="regen">Пересобрать меню</button></div>`}
   </div>`;
 }
+
 function scrShop8(){
   if(!S.plan) return `<div class="screen"><div class="empty"><h2>Список пуст</h2><p>Он соберётся сам, когда вы утвердите меню.</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   const sh=shopping(),need_=sh.items.filter(i=>!i.covered),home=sh.items.filter(i=>i.covered),left=need_.filter(i=>!i.bought);
@@ -261,43 +316,20 @@ function scrShop8(){
   </div>`;
 }
 function scrHome8(){return `<div class="screen">${head8('Дома','Что есть дома')}${pantry8(true)}<p class="small muted">Продукты отсюда вычитаются из покупок и учитываются при подборе меню.</p></div>`}
-function scrProfile8(){
-  const p=P8(),s=S,n=p.members.length;
-  return `<div class="screen">
-   <div class="card row"><span class="avatar big">${esc(initials())}</span><div class="grow"><b>${esc((p.members[0]&&p.members[0].name)||'Профиль')}</b><br><span class="small muted">${S.user&&S.user.phone?esc(S.user.phone):'Вход через Telegram'}</span></div></div>
-   <p class="eyebrow">Настройки</p>
-   <div class="card navcard">
-    ${navRow8('tab','pFamily',IC.profile,'Семья',`${n} ${plural(n,'человек','человека','человек')} · вес, рост, калории`)}
-    ${navRow8('tab','pFood',IC.scale,'Питание и ограничения',`${GOAL8[p.goals[0]||'none']} · ${DIETS[p.diet][0]}${p.allergies.length?` · аллергии: ${p.allergies.length}`:''}`)}
-    ${navRow8('tab','pRecipes',IC.pot,'Мои рецепты',s.myRecipes.length?`${s.myRecipes.length} ${plural(s.myRecipes.length,'рецепт','рецепта','рецептов')} — попадают в меню`:'Добавьте свои блюда — они попадут в меню')}
-    ${navRow8('tab','pDays',IC.menu,'Дни и приёмы пищи',`${p.days} ${plural(p.days,'день','дня','дней')} · ${Object.entries(SLOT8).filter(([k])=>p.mealSetup[k]!=='none').map(([,l])=>l.toLowerCase()).join(', ')}`)}
-   </div>
-   <div class="row"><p class="eyebrow grow">Premium</p>${premium8()?'<span class="pill">подключён</span>':''}</div>
-   <div class="card navcard ${premium8()?'':'lockcard8'}">
-    ${navRow8('tab','autocart',IC.cart,'Автосборка корзины','Из утверждённого меню, под ваш бюджет',!premium8())}
-    ${navRow8('tab','promo',IC.tag,'Подборка акций','ВкусВилл и Яндекс Лавка',!premium8())}
-    ${navRow8('tab','kcal',IC.chart,'Калории и КБЖУ',KC()?'Включены':'Норма и дневник для каждого',!premium8())}
-    ${navRow8('tab','sub',IC.card,'Подписка',premium8()?'Подключена':'299 ₽ в месяц или 1 990 ₽ в год')}
-   </div>
-   <div class="card"><label class="field" for="theme8">Оформление<select id="theme8" data-act="theme8">${[['system','Как в системе'],['light','Светлое'],['dark','Тёмное']].map(([k,l])=>`<option value="${k}" ${(S.theme||'system')===k?'selected':''}>${l}</option>`).join('')}</select></label></div>
-   <button class="btn ghost block" data-act="logout">${IC.logout} Выйти</button>
-   <button class="linkbtn" style="align-self:center" data-act="reset">Пройти знакомство заново</button>
-   <button class="linkbtn" style="align-self:center" data-act="tab" data-v="metrics">Метрики пилота</button>
-  </div>`;
-}
-function pFamily8(){const k=S.profile.kcalOn; S.profile.kcalOn=true; const h=famFields(); S.profile.kcalOn=k; return `<div class="screen">${head8('Профиль','Семья')}${h}</div>`}
-function pFood8(){const p=S.profile;return `<div class="screen">${head8('Профиль','Питание и ограничения')}
-  <div class="card"><h3>Цель</h3><div class="chips">${Object.entries(GOAL8).map(([k,l])=>`<button class="chip" data-act="goal8" data-v="${k}" aria-pressed="${k==='none'?!p.goals.length:p.goals[0]===k}">${l}</button>`).join('')}</div></div>
+
+function pFamily8(){const k=S.profile.kcalOn; S.profile.kcalOn=true; const h=famFields(); S.profile.kcalOn=k; return `<div class="screen">${head8('Настройки','Семья')}${h}</div>`}
+function pFood8(){const p=S.profile;return `<div class="screen">${head8('Настройки','Питание и ограничения')}
+  <div class="card"><h3>Цель</h3><p class="small muted">Можно выбрать несколько</p><div class="chips">${Object.entries(GOAL8).map(([k,l])=>`<button class="chip" data-act="goal8" data-v="${k}" aria-pressed="${k==='none'?!p.goals.length:p.goals.includes(k)}">${l}</button>`).join('')}</div></div>
   <div class="card"><h3>Тип питания</h3><div class="chips">${Object.entries(DIETS).map(([k,[l,d]])=>`<button class="chip" data-act="diet" data-v="${k}" aria-pressed="${p.diet===k}" title="${esc(d)}">${l}</button>`).join('')}</div></div>
   ${restr8()}
   <div class="card">${tasteFields()}</div>
   ${S.history.blocked.length?`<div class="card"><h3>Скрытые блюда</h3>${S.history.blocked.filter(id=>RBY[id]).map(id=>`<div class="row between"><span>${esc(RBY[id].n)}</span><button class="iconbtn" data-act="unblock" data-v="${id}">вернуть</button></div>`).join('')}</div>`:''}
   <button class="btn block" data-act="regen">Сохранить и пересобрать меню</button></div>`}
-function pDays8(){const p=S.profile;return `<div class="screen">${head8('Профиль','Дни и приёмы пищи')}${details8()}
+function pDays8(){const p=S.profile;return `<div class="screen">${head8('Настройки','Дни и приёмы пищи')}${details8().replace(/<p class="small muted">Что готовить[^<]*<\/p>/,'')}${mealKinds8()}
   <div class="card"><label class="toggle"><span><b>Напоминание накануне</b><br><span class="small muted">Проверить продукты для завтрашнего блюда</span></span><input type="checkbox" class="switch" id="remOn" data-act="remOn" ${p.reminder.on?'checked':''}></label>
   ${p.reminder.on?`<label class="field" for="remT">Время<select id="remT" data-act="remT">${['18:00','19:00','20:00','21:00','22:00'].map(t=>`<option ${t===p.reminder.time?'selected':''}>${t}</option>`).join('')}</select></label>`:''}</div>
   <button class="btn block" data-act="regen" ${Object.values(p.mealSetup).some(v=>v!=='none')?'':'disabled'}>Сохранить и пересобрать меню</button></div>`}
-function pRecipes8(){return `<div class="screen">${head8('Профиль','Мои рецепты')}
+function pRecipes8(){return `<div class="screen">${head8('Настройки','Мои рецепты')}
   <p class="small muted">Ваши рецепты попадают в подбор меню наравне с нашими — с учётом аллергий и ограничений.</p>
   <button class="btn block" data-act="recNew">+ Добавить рецепт</button>
   ${S.myRecipes.length?S.myRecipes.map(r=>`<button class="card recrow" data-act="recEdit" data-v="${r.id}"><div class="row"><div class="thumb">${dishArt(r)}</div><span class="grow"><span class="dish">${esc(r.n)}</span><br><span class="small muted">${MYK8[kindOfMine(r)][0]} · ${r.t} мин · ${r.i.length} ${plural(r.i.length,'продукт','продукта','продуктов')}</span></span><span class="muted">›</span></div></button>`).join('')
@@ -347,14 +379,14 @@ function autocart8(){
    ${sum>b?`<div class="note"><b>!</b><span>Не укладываемся: ≈${rub(sum)} из ${rub(b)}. Замените самые дорогие блюда или увеличьте бюджет.</span></div>`:`<p class="small muted">Укладываемся: ≈${rub(sum)} из ${rub(b)}.</p>`}
    <button class="btn block" data-act="cartStart" ${left?'':'disabled'}>${IC.cart} Собрать корзину в ${STORES[st]} · ${left} ${plural(left,'продукт','продукта','продуктов')}</button></div>`;
 }
-const SCR8={menu:()=>scrMenu8(false),today:()=>scrMenu8(false),shop:scrShop8,home:scrHome8,profile:scrProfile8,pFamily:pFamily8,pFood:pFood8,pRecipes:pRecipes8,pRecipe:pRecipe8,pDays:pDays8,
+const SCR8={menu:()=>scrMenu8(false),shop:scrShop8,home:scrHome8,pFamily:pFamily8,pFood:pFood8,pRecipes:pRecipes8,pRecipe:pRecipe8,pDays:pDays8,
   autocart:autocart8,promo:()=>premium8()?scrPromo():offer8('Подборка акций','Каждую неделю — скидки ВкусВилла и Лавки на продукты из вашего меню.'),
   kcal:()=>premium8()?`<div class="screen">${head8('Premium','Калории и КБЖУ')}${kcalToggle()}</div>`:offer8('Калории и КБЖУ','Норма для каждого члена семьи, КБЖУ блюд и дневник «что съели».'),sub:scrSub8,metrics:scrMetrics};
 kcalToggle=(function(orig){return function(){const was=V().ul.kcal; V().ul.kcal=V().ul.kcal||'v8'; const h=orig(); if(!was) delete V().ul.kcal; return h}})(kcalToggle);
 
 /* ---------- render ---------- */
 render=function(){
-  const app=$('#app'); P8(); ensureRecipes(); if(S.tab==='today') S.tab='menu';
+  const app=$('#app'); P8(); ensureRecipes(); if(!SCR8[S.tab]) S.tab='menu';
   if(UI.fam){app.innerHTML=famView(); renderSheet(); return}
   const st=S.stage,signed=!!FamilyMenuApi.session;
   if(st==='intro'&&!signed) app.innerHTML=intro8();
@@ -362,28 +394,34 @@ render=function(){
   else if(st==='gen') app.innerHTML=loader8();
   else if(st==='ready'&&!signed) app.innerHTML=ready8();
   else if(!signed) app.innerHTML=auth8();
-  else app.innerHTML=appbar8()+(SCR8[S.tab]||SCR8.menu)()+tabs8();
+  else app.innerHTML=appbar8()+SCR8[S.tab]()+tabs8()+drawer8()+(UI.board?board8():'');
   renderSheet(); renderCook(); renderCart(); paintTimers(); clampChips();
 };
-
 /* ---------- actions ---------- */
 function v8Act(a,v,el){
   const p=S.profile;
   switch(a){
    case 'introNext8': if((S.introIdx||0)<SLIDES8.length-1) S.introIdx=(S.introIdx||0)+1; else {S.stage='quiz'; S.qStep=0; track('intro_done')} window.scrollTo(0,0); return true;
-   case 'introSkip8': S.stage='quiz'; S.qStep=0; window.scrollTo(0,0); return true;
+   case 'introBack8': S.introIdx=Math.max(0,(S.introIdx||0)-1); return true;
    case 'toAuth8': S.stage='auth'; window.scrollTo(0,0); return true;
    case 'backReady8': S.stage='ready'; return true;
    case 'backIntro8': S.stage='intro'; S.introIdx=0; return true;
    case 'qNext8': S.qStep=Math.min(4,(S.qStep||0)+1); window.scrollTo(0,0); return true;
    case 'qBack8': if((S.qStep||0)>0) S.qStep--; else S.stage=S.plan?(FamilyMenuApi.session?'app':'ready'):'intro'; window.scrollTo(0,0); return true;
    case 'build8': track('onboarding_done',{members:p.members.length,days:p.days}); build(); return 'done';
-   case 'goal8': S.ans.goal=v; p.goals=v==='none'?[]:[v]; p.members.forEach(m=>{if(m.kind==='adult') m.goal=v==='lose'?'lose':v==='mass'?'gain':'keep'}); return true;
+   case 'goal8': {let g=S.ans.goals||(p.goals.length?[...p.goals]:[]); if(v==='none') g=g.includes('none')?[]:['none']; else {g=g.filter(x=>x!=='none'); g=g.includes(v)?g.filter(x=>x!==v):[...g,v]; if(v==='lose') g=g.filter(x=>x!=='mass'); if(v==='mass') g=g.filter(x=>x!=='lose')}
+     S.ans.goals=g; p.goals=g.filter(x=>x!=='none'); p.members.forEach(m=>{if(m.kind==='adult') m.goal=p.goals.includes('lose')?'lose':p.goals.includes('mass')?'gain':'keep'}); return true}
    case 'diet8': S.ans.diet=true; p.diet=v; return true;
    case 'more8': UI.open8=UI.open8||{}; UI.open8[v]=!UI.open8[v]; return true;
    case 'days8': p.days=Math.max(1,Math.min(7,p.days+ +v)); return true;
-   case 'cat8': UI.cat8=UI.cat8||{}; UI.cat8[v]=!UI.cat8[v]; return true;
+   case 'cat8': UI.cat8=UI.cat8===v?null:v; return true;
    case 'pt8': togglePantry8(v); return true;
+   case 'pt8s': togglePantry8(v); UI.q8=''; return true;
+   case 'dislike8': {const ids=Object.fromEntries(dislikeGroups8())[v]||[],all=ids.every(k=>p.dislikes.includes(k)); p.dislikes=all?p.dislikes.filter(k=>!ids.includes(k)):[...new Set([...p.dislikes,...ids])]; return true}
+   case 'persons8': {const n=p.members.length+ +v; if(n<1||n>12) return true; if(+v>0) p.members.push(newMember('adult','Взрослый '+n)); else p.members.pop(); return true}
+   case 'nav8': UI.drawer=false; S.tab=v; UI.sheet=null; window.scrollTo(0,0); return true;
+   case 'board8': UI.board=true; track('leaderboard_opened'); return true;
+   case 'close': if(UI.board){UI.board=false; return true} return false;
    case 'photoAdd': {const inp=document.createElement('input'); inp.type='file'; inp.accept='image/jpeg,image/png,image/webp'; inp.multiple=true; inp.style.display='none'; inp.onchange=()=>{photoFiles8(inp.files); inp.remove()}; document.body.append(inp); inp.click(); return 'done'}
    case 'photoDel': UI.photos.splice(+v,1); return true;
    case 'scan8': scan8(); return 'done';
@@ -393,9 +431,9 @@ function v8Act(a,v,el){
    case 'scanSave': {const sc=UI.scan; let n=0; sc.products.forEach((pr,i)=>{const id=pr.ingredientId?(sc.on[i]?pr.ingredientId:null):sc.pick[i]; if(id&&ING[id]&&!hasP8(id)){S.pantry.push({key:id,qty:defQty8(id)}); n++}});
      UI.scan=null; UI.photos=[]; toast(n?`Добавили в «Дома»: ${n}`:'Новых продуктов не нашли'); return true}
    case 'mday8': UI.mday=+v; return true;
-   case 'back8': S.tab=S.tab==='pRecipe'?'pRecipes':'profile'; UI.sheet=null; window.scrollTo(0,0); return true;
+   case 'back8': S.tab=S.tab==='pRecipe'?'pRecipes':'menu'; UI.sheet=null; window.scrollTo(0,0); return true;
    case 'approve8': S.plan.status='approved'; track('menu_approved'); return true;
-   case 'subscribe8': {const pl=UI.tariff||'year'; V().sub={plan:pl,since:NOW().toISOString()}; track('subscribed',{plan:pl}); toast('Premium подключён. Прототип: деньги не списаны'); if(S.tab==='sub') S.tab='profile'; return true}
+   case 'subscribe8': {const pl=UI.tariff||'year'; V().sub={plan:pl,since:NOW().toISOString()}; track('subscribed',{plan:pl}); toast('Premium подключён. Прототип: деньги не списаны'); if(S.tab==='sub') S.tab='menu'; return true}
    case 'unsub8': V().sub=null; p.kcalOn=false; track('unsubscribed'); toast('Подписка отменена'); return true;
    case 'theme8': S.theme=el.value; document.documentElement.dataset.theme=S.theme==='system'?'':S.theme; return true;
    case 'recNew': UI.edit=null; UI.rq=''; S.tab='pRecipe'; window.scrollTo(0,0); return true;
@@ -417,13 +455,14 @@ function v8Act(a,v,el){
 act=(function(orig){return function(a,v,el){
   const r=v8Act(a,v,el);
   if(r){if(r===true){save(); render()} else save(); return}
-  if(a==='tab'&&!PAGES8[v]&&!['menu','shop','home','profile'].includes(v)) v='menu';
+  if(a==='tab'&&!PAGES8[v]&&!['menu','shop','home'].includes(v)) v='menu';
   return orig(a,v,el);
 }})(act);
 
 /* ---------- inputs that should not re-render on every key ---------- */
 document.addEventListener('input',e=>{const t=e.target,a=t.dataset&&t.dataset.act; if(!a) return;
   if(a==='search8'){UI.q8=t.value; render(); refocus('pq8')}
+  else if(a==='rsearch8'){UI.rs8=UI.rs8||{}; UI.rs8[t.dataset.v]=t.value; render(); refocus('rs8_'+t.dataset.v)}
   else if(a==='rq8'){UI.rq=t.value; render(); refocus('rq8')}
   else if(a==='rf8'&&UI.edit){const f=t.dataset.v; UI.edit[f]=f==='n'?t.value:+t.value; const b=document.querySelector('[data-act="recSave"]'); if(b) b.disabled=!(UI.edit.n.trim()&&UI.edit.i.length&&UI.edit.s.some(x=>x.trim()))}
   else if(a==='ri8'&&UI.edit){const q=+String(t.value).replace(',','.'); if(q>0) UI.edit.i[+t.dataset.v][1]=q}
