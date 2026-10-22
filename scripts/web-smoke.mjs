@@ -9,8 +9,11 @@ import { tmpdir } from 'node:os';
 const root=resolve(process.argv[2] || 'composeApp/build/dist/wasmJs/productionExecutable');
 const report=resolve('composeApp/build/reports/web-smoke');
 await mkdir(report,{recursive:true});
-const index=await readFile(resolve(root,'index.html'),'utf8');
-assert.ok(index.includes('id="app"'),'Production index.html is missing the Compose viewport');
+const externalBase=process.env.WEB_SMOKE_DEV_URL;
+if(!externalBase) {
+  const index=await readFile(resolve(root,'index.html'),'utf8');
+  assert.ok(index.includes('id="app"'),'Production index.html is missing the Compose viewport');
+}
 const browserLog=[];
 const networkLog=[];
 const mime={'.html':'text/html','.js':'text/javascript','.wasm':'application/wasm','.json':'application/json','.png':'image/png','.ttf':'font/ttf'};
@@ -25,7 +28,7 @@ const server=createServer(async(req,res)=>{
   } catch {res.writeHead(404);res.end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const base=`http://127.0.0.1:${server.address().port}`;
+const base=externalBase || `http://127.0.0.1:${server.address().port}`;
 const profile=await mkdtemp(resolve(tmpdir(),'familymenu-smoke-'));
 const port=9333;
 const chrome=spawn(process.env.CHROME_BIN || 'google-chrome',['--headless=new','--no-sandbox','--disable-dev-shm-usage','--no-proxy-server','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:['ignore','ignore','pipe']});
@@ -93,9 +96,9 @@ try {
           scanCalls++;
           assert.equal(request.method,'POST');
           const data=JSON.parse(request.postData);
-          assert.equal(data.mimeType,'image/jpeg');assert.ok(data.image.length>100);
+          assert.equal(data.images.length,4);assert.ok(data.images.every(i=>i.mimeType==='image/jpeg' && i.image.length>100));
           assert.ok(!Object.keys(request.headers).some(k=>k.toLowerCase()==='authorization'));
-          const body={products:[{name:'Яйца',amount:'6 шт',confidence:'high',alternatives:[]},{name:'Овощ',amount:'около 300 г',confidence:'medium',alternatives:['Кабачок','Огурец']}]};
+          const body={products:[{ingredientId:'eggs',name:'Яйца',amount:'6 шт',confidence:'high',alternatives:[]},{ingredientId:null,name:'Овощ',amount:'около 300 г',confidence:'medium',alternatives:[{ingredientId:'zucchini',name:'Кабачок'},{ingredientId:'cucumber',name:'Огурец'}]},{ingredientId:null,name:'Кимчи',amount:'1 банка',confidence:'high',alternatives:[]}]};
           await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:headers,body:Buffer.from(JSON.stringify(body)).toString('base64')});
         }
       } catch(e) {errors.push(String(e));await send('Fetch.failRequest',{requestId:m.params.requestId,errorReason:'Failed'});}
@@ -120,7 +123,7 @@ try {
     const clicked=await evaluate(`(()=>{${deep};const matches=all().filter(e=>(e.getAttribute('aria-label')||e.textContent||'').trim()===${JSON.stringify(label)});const e=matches.find(e=>e.getAttribute('role')==='button'||e.tagName==='BUTTON')||matches.at(-1);if(!e)return false;e.click();return true;})()`);
     assert.ok(clicked,`Cannot click ${label}`);await delay(200);
   };
-  const navigation=await send('Page.navigate',{url:`${base}/FamilyMenu/`});
+  const navigation=await send('Page.navigate',{url:externalBase ? `${base}/` : `${base}/FamilyMenu/`});
   assert.ok(!navigation.errorText,`Browser navigation failed: ${navigation.errorText}`);
   await wait(has('Повторить'),'Catalog error should offer retry');
   await click('Повторить');
@@ -132,22 +135,34 @@ try {
   assert.ok(imageCalls>0,'Dish images must be loaded using database URLs');
   await click('Дома');await wait(has('Мой холодильник'),'Scanner tab did not render');
   const before=await evaluate(`localStorage.getItem('family-menu-compose-v1')`);
-  await click('Сканировать');await click('Выбрать фото');
+  await click('Добавить фото');await click('Выбрать фото');
   await wait(`!!document.querySelector('input[type=file]')`,'File picker did not open');
   const doc=await send('DOM.getDocument');
   const {nodeId}=await send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'input[type=file]'});
-  await send('DOM.setFileInputFiles',{nodeId,files:[resolve('backend/public/art/b1.png')]});
+  await send('DOM.setFileInputFiles',{nodeId,files:Array(3).fill(resolve('backend/public/art/b1.png'))});
+  await wait(has('Удалить фото 3'),'Selected photos were not queued');
+  await click('Добавить фото');await click('Выбрать фото');
+  await wait(`!!document.querySelector('input[type=file]')`,'Second file picker did not open');
+  const doc2=await send('DOM.getDocument');
+  const input2=await send('DOM.querySelector',{nodeId:doc2.root.nodeId,selector:'input[type=file]'});
+  await send('DOM.setFileInputFiles',{nodeId:input2.nodeId,files:Array(2).fill(resolve('backend/public/art/b1.png'))});
+  await wait(has('Удалить фото 5'),'Additional photos replaced the queue');
+  assert.equal(scanCalls,0,'Selecting photos must not trigger recognition');
+  await click('Удалить фото 2');
+  await click('Распознать (4)');
   await wait(has('Огурец'),'Scanner alternatives did not render');
+  await wait(has('Вне справочника'),'Unmatched products must be shown separately');
   await click('Огурец');
-  await wait(`!(${has('Оставить как есть')})`,'Alternative was not confirmed');
+  await wait(`!(${has('Выберите подходящий вариант')})`,'Alternative was not confirmed');
   assert.equal(scanCalls,1,'Expected exactly one mocked scanner request');
   assert.equal(await evaluate(`localStorage.getItem('family-menu-compose-v1')`),before,'Scanner modified persistent menu/profile/purchases');
   const screenshot=await send('Page.captureScreenshot',{format:'png'});
   await writeFile(resolve(report,'scanner.png'),Buffer.from(screenshot.data,'base64'));
   await send('Page.reload');
   await wait(has('Сегодня'),'App did not restore after reload');
-  await click('Дома');await wait(has('Сканировать'),'Scanner tab did not restore');
-  assert.equal(await evaluate(has('Сканировать заново')),false,'Scanner results persisted unexpectedly');
+  await click('Дома');await wait(has('Добавить фото'),'Scanner tab did not restore');
+  assert.equal(await evaluate(has('Кимчи')),false,'Scanner results persisted unexpectedly');
+  assert.equal(await evaluate(has('Удалить фото 1')),false,'Scanner photos persisted unexpectedly');
   assert.ok(await evaluate(`JSON.parse(localStorage.getItem('family-menu-compose-v1')).plan.days.length===7`));
   assert.equal(errors.length,0,errors.join('\n'));
   console.log('Compose Web: intro → demo → weekly plan → shopping → scanner → photo → confirm → reload: PASS. Backend mocked; no paid API calls.');

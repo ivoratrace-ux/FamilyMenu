@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
@@ -28,12 +29,12 @@ actual fun notifyTimer() {runCatching {val tone=ToneGenerator(AudioManager.STREA
     val context=LocalContext.current;val scope=rememberCoroutineScope();val callback by rememberUpdatedState(onResult)
     var cameraUri by remember {mutableStateOf<Uri?>(null)}
     var captureFile by remember {mutableStateOf<File?>(null)}
-    fun process(uri: Uri) {scope.launch {
-        val result=withContext(Dispatchers.IO) {runCatching {encodePhoto(context,uri)}.getOrElse {PhotoResult.Error(it.message ?: "Не удалось прочитать фото.")}}
+    fun process(uris: List<Uri>) {scope.launch {
+        val result=withContext(Dispatchers.IO) {runCatching {PhotoResult.Batch(uris.map {encodePhoto(context,it)})}.getOrElse {PhotoResult.Error(it.message ?: "Не удалось прочитать фото.")}}
         callback(result);captureFile?.delete();captureFile=null
     }}
-    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) {success -> if(success) cameraUri?.let(::process) else {captureFile?.delete();callback(PhotoResult.Cancelled)}}
-    val gallery=rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) {uri -> if(uri!=null) process(uri) else callback(PhotoResult.Cancelled)}
+    val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) {success -> if(success) cameraUri?.let {process(listOf(it))} else {captureFile?.delete();callback(PhotoResult.Cancelled)}}
+    val gallery=rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) {uris -> if(uris.isNotEmpty()) process(uris) else callback(PhotoResult.Cancelled)}
     return PhotoPicker {useCamera ->
         runCatching {
             if(useCamera) {
@@ -68,4 +69,9 @@ private fun encodePhoto(context: Context,uri: Uri): PhotoResult.Success {
         require(bytes.size<=4*1024*1024) {"Фото должно быть не больше 4 МБ."}
         return PhotoResult.Success(Base64.encodeToString(bytes,Base64.NO_WRAP),"image/jpeg")
     } finally {if(oriented!==bitmap) oriented.recycle();bitmap.recycle()}
+}
+
+actual fun decodePhotoPreview(base64: String): androidx.compose.ui.graphics.ImageBitmap {
+    val bytes=Base64.decode(base64,Base64.DEFAULT)
+    return requireNotNull(BitmapFactory.decodeByteArray(bytes,0,bytes.size)).asImageBitmap()
 }

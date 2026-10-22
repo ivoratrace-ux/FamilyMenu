@@ -1,4 +1,6 @@
-export const FRIDGE_PROMPT = `Ты анализируешь фотографию холодильника и составляешь список продуктов, которые пользователь может использовать как ингредиенты для приготовления блюд.
+export const FRIDGE_PROMPT = `Ты анализируешь от 1 до 5 фотографий холодильника и составляешь список продуктов, которые пользователь может использовать как ингредиенты для приготовления блюд.
+
+Используй актуальный справочник ингредиентов из сообщения пользователя. Для каждого продукта возвращай ingredientId из справочника, а для продукта вне справочника — null. Не придумывай ID и не подбирай неподходящий ингредиент ради совпадения. Каждый вариант alternatives — объект с ingredientId (или null) и name. Для неоднозначного продукта ingredientId=null, пользователь выбирает вариант. Анализируй все фотографии вместе в одном списке. Одни и те же продукты на перекрывающихся снимках учитывай один раз, не удваивай количество.
 
 **1. Какие продукты учитывать**
 
@@ -51,11 +53,11 @@ export const FRIDGE_SCHEMA = {
   properties: {
     products: { type: 'array', maxItems: 60, items: {
       type: 'object', additionalProperties: false,
-      required: ['name', 'amount', 'confidence', 'alternatives'],
+      required: ['ingredientId', 'name', 'amount', 'confidence', 'alternatives'],
       properties: {
-        name: { type: 'string' }, amount: { type: 'string' },
+        ingredientId: { type: ['string', 'null'] }, name: { type: 'string' }, amount: { type: 'string' },
         confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-        alternatives: { type: 'array', maxItems: 3, items: { type: 'string' } }
+        alternatives: { type: 'array', maxItems: 3, items: { type: 'object', additionalProperties: false, required: ['ingredientId','name'], properties: { ingredientId: {type:['string','null']}, name: {type:'string'} } } }
       }
     } }
   }

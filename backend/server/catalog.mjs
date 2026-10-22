@@ -1,8 +1,8 @@
 import { DEFAULT_SUPABASE_URL } from './supabase.mjs';
 export function createCatalogRepository({url=process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL,apiKey=process.env.SUPABASE_API_KEY,fetchImpl=fetch,cacheMs=60000,timeoutMs=15000}={}) {
  let cached,expires=0,pending;
- return {async load() {
-  if(cached && Date.now()<expires) return cached;
+ return {async load({fresh=false}={}) {
+  if(!fresh && cached && Date.now()<expires) return cached;
   if(pending) return pending;
   pending=(async()=>{
    if(!apiKey?.trim()) throw Error('Catalog not configured');

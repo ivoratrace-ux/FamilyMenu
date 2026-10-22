@@ -14,6 +14,7 @@ class AppModel(val catalog: Catalog) {
     var selectedSlot by mutableStateOf<Pair<Int,Int>?>(null)
     var replacement by mutableStateOf<Pair<Int,Int>?>(null)
     var swapSource by mutableStateOf<Pair<Int,Int>?>(null)
+    var scannerPhotos by mutableStateOf<List<PhotoResult.Success>>(emptyList())
     var scannerProducts by mutableStateOf<List<ScanProduct>>(emptyList())
     var scanning by mutableStateOf(false)
     var scanMessage by mutableStateOf("Сфотографируйте холодильник — найдём продукты и оценим количество.")

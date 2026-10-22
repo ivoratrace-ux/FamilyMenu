@@ -30,6 +30,7 @@ test('catalog repository uses Supabase RPC, coalesces requests and caches only s
  await assert.rejects(repo.load());fail=false;
  const [a,b]=await Promise.all([repo.load(),repo.load()]);assert.deepEqual(a,doc);assert.strictEqual(a,b);
  await repo.load();assert.equal(calls,2);
+ await repo.load({fresh:true});assert.equal(calls,3);
 });
 test('catalog endpoint serves database content, permits Pages CORS and masks provider failures',async t=>{
  let fail=false;

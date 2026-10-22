@@ -18,7 +18,7 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
 }
 
 export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), authRouter = createAuthRouter() } = {}) {
-  const fridgeRouter = createFridgeRouter({ apiKey, analyze, hourlyLimit });
+  const fridgeRouter = createFridgeRouter({ apiKey, analyze, catalog, hourlyLimit });
   // A deliberately small global budget for this unauthenticated single-instance prototype.
   let calls = 0, resetAt = Date.now() + 3600000, inFlight = 0;
   return http.createServer(async (req, res) => {
