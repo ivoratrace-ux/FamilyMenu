@@ -393,3 +393,18 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .mbar8 i.ok{background:var(--accent)}.mbar8 i.low{background:var(--saffron)}.mbar8 i.over{background:var(--danger)}.mbar8 i.none{background:var(--line)}
 .mbar8.sel8{outline:2px solid var(--accent);outline-offset:1px}
 .mline8{position:absolute;left:0;right:0;bottom:calc(100% / 1.3);border-top:1px dashed var(--muted);pointer-events:none}
+
+/* v8.6 */
+.next8m{background:var(--accent-soft)}
+.next8m .mealhead8 .pill{margin-left:auto}
+.day .slot .btn.small{flex:none}
+.over8{color:var(--danger)}
+.fav8{font-size:20px;color:var(--danger)}
+.fav8.on{background:var(--danger-soft);border-color:var(--danger)}
+.steps8{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.hscroll8{display:flex;gap:4px;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px;scrollbar-width:thin}
+.hscroll8 .wday8{flex:0 0 calc((100% - 24px)/7);scroll-snap-align:center}
+.gran8{flex-wrap:nowrap}
+.gran8 .chip{padding:4px 10px;font-size:13px}
+.histrow8{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 10px;text-align:left;color:inherit;font:inherit}
+.histrow8 .thumb{width:48px;height:34px}
