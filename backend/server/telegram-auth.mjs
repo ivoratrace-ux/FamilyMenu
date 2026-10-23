@@ -74,7 +74,7 @@ export function createTelegramAuth({auth,token=process.env.TELEGRAM_BOT,fetchImp
         if(message.chat?.type!=='private' || message.from?.is_bot || message.chat.id!==message.from?.id)return;
         let c;try{c=challenge(match[1]);}catch{await api('sendMessage',{chat_id:message.chat.id,text:'Вход истёк. Вернитесь в «Семейное меню» и начните заново.'});return;}
         if(c.status!=='pending')return;
-        await api('sendMessage',{chat_id:message.chat.id,text:`Вход в «Семейное меню».\nКод на экране приложения: ${c.code}\nПодтверждайте, только если вы сами начали вход и код совпадает.`,reply_markup:{inline_keyboard:[[{text:'Подтвердить вход',callback_data:'login:'+match[1]}]]}});
+        await api('sendMessage',{chat_id:message.chat.id,text:`Вход в "Frigo".\nКод на экране приложения: ${c.code}\nПодтверждайте, только если вы сами начали вход и код совпадает.`,reply_markup:{inline_keyboard:[[{text:'Подтвердить вход',callback_data:'login:'+match[1]}]]}});
         return;
       }
       if(!callback || typeof callback.data!=='string' || !/^login:[A-Za-z0-9_-]{24}$/.test(callback.data))return;
