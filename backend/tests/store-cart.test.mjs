@@ -39,6 +39,8 @@ test('real current product IDs only; malformed search and fake/model URLs cannot
   for(const url of ['https://evil.example/?share_basket=1','https://vkusvill.ru.evil.example/','https://evil@vkusvill.ru/','javascript:alert(1)'])assert.throws(()=>cartUrl({url}),StoreError);
   assert.equal(cartUrl({link:'https://vkusvill.ru/?share_basket=123'}),'https://vkusvill.ru/?share_basket=123');
   assert.equal(cartUrl('Готово: https://vkusvill.onelink.me/abc/cart'),'https://vkusvill.onelink.me/abc/cart');
+  assert.equal(cartUrl({ok:true,data:{link:'https://vkusvill.ru/mobile?basket&share=68149'}}),'https://vkusvill.ru/mobile?basket&share=68149');
+  assert.equal(cartUrl({message:'Готово',link:'https://vkusvill.ru/mobile?basket&share=68149'}),'https://vkusvill.ru/mobile?basket&share=68149');
 });
 test('catalog names and units are authoritative; invalid/duplicate ingredients fail before paid calls',()=>{
   assert.deepEqual(cartIngredients({items:[{ingredientId:'milk',quantity:1500}]},ingredients),[items[0]]);

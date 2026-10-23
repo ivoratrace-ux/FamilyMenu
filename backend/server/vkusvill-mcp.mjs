@@ -43,12 +43,15 @@ export function safeCartUrl(value) {
 }
 export function cartUrl(data) {
   // Only return a URL actually supplied by the cart tool, never one invented by a model.
-  if(typeof data==='string') {
-    for(const match of data.matchAll(/https:\/\/[^\s<>"'\]\)]+/g)){const url=safeCartUrl(match[0]);if(url)return url;}
-  } else if(data && typeof data==='object') {
-    for(const value of Object.values(data)){const url=cartUrl(value);if(url)return url;}
+  function find(value) {
+    if(typeof value==='string') {
+      for(const match of value.matchAll(/https:\/\/[^\s<>"'\]\)]+/g)){const url=safeCartUrl(match[0]);if(url)return url;}
+    } else if(value && typeof value==='object') {
+      for(const child of Object.values(value)){const url=find(child);if(url)return url;}
+    }
+    return null;
   }
-  throw unavailable();
+  const url=find(data);if(!url)throw unavailable();return url;
 }
 export function createVkusvillMcp({fetchImpl=fetch,signal=AbortSignal.timeout(150000)}={}) {
   let nextId=0,session,version='2025-03-26';
