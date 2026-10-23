@@ -132,6 +132,12 @@ pick=function(slot,used,weekend,ctx){
   const r=variedPick8(list,r=>score(r,ctx)-recentPenalty8(r));
   used.cnt=used.cnt||{};const key=baseKey8(r.id);used.cnt[key]=(used.cnt[key]||0)+1;return r;
 };
+function replacementPool8(day,slot){
+  const cur=slotRecipe(day,slot);if(!cur)return [];
+  let kind=cur.m==='c'||cur.m==='p'?'pair':cur.m==='m'?(isSoup(cur)?'soup':isSalad8(cur)?'salad':'dish'):({b:'breakfast',g:'side',z:'dessert',k:'drink',s:'snack'})[cur.m];
+  if(kind==='dish'&&kindOfKey8(slot)==='pair')kind='pair';
+  return kind==='pair'?poolFor('l_pair'):pool8(kind);
+}
 altList=(function(orig){return function(day,slot,reason){buildHome8();
   return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r);
 }})(altList);
@@ -940,6 +946,8 @@ function v8Act(a,v,el){
    case 'bought': {if(!S.plan) return false; const it=shopping().items.find(i=>i.k===v); S.bought[v]=!S.bought[v];
      S.pantry=S.pantry.filter(x=>!(x.key===v&&x.src==='left8'&&x.plan===S.plan.created));
      if(S.bought[v]&&it&&it.left>=1){S.pantry.push({key:v,qty:Math.round(it.left),src:'left8',plan:S.plan.created}); toast(`Остаток ${fmtQty(v,it.left)} добавили в «Дома»`)} return true}
+   case 'doReplace': {const sh=UI.sheet;if(!sh||sh.type!=='replace')return true;
+     if(!replacementPool8(sh.day,sh.slot).some(r=>r.id===v)){toast('Выберите замену из той же категории');return true}return false}
    case 'side8': {const sh=UI.sheet; if(!sh||sh.type!=='replace') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid],mm=cur&&/^c_(.+)_(g\d+)$/.exec(cur.id); if(!mm||!RBY[v]) return true;
      sl.rid=comboOf(RBY[mm[1]],RBY[v]).id; UI.sheet=null; toast('Гарнир заменён'); return true}
    case 'ingDrop8': case 'ingAdd8': case 'ingReset8': case 'iq8': {const sh=UI.sheet; if(!sh||sh.type!=='recipe') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid]; if(!cur||sl.left) return true;

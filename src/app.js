@@ -496,9 +496,8 @@ function altList(day,slot,reason){
   const cur=slotRecipe(day,slot),inWeek=new Set(); S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>s&&s.rid&&inWeek.add(s.rid)));
   const wd=new Date(S.plan.days[day].date).getDay(),weekend=wd===0||wd===6,maxT=S.profile.maxTime?(weekend?S.profile.maxTime+30:S.profile.maxTime):999;
   const rank=arr=>arr.map(r=>({r,s:score(r,{reason,slot})})).sort((a,b)=>b.s-a.s).map(x=>x.r);
-  const base=poolFor(slot).filter(r=>r.id!==cur.id);
-  const wider=(slot==='l'||slot==='d'?R.filter(r=>r.m==='m'&&allowed(r)):slot==='b'?R.filter(r=>(r.m==='b'||r.m==='s')&&allowed(r)):R.filter(r=>['s','z','k'].includes(r.m)&&allowed(r))).filter(r=>r.id!==cur.id);
-  const tiers=[base.filter(r=>!inWeek.has(r.id)&&r.t<=maxT),base.filter(r=>!inWeek.has(r.id)),wider.filter(r=>!inWeek.has(r.id)),base,wider];
+  const base=(typeof replacementPool8==='function'?replacementPool8(day,slot):poolFor(slot)).filter(r=>r.id!==cur.id);
+  const tiers=[base.filter(r=>!inWeek.has(r.id)&&r.t<=maxT),base.filter(r=>!inWeek.has(r.id)),base];
   const out=[],seen=new Set(); for(const t of tiers){for(const r of rank(t)){if(out.length>=5) break; if(!seen.has(r.id)){seen.add(r.id);out.push(r)}} if(out.length>=5) break}
   return out;
 }
