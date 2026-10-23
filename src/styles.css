@@ -369,3 +369,27 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .mealrow8 .chips{gap:6px}
 .mealrow8 .chip{padding:5px 11px;font-size:13px}
 .todaymeal .btn.small{flex:none}
+
+/* v8.5 */
+.meal8+.meal8{border-top:1px solid var(--line)}
+.mealhead8{display:flex;align-items:center;gap:8px;padding:8px 14px 0;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.mealhead8 .small{text-transform:none;letter-spacing:0}
+.meal8 .slot{border-bottom:0}
+.day .slot{touch-action:pan-y;transition:transform .15s,opacity .15s;background:var(--card)}
+.day .slot.swiping8{transition:none;box-shadow:inset 4px 0 0 var(--danger)}
+.kmem8{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:8px 10px;text-align:left;color:inherit;font:inherit;width:100%}
+.kmem8.on{border-color:var(--accent);background:var(--accent-soft)}
+.week8{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.wday8{position:relative;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;color:inherit;font:inherit}
+.wday8.today8{border-color:var(--accent)}
+.wday8.sel8{background:var(--accent-soft);border-color:var(--accent)}
+.wbar8{width:10px;height:44px;border-radius:5px;background:var(--line);display:flex;align-items:flex-end;overflow:hidden}
+.wbar8 i{display:block;width:100%;background:var(--accent);border-radius:5px}
+.wbar8 i.over{background:var(--danger)}
+.cookdot8{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--saffron)}
+.mchart8{position:relative;height:110px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;align-items:end;padding-top:4px}
+.mbar8{height:100%;border:0;background:transparent;padding:0;display:flex;align-items:flex-end;border-radius:3px}
+.mbar8 i{display:block;width:100%;min-height:2px;background:var(--line);border-radius:3px}
+.mbar8 i.ok{background:var(--accent)}.mbar8 i.low{background:var(--saffron)}.mbar8 i.over{background:var(--danger)}.mbar8 i.none{background:var(--line)}
+.mbar8.sel8{outline:2px solid var(--accent);outline-offset:1px}
+.mline8{position:absolute;left:0;right:0;bottom:calc(100% / 1.3);border-top:1px dashed var(--muted);pointer-events:none}
