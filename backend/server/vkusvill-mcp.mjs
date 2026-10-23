@@ -87,3 +87,19 @@ export function createVkusvillMcp({fetchImpl=fetch,signal=AbortSignal.timeout(15
     async close(){if(session)try{const response=await fetchImpl(VKUSVILL_MCP_URL,{method:'DELETE',redirect:'error',headers:{'Mcp-Session-Id':session,'MCP-Protocol-Version':version},signal:AbortSignal.timeout(3000)});await response.body?.cancel();}catch{}}
   };
 }
+
+// Independent dependency health; no customer data, search, cart or model calls.
+// Cache and coalesce probes so public health checks cannot flood the upstream.
+export function createVkusvillHealth({mcpFactory=createVkusvillMcp,now=Date.now}={}) {
+  let pending=null,expires=0;
+  return function check() {
+    if(pending && now()<expires)return pending;
+    expires=now()+60000;
+    pending=(async()=>{
+      const mcp=mcpFactory({signal:AbortSignal.timeout(10000)});
+      try {await mcp.connect();return true;}catch{return false;}
+      finally {await mcp.close();}
+    })();
+    return pending;
+  };
+}

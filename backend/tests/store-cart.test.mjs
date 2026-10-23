@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {createApp} from '../server/app.mjs';
-import {createVkusvillMcp,cartUrl,StoreError} from '../server/vkusvill-mcp.mjs';
+import {createVkusvillMcp,createVkusvillHealth,cartUrl,StoreError} from '../server/vkusvill-mcp.mjs';
 import {buildVkusvillCart,cartIngredients,searchProducts,selectedProducts,selectStoreProducts} from '../server/store-cart.mjs';
 
 const ingredients=[{id:'milk',name:'Молоко',unit:'ml'},{id:'potato',name:'Картофель',unit:'g'}];
@@ -29,6 +29,19 @@ test('public MCP negotiates a session, supports SSE, and never sends OAuth or ap
 test('edge 403 is a store connection failure; provider HTML is never exposed to clients',async()=>{
   const mcp=createVkusvillMcp({fetchImpl:async()=>new Response('<html>Access Blocked private details</html>',{status:403})});
   await assert.rejects(mcp.connect(),e=>e instanceof StoreError && e.status===502 && !e.message.includes('private'));
+});
+test('public dependency health coalesces concurrent probes and caches failures; no search, carts or model calls',async()=>{
+  let connected=0,closed=0,time=0,fail=false;
+  const check=createVkusvillHealth({now:()=>time,mcpFactory:()=>({connect:async()=>{connected++;if(fail)throw Error('upstream secret');},close:async()=>{closed++;}})});
+  assert.deepEqual(await Promise.all([check(),check(),check()]),[true,true,true]);assert.equal(connected,1);assert.equal(closed,1);
+  time=60001;fail=true;assert.equal(await check(),false);assert.equal(await check(),false);assert.equal(connected,2);
+});
+test('public health reports only dependency status and leaves core API ready',async t=>{
+  const app=createApp({apiKey:'server-only',storeHealth:async()=>{throw Error('private upstream error');}});
+  app.listen(0,'127.0.0.1');await once(app,'listening');t.after(()=>{app.close();app.closeAllConnections();});
+  const base=`http://127.0.0.1:${app.address().port}`;
+  const response=await fetch(base+'/health/vkusvill');assert.equal(response.status,503);assert.deepEqual(await response.json(),{status:'error',publicMcp:'unavailable'});
+  assert.equal((await fetch(base+'/health')).status,200);assert.equal((await fetch(base+'/health/vkusvill',{method:'POST'})).status,405);
 });
 test('real current product IDs only; malformed search and fake/model URLs cannot enter the cart',()=>{
   assert.deepEqual(searchProducts({products:[{xml_id:10,name:'Молоко'}]}),[]);

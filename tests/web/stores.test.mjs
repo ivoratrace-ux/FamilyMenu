@@ -14,7 +14,7 @@ function setup({blocked=false}={}) {
   vm.runInContext(source,ctx);
   return {ctx,api,calls,navigated,prior,notices,popup,shopping,resolve:value=>resolve(value),reject:error=>reject(error),card:()=>ctx.window.FamilyMenuStores.card(),click:()=>ctx.act('vkusvillCart')};
 }
-const response={store:'vkusvill',carts:[{url:'https://vkusvill.ru/?share_basket=1',productCount:1}]};
+const response={store:'vkusvill',carts:[{url:'https://vkusvill.ru/mobile?basket&share=1001',productCount:1}]};
 test('click reserves tab immediately, sends only remaining amounts, opens store URL without a review wizard or mutating stocks',async()=>{
   const f=setup();f.click();assert.equal(f.calls.length,1);assert.equal(f.popup.opener,null);
   assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0].options.body)),{items:[{ingredientId:'milk',quantity:1500}]});assert.equal(f.calls[0].options.timeoutMs,165000);

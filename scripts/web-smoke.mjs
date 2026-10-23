@@ -59,7 +59,7 @@ try {
    privateCalls++;
    if(path==='/api/stores/vkusvill/cart'){
     cartCalls++;assert.ok(data.items.length>0);assert.ok(data.items.every(i=>catalog.ingredients.some(c=>c.id===i.ingredientId) && i.quantity>0));
-    await respond(cartCalls===1?{error:'ВкусВилл отклонил подключение'}:{store:'vkusvill',carts:[{url:'https://vkusvill.ru/?share_basket=smoke',productCount:data.items.length}],ingredientCount:data.items.length},cartCalls===1?502:200);return;
+    await respond(cartCalls===1?{error:'ВкусВилл отклонил подключение'}:{store:'vkusvill',carts:[{url:'https://vkusvill.ru/mobile?basket&share=1001',productCount:data.items.length}],ingredientCount:data.items.length},cartCalls===1?502:200);return;
    }
    if(path==='/api/ingredients'){searchCalls++;const q=url.searchParams.get('q');assert.ok(q.length>=3);await respond({ingredients:catalog.ingredients.filter(i=>i.name.toLowerCase().includes(q.toLowerCase())).map(({id,name,unit})=>({id,name,unit}))});return;}
    if(path==='/api/user-state'){
@@ -147,7 +147,7 @@ try {
  await evaluate('window.open=()=>null;window.boughtBeforeCart=JSON.stringify(S.bought)');
  await click('[data-act="vkusvillCart"]');await wait(has('ВкусВилл отклонил подключение'),'Store connection error missing');
  await click('[data-act="vkusvillCart"]');await wait('!!document.querySelector("[data-store-cart-link]")','Ready basket link missing');
- assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").href'),'https://vkusvill.ru/?share_basket=smoke');
+ assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").href'),'https://vkusvill.ru/mobile?basket&share=1001');
  assert.equal(await evaluate('JSON.stringify(S.bought)===window.boughtBeforeCart'),true,'Cart creation must not mark groceries as bought');
  assert.equal(await evaluate('!!UI.cart'),false,'No per-product wizard for VkusVill');
  await click('.pricecard');await wait(has('Автосборка корзины'),'Auto cart opens during the 7 free days');

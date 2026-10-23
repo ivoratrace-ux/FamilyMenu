@@ -1,5 +1,6 @@
 import http from 'node:http';
 import {createStoreCartRouter,buildVkusvillCart} from './store-cart.mjs';
+import {createVkusvillHealth} from './vkusvill-mcp.mjs';
 import { readFile } from 'node:fs/promises';
 import {createSupabaseAuth,AuthError} from './auth.mjs';
 import {bearer} from './auth-routes.mjs';
@@ -23,7 +24,7 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
 }
 
-export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, buildStoreCart = buildVkusvillCart, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
+export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, buildStoreCart = buildVkusvillCart, storeHealth = createVkusvillHealth(), hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
   const storeCartRouter=createStoreCartRouter({catalog,apiKey,build:buildStoreCart,hourlyLimit});
   const userStateRouter=createUserStateRouter(userState);
   const inventoryRouter = createInventoryRouter({inventory,catalog});
@@ -36,7 +37,7 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
     };
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (path === '/api/stores/vkusvill/cart' || path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
+    if (path === '/health/vkusvill' || path === '/api/stores/vkusvill/cart' || path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
       const origin = req.headers.origin;
       if (origin && !allowedOrigins.includes(origin) && origin !== `http://${req.headers.host}` && origin !== `https://${req.headers.host}`) return send(403, { error: 'Этот сайт не подключён к API.' });
       if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
@@ -57,6 +58,11 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
         catch {return send(503,{error:'Каталог временно недоступен. Попробуйте ещё раз.'});}
       }
       if (path === '/api/fridge/scan') return fridgeRouter(req, res, send);
+      if (path === '/health/vkusvill') {
+        if(req.method!=='GET'){res.setHeader('Allow','GET, OPTIONS');return send(405,{error:'Метод не поддерживается.'});}
+        let available=false;try{available=await storeHealth();}catch{}
+        return send(available?200:503,{status:available?'ok':'error',publicMcp:available?'available':'unavailable'});
+      }
       if (path.startsWith('/api/auth/') || path === '/health/auth') return authRouter(req, path, send, res);
       if (path === '/health/supabase' && req.method === 'GET') {
         try {
