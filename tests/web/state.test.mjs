@@ -65,3 +65,11 @@ test('v8 answers, own recipes and per-meal kinds round-trip through the seven-da
  const restored=convert.fromDocument({preferences,menu},state());
  assert.equal(restored.profile.days,3);assert.deepEqual(plain(restored.profile.mealSetup),s.profile.mealSetup);assert.equal(restored.myRecipes[0].n,'Бабушкин борщ');
 });
+
+test('individual portions and day multipliers survive saving and reopening the menu',()=>{
+ const s=state();s.plan.days[0].slots.l.serv=2.4545;s.parts8={'2026-10-22:l':1.125};s.menuRecent8=[['m5','m9']];
+ const preferences=convert.toPreferences(s),menu=convert.toMenu(s.plan);
+ validateUserState(preferences,menu);
+ const restored=convert.fromDocument({preferences,menu},state());
+ assert.equal(restored.plan.days[0].slots.l.serv,2.4545);assert.deepEqual(plain(restored.parts8),s.parts8);assert.deepEqual(plain(restored.menuRecent8),s.menuRecent8);
+});

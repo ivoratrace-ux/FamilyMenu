@@ -30,3 +30,9 @@ test('user-state endpoints reject arbitrary owner fields and preserve independen
  const p=await (await call('a','/api/preferences')).json();assert.deepEqual(p.preferences,preferences);
  assert.deepEqual((await (await call('a','/api/menu')).json()).menu,menu);
 });
+
+test('fractional family servings persist; invalid quantities remain rejected',()=>{
+ const withServings=n=>({...menu,days:menu.days.map((d,i)=>i?d:{...d,slots:[{meal:'d_pair',recipeId:'m1',servings:n}]})});
+ for(const n of [.35,1.8182,2.4545,100])assert.doesNotThrow(()=>validateUserState(preferences,withServings(n)));
+ for(const n of [0,-1,NaN,Infinity,'2',100.1])assert.throws(()=>validateUserState(preferences,withServings(n)),UserStateError);
+});

@@ -63,8 +63,8 @@ function need(m){
   if(m.sex&&a&&w&&h){const bmr=10*w+6.25*h-5*a+(m.sex==='m'?5:-161);return {kcal:Math.round(bmr*ACT[m.act||'mid'][1]*gf/50)*50,exact:true}}
   const base=m.sex==='m'?2500:m.sex==='f'?2000:2200; return {kcal:Math.round(base*af*gf/50)*50,exact:false};
 }
-const pfactor=m=>Math.max(.4,Math.min(1.6,Math.round(need(m).kcal/2200*10)/10));
-function portions(){return Math.max(1,Math.ceil(S.profile.members.reduce((s,m)=>s+pfactor(m),0)-0.05))}
+const pfactor=m=>need(m).kcal/2200;
+function portions(){return Math.round(S.profile.members.reduce((s,m)=>s+pfactor(m),0)*10000)/10000}
 function fmtQty(k,q,buy){
   const u=ING[k][2];
   if(u==='g'){ if(q>=1000) return dec(q/1000)+' кг'; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+' г'}
@@ -463,7 +463,7 @@ function renderCook(){
   let body='';
   if(st<0){
     body=`<div class="cover">${dishArt(r)}</div><p class="eyebrow">Подготовка</p><h1 class="dish" style="font-size:26px">${esc(r.n)}</h1>
-     <div class="meta" style="font-size:14px"><span>${r.t} мин всего</span><span>${n} ${plural(n,'шаг','шага','шагов')}</span>${total?`<span>таймеры: ${durLabel(total)}</span>`:''}<span>${sl.serv} ${plural(sl.serv,'порция','порции','порций')}</span></div>
+     <div class="meta" style="font-size:14px"><span>${r.t} мин всего</span><span>${n} ${plural(n,'шаг','шага','шагов')}</span>${total?`<span>таймеры: ${durLabel(total)}</span>`:''}<span>${dec(sl.serv)} ${plural(sl.serv,'порция','порции','порций')}</span></div>
      <div class="card"><h3>Достаньте продукты</h3>${r.i.map(([k,q])=>`<label class="ingr" style="cursor:pointer"><span class="row" style="gap:10px"><input type="checkbox" class="chk2" aria-label="${esc(ING[k][0])}"> ${esc(ING[k][0])}</span><span class="qty">${fmtQty(k,q*f)}</span></label>`).join('')}
       ${r.sp&&r.sp.length?`<div class="ingr"><span>${esc(r.sp.join(', '))}</span><span class="muted">по вкусу</span></div>`:''}</div>
      <div class="card small"><b>Посуда:</b> ${esc(equipment(r).join(', ')||'миска')}</div>

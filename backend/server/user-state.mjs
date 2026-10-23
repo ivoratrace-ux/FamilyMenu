@@ -21,7 +21,7 @@ export function validateUserState(preferences,menu) {
  if(preferences.plan!=null) fail();
  if('extra' in preferences && (!object(preferences.extra) || Object.values(preferences.extra).some(list=>!Array.isArray(list) || list.some(x=>!object(x) || typeof x.label!=='string' || !Number.isInteger(x.calories))))) fail();
  if(menu!==null && (!menu || !Array.isArray(menu.days) || menu.days.length!==7 || menu.days.some(d=>!d || typeof d.date!=='string' || !Array.isArray(d.slots) || d.slots.length>20))) throw new UserStateError(400,'Некорректное меню.');
- if(menu!==null && menu.days.some(d=>d.slots.some(s=>!object(s) || typeof s.meal!=='string' || (s.recipeId!=null && typeof s.recipeId!=='string') || ('servings' in s && (!Number.isInteger(s.servings) || s.servings<1 || s.servings>100)) || ['leftover','cooked'].some(k=>k in s && typeof s[k]!=='boolean')))) fail();
+ if(menu!==null && menu.days.some(d=>d.slots.some(s=>!object(s) || typeof s.meal!=='string' || (s.recipeId!=null && typeof s.recipeId!=='string') || ('servings' in s && (typeof s.servings!=='number' || !Number.isFinite(s.servings) || s.servings<=0 || s.servings>100)) || ['leftover','cooked'].some(k=>k in s && typeof s[k]!=='boolean')))) fail();
  if(JSON.stringify({preferences,menu}).length>250000) throw new UserStateError(413,'Слишком большой документ.');
 }
 export function createUserStateRepository({url=process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL,apiKey=process.env.SUPABASE_API_KEY,fetchImpl=fetch}={}) {
