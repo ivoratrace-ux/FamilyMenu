@@ -126,7 +126,7 @@ pick=(function(orig){return function(slot,used,weekend,ctx){
 altList=(function(orig){return function(day,slot,reason){buildHome8();
   return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r);
 }})(altList);
-slotRow=(function(orig){return function(di,sk,compact){const h=orig(di,sk,compact),r=slotRecipe(di,sk); return r?h.replace('<span class="meta">','<span class="meta meta8">'+buyTag8(r,true)).replace(/<span>\d+ (?:порция|порции|порций)<\/span>/,''):h}})(slotRow);
+slotRow=(function(orig){return function(di,sk,compact){const h=orig(di,sk,compact),r=slotRecipe(di,sk); return r?h.replace('<span class="meta">','<span class="meta meta8">'+buyTag8(r,true)+partTag8(S.plan.days[di],sk)).replace(/<span>(\d+) ккал<\/span>/,(m,n)=>`<span>${Math.round(n*partOf8(S.plan.days[di],sk))} ккал</span>`).replace(/<span>\d+ (?:порция|порции|порций)<\/span>/,''):h}})(slotRow);
 sheetReplace=(function(orig){return function(o){let h=orig(o);
   // v8.11: «второе с гарниром» — keep the main, pick any other side (pasta, buckwheat, rice…)
   const cur=slotRecipe(o.day,o.slot),mm=cur&&/^c_(.+)_(g\d+)$/.exec(cur.id);
@@ -225,7 +225,7 @@ generate=function(){
     days.push({date:date.toISOString(),slots});
     if(d<p.days) topUp8(days[d],used,weekend);
   }
-  S.plan={created:NOW().toISOString(),status:'draft',days}; S.bought={}; S.eaten={}; S.extra={};
+  S.plan={created:NOW().toISOString(),status:'draft',days}; S.bought={}; S.eaten={}; S.extra={}; S.parts8={};
   fit8();
 };
 /* Hard limits. Portions are scaled per person (need ÷ 2 200), so a day of standard portions within 2 200 kcal keeps
@@ -253,7 +253,8 @@ function fit8(){
     if(auto){delete day.slots[auto]; continue}
     if(keys.some(k=>swapFor8(day,k,(r,cur)=>r.kcal<cur.kcal&&r.kcal>=cur.kcal-over-250))) continue;
     if(keys.some(k=>swapFor8(day,k,(r,cur)=>r.kcal<cur.kcal))) continue;
-    break; // v8.11: dishes the person chose for a meal stay — only lighter versions
+    if(shrink8(day)) continue;
+    break; // v8.11: dishes the person chose for a meal stay — lighter versions, then smaller portions
   }
   // 2) budget: cheaper dishes (biggest saving first, never above the calorie cap); then drop the priciest meal
   const limit=budgetLimit8(),costOf=(k,d)=>{const sl=d.slots[k];return rc(RBY[sl.rid])*sl.serv/4};
@@ -266,13 +267,27 @@ function fit8(){
     }
     if(best&&best.save>1){best.d.slots[best.k].rid=best.r.id; continue}
     const all=days.flatMap(d=>live(d).filter(k=>d.slots[k].auto).map(k=>[k,d])).sort((a,b)=>costOf(b[0],b[1])-costOf(a[0],a[1]));
-    if(!all.length) break; delete all[0][1].slots[all[0][0]];
+    if(all.length){delete all[0][1].slots[all[0][0]]; continue}
+    if(!days.some(d=>shrink8(d))) break;
   }
 }
 /* Calories: a day of standard portions should give ≈2 200 kcal (portions are scaled per person).
    Below 2 000 — add filling snacks (up to two); above 2 600 — drop dessert or drink snacks first. */
 const KCAL_TARGET8=2200;
-function dayKcal8(day){return Object.values(day.slots).reduce((a,s)=>a+((s&&s.rid&&RBY[s.rid])?RBY[s.rid].kcal:0),0)}
+/* v8.12: several dishes in one meal → smaller portions instead of dropping a dish (½ or ¾ of a portion each). */
+const partKey8=(day,k)=>String(day.date).slice(0,10)+':'+k;
+const partOf8=(day,k)=>(S.parts8||{})[partKey8(day,k)]||1;
+function setPart8(day,k,v){S.parts8=S.parts8||{}; const s=day.slots[k],old=partOf8(day,k),full=Math.max(1,Math.round(s.serv/old)); if(v>=1) delete S.parts8[partKey8(day,k)]; else S.parts8[partKey8(day,k)]=v; s.serv=Math.max(1,Math.round(full*v))}
+const partTag8=(day,k)=>{const p=partOf8(day,k);return p<1?`<span class="pill grey">${p<=.5?'½':'¾'} порции</span>`:''};
+function dayKcal8(day){return Object.entries(day.slots).reduce((a,[k,s])=>a+((s&&s.rid&&RBY[s.rid])?RBY[s.rid].kcal*partOf8(day,k):0),0)}
+dayKcal=function(di){const d=S.plan.days[di];return Object.keys(d.slots).reduce((s,k)=>{const r=slotRecipe(di,k);return s+(r?r.kcal*partOf8(d,k):0)},0)};
+eatenKcal=function(di){const d=S.plan.days[di];return Object.keys(d.slots).reduce((s,k)=>{const r=slotRecipe(di,k);return s+(r&&S.eaten[eatKey(di,k)]?r.kcal*partOf8(d,k):0)},0)};
+/* Meals with two or more dishes (drinks aside) get smaller portions, step by step: ¾, then ½. */
+function shrink8(day){
+  const groups={}; Object.keys(day.slots).forEach(k=>{const s=day.slots[k]; if(!s||!s.rid||s.auto||kindOfKey8(k)==='drink') return; (groups[baseOf8(k)]=groups[baseOf8(k)]||[]).push(k)});
+  const ks=Object.values(groups).filter(g=>g.length>1).flat().filter(k=>partOf8(day,k)>.5); if(!ks.length) return false;
+  ks.forEach(k=>setPart8(day,k,partOf8(day,k)>.75?.75:.5)); return true;
+}
 function topUp8(day,used,weekend){
   const por=portions();
   for(let n=1;n<=2&&dayKcal8(day)<KCAL_TARGET8-200;n++){
@@ -529,13 +544,13 @@ function scrToday8(){
   const d=S.plan.days[ti],date=new Date(d.date),mk=nextSlotKey(ti),nextB=baseOf8(mk);
   const action=(k,hero)=>{const s=d.slots[k],eaten=!!S.eaten[eatKey(ti,k)];
     return s.cooked?`<button class="eat" ${hero?'style="background:transparent;color:inherit;border-color:currentColor"':''} data-act="eat" data-v="${ti}:${k}" aria-pressed="${eaten}">${eaten?'Съели ✓':'Съели'}</button>`
-      :`<button class="btn ${hero?'grow':'small'}" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
+      :`<button class="btn small ${hero?'herobtn8':''}" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
   const row=k=>{nameSlot8(k); const r=slotRecipe(ti,k),s=d.slots[k]; if(!r) return '';
     return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${ti}:${k}"><div class="thumb">${dishArt(r)}</div>
-     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}"><span class="small muted">${SLOT_NAMES[k]}</span><span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}<span>${r.t} мин</span><span>${r.kcal} ккал</span></span></button>${action(k)}</div>`};
+     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}"><span class="small muted">${SLOT_NAMES[k]}</span><span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}${partTag8(d,k)}<span>${r.t} мин</span><span>${Math.round(r.kcal*partOf8(d,k))} ккал</span></span></button>${action(k)}</div>`};
   nameSlot8(mk); const hr=slotRecipe(ti,mk),hs=d.slots[mk];
   const hero=hr?`<div class="hero hero8"><button class="heroimg" data-act="recipe" data-v="${srcRef(ti,mk)}" aria-label="Рецепт: ${esc(hr.n)}">${dishArt(hr)}</button><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}${hs.cooked?' · приготовлено':''}</p><p class="dish">${esc(hr.n)}</p>
-     <div class="meta">${missing8(hr)?buyTag8(hr):''}<span>${hr.t} мин</span><span>${hr.kcal} ккал на порцию</span><span>${hs.serv} ${plural(hs.serv,'порция','порции','порций')}</span></div>
+     <div class="meta">${missing8(hr)?buyTag8(hr):''}${partTag8(d,mk)}<span>${hr.t} мин</span><span>${hr.kcal} ккал на порцию</span><span>${hs.serv} ${plural(hs.serv,'порция','порции','порций')}</span></div>
      <div class="row">${action(mk,true)}</div></div>`:'';
   const groups=groups8(d).map(g=>({...g,keys:g.keys.filter(k=>k!==mk)})).filter(g=>g.keys.length);
   return `<div class="screen"><h1 class="range8" style="text-transform:capitalize">${DOWL[date.getDay()]}, ${date.getDate()} ${MON[date.getMonth()]}</h1>
@@ -582,7 +597,10 @@ function macroShare8(m){
   return [p,f,1-p-f];
 }
 function macroNeed8(m){const k=need(m).kcal,[p,f,c]=macroShare8(m);return [Math.round(k*p/4),Math.round(k*f/9),Math.round(k*c/4)]}
-function eatenMacro8(di,m){const d=S.plan.days[di],pf=pfactor(m),out=[0,0,0]; Object.keys(d.slots).forEach(k=>{const r=slotRecipe(di,k); if(r&&S.eaten[eatKey(di,k)]){out[0]+=r.P*pf;out[1]+=r.F*pf;out[2]+=r.C*pf}}); return out.map(Math.round)}
+function eatenMacro8(di,m){const d=S.plan.days[di],pf=pfactor(m),out=[0,0,0]; Object.keys(d.slots).forEach(k=>{const r=slotRecipe(di,k),f=pf*partOf8(d,k); if(r&&S.eaten[eatKey(di,k)]){out[0]+=r.P*f;out[1]+=r.F*f;out[2]+=r.C*f}});
+  // v8.12: what was added in «Что ещё съели» counts too
+  const dk=d.date.slice(0,10); (((S.extra[dk]||{})[m.id])||[]).forEach(x=>{const mac=x&&typeof x==='object'?(x.P!=null?[x.P,x.F,x.C]:(S.exm8||{})[dk+'|'+m.id+'|'+x.label]):null; if(mac){out[0]+=mac[0];out[1]+=mac[1];out[2]+=mac[2]}});
+  return out.map(Math.round)}
 const MAC8=[['Белки','var(--accent)'],['Жиры','var(--saffron)'],['Углеводы','#5f86b8']];
 function donuts8(m,eaten){const nd=macroNeed8(m),R_=26,C_=2*Math.PI*R_;
   return `<div class="donuts8">${MAC8.map(([l,c],i)=>{const v=eaten[i]||0,n=nd[i]||1,p=Math.min(1,v/n);
@@ -591,10 +609,25 @@ const macNote8=()=>`<details class="macnote8"><summary class="small muted">Ка�
 /* Calories for every family member, children included; the extra-food field adds to the chosen person. */
 function eatenToday8(ti,m){const dk=S.plan.days[ti].date.slice(0,10),ex=((S.extra[dk]||{})[m.id])||[];return Math.round(eatenKcal(ti)*pfactor(m)+ex.reduce((a,b)=>a+(typeof b==='number'?b:b.kcal),0))}
 function familyToday8(){const ti=todayIdx(); if(!S.plan||ti<0) return null; const ms=S.profile.members; return {n:ms.length,eat:ms.reduce((a,m)=>a+eatenToday8(ti,m),0),need:ms.reduce((a,m)=>a+need(m).kcal,0)}}
+/* v8.12: search for what was eaten — products (per 100 g or per piece) and dishes (per portion), with proteins, fats and carbs. */
+function eatFind8(q){
+  q=q.trim().toLowerCase(); if(q.length<2) return [];
+  const ings=Object.keys(ING).filter(k=>ING[k][0].toLowerCase().includes(q)&&ING[k][6]&&!['salt','water'].includes(k)).slice(0,6).map(k=>({t:'i',id:k,n:ING[k][0].replace(/\s*\(.*?\)/,''),u:ING[k][2]}));
+  const dishes=R.filter(r=>!r.base8&&r.m!=='c'&&r.n.toLowerCase().includes(q)).slice(0,4).map(r=>({t:'r',id:r.id,n:r.n}));
+  return [...ings,...dishes];
+}
+function eatPortion8(x,qty){
+  if(x.t==='r'){const r=RBY[x.id],k=qty>0?qty:1;return {label:`${r.n}${k!==1?` × ${dec(k)}`:''}`,kcal:Math.round(r.kcal*k),P:Math.round(r.P*k),F:Math.round(r.F*k),C:Math.round(r.C*k)}}
+  const d=ING[x.id],u=d[2],per=u==='g'||u==='ml',q=qty>0?qty:per?100:1,f=per?q/100:q,n=d[6];
+  return {label:`${x.n}, ${per?q+(u==='g'?' г':' мл'):dec(q)+' '+u}`,kcal:Math.round(n[0]*f),P:Math.round(n[1]*f),F:Math.round(n[2]*f),C:Math.round(n[3]*f)};
+}
+function eatSugg8(){const list=eatFind8(UI.kq8||''); if(!(UI.kq8||'').trim()) return ''; if(!list.length) return '<p class="small muted">Ничего не нашли — попробуйте по-другому или впишите калории числом.</p>';
+  return `<div class="chips">${list.map(x=>`<button class="chip" data-act="kpick8" data-v="${x.t}:${x.id}">${esc(x.n)} <span class="muted">${x.t==='r'?'порция':(x.u==='g'?'100 г':x.u==='ml'?'100 мл':'1 '+x.u)}</span></button>`).join('')}</div>`}
 function ateForm8(ti){
   const ms=S.profile.members; if(!UI.member||!ms.find(m=>m.id===UI.member)) UI.member=ms[0].id;
   const dk=S.plan.days[ti].date.slice(0,10),ex=((S.extra[dk]||{})[UI.member])||[];
-  return `<div class="card ate8"><h3>Что ещё съели</h3><form class="row" data-form="kadd">${ms.length>1?`<select id="kwho8" data-act="kwho8" aria-label="Кто съел">${ms.map(m=>`<option value="${m.id}" ${m.id===UI.member?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:''}<input type="text" id="kadd" placeholder="Например: банан, латте" autocomplete="off" aria-label="Что ещё съели" style="flex:1;min-width:0"><button class="btn secondary small" type="submit">Добавить</button></form>
+  return `<div class="card ate8"><h3>Что ещё съели</h3><form class="row" data-form="kadd">${ms.length>1?`<select id="kwho8" data-act="kwho8" aria-label="Кто съел">${ms.map(m=>`<option value="${m.id}" ${m.id===UI.member?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:''}<input type="search" id="kadd" data-act="kq8" value="${esc(UI.kq8||'')}" placeholder="Начните вводить: банан, творог…" autocomplete="off" aria-label="Что ещё съели" style="flex:1;min-width:0"><input type="number" id="kqty8" inputmode="decimal" min="0" placeholder="г/шт" aria-label="Сколько: граммы или штуки" style="width:74px;flex:none"></form>
+   ${eatSugg8()}
    <p class="small muted" id="kmsg"></p>
    ${ex.length?`<div class="chips">${ex.map((v,i)=>{const o=typeof v==='number'?{label:'Вручную',kcal:v}:v;return `<button class="chip" data-act="kdel" data-v="${i}" aria-label="Удалить ${esc(o.label)}">${esc(o.label)} · ${num(o.kcal)} ккал ✕</button>`}).join('')}</div>`:''}</div>`;
 }
@@ -628,9 +661,11 @@ function scrMenu8(preview){
   const row=(di,k)=>{nameSlot8(k); let h=slotRow(di,k,!!preview); if(!preview&&di===ti&&d0) {const s=S.plan.days[di].slots[k]; if(s&&s.cooked) h=h.replace('<button class="iconbtn" data-act="replace"',eatBtn(di,k)+'<button class="iconbtn" data-act="replace"')} return h};
   return `<div class="screen${preview?' preview8':''}">
    ${preview?'<div class="note"><b>✓</b><span>Ваше меню готово! Сохраните его — и список покупок соберётся сам.</span></div>':''}
+   ${!preview&&shopping().cost>budgetLimit8()+1?`<div class="note"><b>!</b><span class="grow">Меню дороже бюджета на ≈${rub(shopping().cost-budgetLimit8())}</span><button class="btn ghost small" data-act="cheaper8">Подобрать подешевле</button></div>`:''}
    <div class="row between" style="align-items:center"><h1 class="range8">${range8(d0,dn)}</h1>${preview?'':S.plan.status==='draft'?'<span class="pill warn">черновик</span>':'<span class="pill">утверждено</span>'}</div>
    ${vis.map(([d,di])=>{const groups=[];keysOf8(d).forEach(k=>{const b=baseOf8(k),g=groups.find(x=>x.b===b);g?g.keys.push(k):groups.push({b,keys:[k]})});
-     return `<div class="day ${di===ti?'today':''}"><header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}≈${num(dayKcal(di))} ккал</span></header>${groups.map(g=>`<div class="meal8"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(k=>row(di,k)).join('')}</div>`).join('')}</div>`}).join('')}
+     const over=Math.round(dayKcal8(d)-KCAL_TARGET8),warn=!preview&&over>50?`<div class="warn8"><span class="grow small">Выше нормы на ≈${num(over)} ккал на порцию</span><button class="btn ghost small" data-act="lighter8" data-v="${di}">Подобрать полегче</button></div>`:'';
+     return `<div class="day ${di===ti?'today':''}">${warn}<header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}≈${num(dayKcal(di))} ккал</span></header>${groups.map(g=>`<div class="meal8"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(k=>row(di,k)).join('')}</div>`).join('')}</div>`}).join('')}
    ${preview?'':`<p class="small muted">${KC()?'Калории дня — на одну стандартную порцию каждого блюда. ':''}Потяните за ⠿, чтобы поменять блюда местами. Смахните блюдо вправо, чтобы убрать его.</p>
    <div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать покупки</button>':`<button class="btn secondary block" data-act="share">${IC.share} Отправить меню семье</button>`}
     <button class="btn ghost block" data-act="regen">Пересобрать меню</button></div>`}
@@ -858,6 +893,14 @@ function v8Act(a,v,el){
      else {const u=ING[v][2],d=UI.drop8&&ING[UI.drop8[0]][2]===u?UI.drop8[1]:(u==='g'||u==='ml')?150:1; list.push([v,d]); UI.ia8=''; UI.drop8=null}
      const base=ensureBase8(baseId),same=base&&base.i.length===list.length&&base.i.every(([k,q])=>list.some(([x,y])=>x===k&&y===q));
      const r=same?base:variant8(baseId,list); if(r) sl.rid=r.id; return true}
+   case 'lighter8': {const day=S.plan.days[+v],cap=KCAL_TARGET8,before=dayKcal8(day);
+     for(let n=0;n<14&&dayKcal8(day)>cap;n++){const keys=Object.keys(day.slots).filter(k=>day.slots[k].rid&&RBY[day.slots[k].rid]&&!day.slots[k].cooked).sort((a,b)=>RBY[day.slots[b].rid].kcal-RBY[day.slots[a].rid].kcal);
+       if(keys.some(k=>swapFor8(day,k,(r,cur)=>r.kcal<cur.kcal))) continue; if(!shrink8(day)) break}
+     toast(dayKcal8(day)<before?`Стало легче на ${num(before-dayKcal8(day))} ккал`:'Легче подобрать не получилось'); return true}
+   case 'cheaper8': {const before=shopping().cost; fit8(); const after=shopping().cost; toast(after<before-1?`Дешевле на ${rub(before-after)}`:'Дешевле подобрать не получилось'); return true}
+   case 'kpick8': {const ti=todayIdx(); if(ti<0) return true; const [t,id]=[v.slice(0,1),v.slice(2)],q=+((document.getElementById('kqty8')||{}).value||0),e=eatPortion8({t,id,n:t==='r'?RBY[id].n:ING[id][0].replace(/\s*\(.*?\)/,'')},q);
+     const dk=S.plan.days[ti].date.slice(0,10); S.extra[dk]=S.extra[dk]||{}; (S.extra[dk][UI.member]=S.extra[dk][UI.member]||[]).push(e);
+     S.exm8=S.exm8||{}; S.exm8[dk+'|'+UI.member+'|'+e.label]=[e.P,e.F,e.C]; UI.kq8=''; toast(`${e.label} ≈ ${e.kcal} ккал`); return true}
    case 'kwho8': UI.member=v; return true;
    case 'norep8': p.noRepeat8=!!el.checked; return true;
    case 'tpill8': openTimer8(v); return true;
@@ -915,6 +958,7 @@ document.addEventListener('input',e=>{const t=e.target,a=t.dataset&&t.dataset.ac
   else if(a==='rsearch8'){UI.rs8=UI.rs8||{}; UI.rs8[t.dataset.v]=t.value; render(); refocus('rs8_'+t.dataset.v)}
   else if(a==='rq8'){UI.rq=t.value; render(); refocus('rq8')}
   else if(a==='ia8'){UI.ia8=t.value; render(); refocus('ia8')}
+  else if(a==='kq8'){UI.kq8=t.value; render(); refocus('kadd')}
   else if(a==='rf8'&&UI.edit){const f=t.dataset.v; UI.edit[f]=f==='n'?t.value:+t.value; const b=document.querySelector('[data-act="recSave"]'); if(b) b.disabled=!(UI.edit.n.trim()&&UI.edit.i.length&&UI.edit.s.some(x=>x.trim()))}
   else if(a==='ri8'&&UI.edit){const q=+String(t.value).replace(',','.'); if(q>0) UI.edit.i[+t.dataset.v][1]=q}
   else if(a==='rstep8'&&UI.edit){UI.edit.s[+t.dataset.v]=t.value; const b=document.querySelector('[data-act="recSave"]'); if(b) b.disabled=!(UI.edit.n.trim()&&UI.edit.i.length&&UI.edit.s.some(x=>x.trim()))}
@@ -923,6 +967,7 @@ document.addEventListener('change',e=>{const t=e.target,a=t.dataset&&t.dataset.a
   if(a==='rk8'||a==='theme8'||a==='kwho8'||a==='norep8'){act(a,a==='norep8'?t.checked:t.value,t)}
   else if(a==='scanSel'){act(a,t.dataset.v,t)}
 });
+document.addEventListener('submit',e=>{const f=e.target; if(!f.dataset||f.dataset.form!=='kadd') return; const first=eatFind8(UI.kq8||'')[0]; if(first){e.preventDefault(); e.stopImmediatePropagation(); act('kpick8',first.t+':'+first.id)}},true);
 window.addEventListener('resize',()=>clampChips());
 try{const th=S.theme; if(th&&th!=='system') document.documentElement.dataset.theme=th}catch(e){}
 

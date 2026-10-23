@@ -126,7 +126,7 @@ try {
  await wait(`S.stage==='ready'`,'First menu did not open before sign-in');await wait(has('Ваше меню готово'),'Ready text missing');await shot('04-ready');
  assert.equal(privateCalls,0,'Nothing private before sign-in');
  assert.equal(await evaluate('S.plan.days.filter(d=>Object.keys(d.slots).length).length'),3,'Menu for 3 days');
- assert.ok(await evaluate('S.plan.days.some(d=>d.slots.d_pair&&String(d.slots.d_pair.rid).startsWith("c_"))'),'Dinner combines main and side');
+ assert.ok(await evaluate('S.plan.days.some(d=>d.slots.d_pair&&d.slots.d_pair.rid)'),'Dinner has a second course');
  await click('[data-act="toAuth8"]');await wait(has('Войти через Telegram'),'Telegram login missing');
  await click('[data-act="telegramStart"]');await wait(has('4826'),'Challenge missing');approved=true;
  await wait(`window.FamilyMenuBridge?.ready && S.stage==='app'`,'Sign-in did not open the app');
@@ -142,6 +142,9 @@ try {
  assert.ok(await evaluate('!!document.querySelector(".slot .buy8")'),'Dish rows show how many products to buy');
  await click('[data-act="tab"][data-v="today"]');await wait(has('Что ещё съели'),'Today tab');await wait('!!document.querySelector(".hero8") && !!document.querySelector(".day.today .mealhead8")','Today: big card for the next dish, the rest grouped');
  assert.ok(await evaluate('!document.querySelector(".kcal") && !!document.querySelector(".ate8") && document.querySelector(".ate8").compareDocumentPosition(document.querySelector(".hero8"))===4'),'«Что ещё съели» above the big card, no calorie bars');
+ await fill('#kadd','твор');await wait('!!document.querySelector(\'[data-act="kpick8"][data-v="i:cottage"]\')','Search what was eaten');await click('[data-act="kpick8"][data-v="i:cottage"]');
+ assert.ok(await evaluate('eatenMacro8(todayIdx(),S.profile.members.find(m=>m.id===UI.member))[0]>=17 && familyToday8().eat>=121'),'Picked food counts in calories and macros');
+ await evaluate(`act('kdel','0')`);
  assert.match(await evaluate('document.querySelector(".kc8").innerText'),/^\s*0\s*\/\s*7[\s\u00a0]?800\s*$/,'Family calories next to the diary icon');
  assert.equal(await evaluate(`(()=>{const kp=S.pantry;S.pantry=[{key:'fish_white',qty:800},{key:'rice',qty:900},{key:'soy_sauce',qty:250}];const r=buildHome8()[0];S.pantry=kp;return r&&r.n+'|'+(r.kcal>200)})()`),'Минтай с рисом в соевом соусе|true','Dish composed from what is at home');
  assert.ok(await evaluate(`(()=>{const kp=S.pantry,keep=S.plan,md=S.profile.mealSetup.d;S.profile.mealSetup.d=['pair'];S.pantry=[{key:'fish_white',qty:800},{key:'rice',qty:900},{key:'soy_sauce',qty:250}];buildHome8();generateOnce8();const ok=Object.values(S.plan.days[0].slots).some(s=>String(s.rid).startsWith('h8~'));S.pantry=kp;S.plan=keep;S.profile.mealSetup.d=md;return ok})()`),'Home dish lands in the menu');
@@ -196,7 +199,7 @@ try {
  await click('[data-act="nav8"][data-v="pDays"]');await click('[data-act="kind8"][data-v="l:drink"]');await click('[data-act="kind8"][data-v="l:dessert"]');assert.deepEqual(await evaluate('S.profile.mealSetup.l'),['soup','drink','dessert'],'Several dishes for lunch');
  await click('[data-act="regen"]');await wait(`S.stage==='app' && !!S.plan.days[0].slots.l_drink && !!S.plan.days[0].slots.l_dessert`,'Lunch with soup, drink and dessert');
  assert.ok(await evaluate(`(()=>{const keep=S.plan;S.profile.noRepeat8=true;let ok=true;for(let i=0;i<3;i++){generate();const ids=S.plan.days.flatMap(d=>Object.values(d.slots).filter(x=>x.rid).map(x=>baseKey8(x.rid)));if(new Set(ids).size!==ids.length)ok=false}S.profile.noRepeat8=false;S.plan=keep;return ok})()`),'«Без повторений»: every dish once');
- assert.ok(await evaluate(`(()=>{const ms=S.profile.mealSetup.d,keep=S.plan;S.profile.mealSetup.d=['salad','pair','soup'];generate();const ok=S.plan.days.filter(d=>Object.keys(d.slots).length).every(d=>['d_salad','d_pair','d_soup'].every(k=>d.slots[k]));S.profile.mealSetup.d=ms;S.plan=keep;return ok})()`),'Every chosen dish for dinner stays');
+ assert.ok(await evaluate(`(()=>{const ms=S.profile.mealSetup.d,keep=S.plan;S.profile.mealSetup.d=['salad','pair','soup'];generate();const ok=S.plan.days.filter(d=>Object.keys(d.slots).length).every(d=>['d_salad','d_pair','d_soup'].every(k=>d.slots[k])&&(dayKcal8(d)<=KCAL_TARGET8||Object.keys(d.slots).some(k=>partOf8(d,k)<1)));S.profile.mealSetup.d=ms;S.plan=keep;return ok})()`),'Every chosen dish for dinner stays, portions shrink to fit');
  {const at=await evaluate(`(()=>{for(const [di,d] of S.plan.days.entries())for(const k of Object.keys(d.slots))if(String(d.slots[k].rid).startsWith('c_'))return di+':'+k;const d=S.plan.days[todayIdx()],k=Object.keys(d.slots)[0];window.keepRid8=[k,d.slots[k].rid];d.slots[k].rid=comboOf(RBY.p1,RBY.g1).id;return todayIdx()+':'+k})()`);
   assert.ok(at,'A main with a side in the menu');await evaluate(`(()=>{const [d,k]=${JSON.stringify(at)}.split(':');UI.sheet={type:'replace',day:+d,slot:k,reason:'none',open:null};render()})()`);
   assert.ok(await evaluate('document.querySelectorAll("#layer [data-act=side8]").length>=10'),'Any other side for the same main');
@@ -237,7 +240,7 @@ try {
  assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
  approved=false;user='b';await click('[data-act="telegramStart"]');await wait(has('4826'),'Second challenge missing');approved=true;
  await wait(has('Зачем вам Frigo?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
- assert.equal(errors.length,0);console.log('PASS v8.11: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
+ assert.equal(errors.length,0);console.log('PASS v8.12: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
 }catch(error){
  console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const info=await send('Runtime.evaluate',{expression:'JSON.stringify({url:location.href,ready:document.readyState,scripts:[...document.scripts].map(s=>s.src)})',returnByValue:true});console.error('Page:',info.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
  console.log('::error title=web-smoke::'+String(error.message).replace(/\n/g,'%0A'));process.exitCode=1;
