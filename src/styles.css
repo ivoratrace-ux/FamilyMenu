@@ -432,3 +432,16 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .tp8.done{background:var(--saffron);color:#2a1f00;animation:tp8 1s ease-in-out infinite alternate}
 @keyframes tp8{from{transform:scale(1)}to{transform:scale(1.05)}}
 @media (prefers-reduced-motion:reduce){.tp8.done{animation:none}}
+
+/* ===== v8.8 ===== */
+.meta8{flex-wrap:nowrap !important;white-space:nowrap;overflow:hidden;gap:8px !important}
+.meta8>span{flex:none}
+.meta8 .buy8{padding:0 6px}
+.fam8{display:flex;align-items:center;gap:12px;text-align:left;width:100%;font:inherit;color:inherit;padding:12px 14px}
+.fam8 .grow{min-width:0}
+.famnums8{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;margin-top:2px}
+.famnums8 span{color:var(--muted,#6b6b6b)}
+.mac8{margin:0;padding:8px 10px;border-radius:10px;background:var(--accent-soft)}
+.card.fam8{flex-direction:row;align-items:center;text-align:left;cursor:pointer}
+.fam8>.grow{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.fam8 .avatar{flex:none}

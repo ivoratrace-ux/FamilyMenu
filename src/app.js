@@ -169,7 +169,8 @@ function needMap(plan){
   }));
   return {m,spices};
 }
-const pantryQty=k=>S.pantry.filter(x=>x.key===k).reduce((s,x)=>s+(+x.qty||0),0);
+// v8.8: leftovers of packs bought for this menu are «at home» for the next menus, not for this list
+const pantryQty=k=>S.pantry.filter(x=>x.key===k&&!(x.src==='left8'&&S.plan&&x.plan===S.plan.created)).reduce((s,x)=>s+(+x.qty||0),0);
 const fromList=k=>S.pantry.some(x=>x.key===k&&x.src==='list');
 function shopping(){
   if(!S.plan) return {items:[],spices:[],cost:0};

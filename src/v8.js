@@ -3,13 +3,13 @@
    tabs: Меню · Покупки · Дома · Профиль; per-meal kinds, 1–7 days, main+side pairs, own recipes, Premium as a subscription */
 
 const SLOT8={b:'Завтрак',l:'Обед',s:'Перекус',d:'Ужин'};
-const KIND8={breakfast:'Завтрак: каши, яйца, сырники',soup:'Суп',pair:'Второе с гарниром',dish:'Целое блюдо или салат',dessert:'Десерт',drink:'Напиток',snack:'Перекус',none:'Не нужен'};
-const KOPT8={b:['breakfast','drink'],l:['soup','pair','dish','drink','dessert'],s:['snack','dessert','drink'],d:['pair','dish','soup','drink','dessert']};
-const KSHORT8={breakfast:'Завтрак',soup:'Суп',pair:'Второе с гарниром',dish:'Блюдо или салат',drink:'Напиток',dessert:'Десерт',snack:'Перекус'};
-const KTAG8={soup:'суп',pair:'второе',dish:'блюдо',drink:'напиток',dessert:'десерт',snack:'перекус',breakfast:''};
+const KIND8={breakfast:'Завтрак: каши, яйца, сырники',soup:'Суп',pair:'Второе с гарниром',dish:'Целое блюдо',salad:'Салат',dessert:'Десерт',drink:'Напиток',snack:'Перекус',none:'Не нужен'};
+const KOPT8={b:['breakfast','drink'],l:['salad','soup','pair','dish','drink','dessert'],s:['snack','salad','dessert','drink'],d:['salad','pair','dish','soup','drink','dessert']};
+const KSHORT8={breakfast:'Завтрак',soup:'Суп',pair:'Второе с гарниром',dish:'Целое блюдо',salad:'Салат',drink:'Напиток',dessert:'Десерт',snack:'Перекус'};
+const KTAG8={soup:'суп',pair:'второе',dish:'блюдо',salad:'салат',drink:'напиток',dessert:'десерт',snack:'перекус',breakfast:''};
 /* Snacks, desserts and drinks open with the subscription. */
 const kopt8=k=>KOPT8[k];
-const MYK8={breakfast:['Завтрак','b'],soup:['Суп','m'],main:['Основное: мясо, рыба','p'],side:['Гарнир','g'],dish:['Целое блюдо или салат','m'],dessert:['Десерт','z'],drink:['Напиток','k'],snack:['Перекус','s']};
+const MYK8={breakfast:['Завтрак','b'],soup:['Суп','m'],main:['Основное: мясо, рыба','p'],side:['Гарнир','g'],dish:['Целое блюдо','m'],salad:['Салат','m'],dessert:['Десерт','z'],drink:['Напиток','k'],snack:['Перекус','s']};
 const GOAL8={lose:'Похудение',mass:'Набор массы',pp:'Правильное питание',protein:'Больше белка',lowcarb:'Меньше углеводов',none:'Просто вкусно и разнообразно'};
 const PAGES8={rec8:'Рецепт',diary:'Дневник',pBudget:'Бюджет и цены',pFamily:'Семья',pFood:'Питание и ограничения',pRecipes:'Мои рецепты',pRecipe:'Рецепт',pDays:'Дни и приёмы пищи',autocart:'Автосборка корзины',promo:'Подборка акций',kcal:'Калории и КБЖУ',sub:'Premium',metrics:'Метрики пилота'};
 const trialOn8=()=>!!V().trialStart&&!subscribed()&&dayN()<7;
@@ -64,12 +64,14 @@ window.dishArt=function(r){
   if(r&&!r.art&&!r.imageUrl) return `<svg viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${esc(r.n)}" preserveAspectRatio="xMidYMid slice"><rect width="400" height="260" fill="#e2eee6"/><circle cx="200" cy="130" r="78" fill="#fff"/><text x="200" y="152" text-anchor="middle" font-family="Literata,Georgia,serif" font-size="64" fill="#2c6a4c">${esc((r.n||'?')[0].toUpperCase())}</text></svg>`;
   return artOrig8(r);
 };
+const isSalad8=r=>(r.tags||[]).includes('salad')||/^(Салат|Винегрет|Табуле)/.test(r.n||'');
 function pool8(kind){
   const all=R.filter(r=>r.m!=='c'&&allowed(r));
   switch(kind){
    case 'breakfast': return all.filter(r=>r.m==='b');
    case 'soup': return all.filter(r=>r.m==='m'&&isSoup(r));
-   case 'dish': return all.filter(r=>r.m==='m'&&!isSoup(r));
+   case 'dish': return all.filter(r=>r.m==='m'&&!isSoup(r)&&!isSalad8(r));
+   case 'salad': return all.filter(r=>r.m==='m'&&isSalad8(r));
    case 'pair': return all.filter(r=>r.m==='p');
    case 'side': return all.filter(r=>r.m==='g');
    case 'dessert': return all.filter(r=>r.m==='z');
@@ -82,7 +84,7 @@ poolFor=(function(orig){return function(slot){
   slot=String(slot); if(slot.startsWith('k:')) return pool8(slot.slice(2));
   const kind=slot.split('_')[1]; if(!kind) return orig(slot);
   // Replacing «второе с гарниром» offers mains already paired with a side.
-  if(kind==='pair') return pool8('pair').map(m=>{const sides=pool8('side'),pref=sides.find(x=>(m.tags||[]).includes('pair:'+x.id))||sides[0];return pref?comboOf(m,pref):m});
+  if(kind==='pair') return pool8('pair').map(m=>{const sides=pool8('side'),home=S.pantry.length?sides.filter(x=>hits8(x)).sort((a,b)=>missing8(a)-missing8(b))[0]:null,pref=home||sides.find(x=>(m.tags||[]).includes('pair:'+x.id))||sides[0];return pref?comboOf(m,pref):m});
   return pool8(kind);
 }})(poolFor);
 /* Budget shapes the dishes: a small budget prefers cheaper recipes, a large one — salmon, beef, shrimp and other pricier dishes. */
@@ -96,7 +98,7 @@ const STAPLE8=new Set(['oil','sugar','salt','water']);
 const inPantry8=k=>S.pantry.some(x=>x.key===k&&(+x.qty||0)>0);
 function missing8(r){return r?r.i.filter(([k])=>!STAPLE8.has(k)&&!inPantry8(k)).length:0}
 function hits8(r){return r?r.i.filter(([k])=>!STAPLE8.has(k)&&inPantry8(k)).length:0}
-const buyTag8=r=>{if(!r) return ''; const m=missing8(r); return `<span class="buy8 ${m?'':'ok'}">${m?`докупить +${m}`:'всё есть дома'}</span>`};
+const buyTag8=(r,short)=>{if(!r) return ''; const m=missing8(r); return short?`<span class="buy8 ${m?'':'ok'}" title="${m?`Докупить ${m} ${plural(m,'продукт','продукта','продуктов')}`:'Всё есть дома'}">${m?`🛒 +${m}`:'✓ дома'}</span>`:`<span class="buy8 ${m?'':'ok'}">${m?`докупить +${m}`:'всё есть дома'}</span>`};
 score=(function(orig){return function(r,ctx){const s=orig(r,ctx); if(!S.pantry.length) return s; const h=hits8(r),m=missing8(r); return s+h*4-m*1.5+(h&&!m?5:0)}})(score);
 pick=(function(orig){return function(slot,used,weekend,ctx){
   if(!S.pantry.length) return orig(slot,used,weekend,ctx);
@@ -107,12 +109,34 @@ pick=(function(orig){return function(slot,used,weekend,ctx){
   used.cnt=used.cnt||{}; used.cnt[ch.id]=cnt(ch.id)+1; return ch;
 }})(pick);
 altList=(function(orig){return function(day,slot,reason){return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r)}})(altList);
-slotRow=(function(orig){return function(di,sk,compact){const h=orig(di,sk,compact),r=slotRecipe(di,sk); return r?h.replace('<span class="meta">','<span class="meta">'+buyTag8(r)):h}})(slotRow);
+slotRow=(function(orig){return function(di,sk,compact){const h=orig(di,sk,compact),r=slotRecipe(di,sk); return r?h.replace('<span class="meta">','<span class="meta meta8">'+buyTag8(r,true)).replace(/<span>(\d+) (?:порция|порции|порций)<\/span>/,'<span>$1 порц.</span>'):h}})(slotRow);
 sheetReplace=(function(orig){return function(o){let h=orig(o); for(const r of altList(o.day,o.slot,o.reason||'none')) h=h.replace(new RegExp(`(data-act="altOpen" data-v="${r.id}"[\\s\\S]*?<span class="meta">)`),'$1'+buyTag8(r)); return h}})(sheetReplace);
 const buyLine8=r=>{const miss=r.i.filter(([k])=>!STAPLE8.has(k)&&!inPantry8(k)).map(([k])=>ING[k][0]);
   return `<p class="small buyline8">${miss.length?`<b>Докупить +${miss.length}</b> · ${esc(miss.join(', '))}`:'<b>Всё есть дома</b> — докупать ничего не нужно'}</p>`};
-function sideFor(main){const sides=pool8('side'); if(!sides.length) return null; const pref=sides.filter(x=>(main.tags||[]).includes('pair:'+x.id)); const list=pref.length?pref:sides; return list[Math.floor(Math.random()*list.length)]}
+function sideFor(main){const sides=pool8('side'); if(!sides.length) return null;
+  // v8.8: a side made of what is at home wins (rice at home → fish with rice, not mash that needs milk and butter)
+  if(S.pantry.length){const rank=sides.map(x=>({x,s:hits8(x)*3-missing8(x)+((main.tags||[]).includes('pair:'+x.id)?1:0)+Math.random()*.5})).sort((a,b)=>b.s-a.s); if(hits8(rank[0].x)) return rank[0].x}
+  const pref=sides.filter(x=>(main.tags||[]).includes('pair:'+x.id)); const list=pref.length?pref:sides; return list[Math.floor(Math.random()*list.length)]}
 
+/* v8.8: shops sell packs. The list buys whole packs (the price counts the whole pack); what is left after cooking goes to «Дома». */
+const PACK8={chicken_fillet:500,chicken_thigh:700,chicken_liver:500,beef:400,pork:500,minced_mix:400,minced_turkey:400,turkey:500,fish_white:400,cod:400,salmon:250,shrimp:300,squid:500,
+ milk:1000,kefir:900,yogurt:400,sour_cream:300,cheese:200,feta:200,cottage:300,butter:180,cream:500,tofu:300,broccoli:400,green_peas:400,spinach:250,lettuce:150,mushrooms:400,berries:300,cranberries:300,
+ rice:900,buckwheat:900,bulgur:500,millet:800,quinoa:400,pasta:450,noodles:400,oats:500,flour:1000,lentils:450,tomato_paste:140,sugar:1000,honey:300,oil:1000,soy_sauce:250,mustard:150,sesame:100,walnuts:150,
+ peanut_butter:300,semolina:800,barley:800,peas_dry:800,pickles:500,cocoa:100,raisins:200,
+ orzo:400,pasteroni:400,couscous:400,spaghetti:450,penne:450,farfalle:400,lasagna:500,egg_noodles:250,rice_noodles:200,soba:250,basmati:900,rice_round:900,rice_brown:500,wheat_groats:800,corn_grits:700,
+ muesli:400,corn_flakes:300,lentils_green:450,beans_dry:450,chickpeas_dry:450,olives:300,olive_oil:500,mayo:400,ketchup:350,vinegar:500,breadcrumbs:200,starch:400,baking_powder:10,cookies:300,chocolate:90,jam:350,
+ almonds:150,hazelnuts:150,cashew:150,sunflower_seeds:150,pumpkin_seeds:150,dried_apricots:200,prunes:200,dates:250,puff_pastry:500,pineapple_canned:580,corn_frozen:400,beans_green:400,mixed_veg:400,
+ spinach_frozen:400,cauli_frozen:400,arugula:125,cherry:250,ginger:100,brussels:400,sauerkraut:500,oyster_mush:300,forest_mush:400,tomatoes_pickled:680,grapes:500,strawberry:300,cherry_frozen:300,plum:500,
+ chicken_drum:800,chicken_wings:800,minced_chicken:400,minced_beef:400,beef_liver:500,lamb:500,pork_loin:500,bacon:150,ham:300,sausages:400,boiled_sausage:400,hake:400,pink_salmon:500,trout:250,mackerel:400,
+ herring:300,mussels:500,crab_sticks:200,mozzarella:125,parmesan:150,suluguni:300,adyghe:300,cream_cheese:140,ricotta:250,cream33:200,ryazhenka:500,greek_yogurt:400,cottage9:300,cottage_grain:300,
+ condensed_milk:380,oat_milk:1000,crispbread:150};
+shopping=(function(orig){return function(){
+  const sh=orig(); let cost=0;
+  sh.items.forEach(i=>{const pk=PACK8[i.k];
+    if(pk&&!i.covered&&i.toBuy>0&&['g','ml'].includes(ING[i.k][2])){const n=Math.ceil(i.toBuy/pk-1e-6),b=n*pk; i.packs=n; i.pack=pk; i.left=b-i.toBuy; i.toBuy=b; i.cost=b*price(i.k)}
+    if(!i.covered) cost+=i.cost});
+  sh.cost=cost; return sh;
+}})(shopping);
 /* ---------- menu generation: chosen kinds, 1–7 days (the stored menu keeps 7 days) ---------- */
 generate=function(){
   const p=P8(),start=day0(NOW()),used={},por=portions(),days=[]; let prev=null;
@@ -283,7 +307,7 @@ function pantry8(full){
    <div class="cats8">${cats.map(c=>{const n=Object.keys(ING).filter(k=>ING[k][1]===c&&hasP8(k)).length;
      return `<button class="cat8" data-act="cat8" data-v="${esc(c)}" aria-expanded="${open===c}"><span class="oneline">${short[c]||esc(c)}</span>${n?`<span class="pill">${n}</span>`:''}<span class="plus">${open===c?'−':'+'}</span></button>`}).join('')}</div>
    ${open?`<div class="card"><h3>${esc(open)}</h3><div class="chips">${ks.map(k=>`<button class="chip" data-act="pt8" data-v="${k}" aria-pressed="${hasP8(k)}">${esc(ING[k][0])}</button>`).join('')}</div></div>`:''}
-   ${full&&S.pantry.length?`<h3>Детали</h3>${S.pantry.map((p,i)=>`<div class="card prow8">${ingPic8(p.key)}<span class="grow prname8">${esc(ING[p.key][0])}${p.src==='list'?'<br><span class="small muted">из списка покупок</span>':''}</span>
+   ${full&&S.pantry.length?`<h3>Детали</h3>${S.pantry.map((p,i)=>`<div class="card prow8">${ingPic8(p.key)}<span class="grow prname8">${esc(ING[p.key][0])}${p.src==='list'?'<br><span class="small muted">из списка покупок</span>':p.src==='left8'?'<br><span class="small muted">остаток упаковки</span>':''}</span>
      <input type="number" inputmode="decimal" id="pqty_${i}" value="${p.qty}" min="0" max="1000000000" step="0.001" style="width:84px" data-act="pqty" data-v="${i}" aria-label="Количество: ${esc(ING[p.key][0])}"><span class="small muted" style="width:34px">${unitLabel(p.key)}</span>
      <button class="iconbtn" data-act="delP" data-v="${i}" aria-label="Удалить ${esc(ING[p.key][0])}">✕</button></div>`).join('')}`:''}`;
 }
@@ -368,12 +392,13 @@ function auth8(){
 /* ---------- app shell: burger (left), title, cooked-dishes counter (right), three tabs ---------- */
 const TG8='<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M21.4 4.6 2.9 11.7c-1 .4-1 1.6 0 1.9l4.6 1.5 1.8 5.5c.2.7 1.1.9 1.6.4l2.6-2.5 4.6 3.4c.6.4 1.4.1 1.6-.6l3.1-14.6c.2-.9-.6-1.5-1.4-1.1zM9.8 14.6l-.4 3.6-1.3-4 9.6-6.2-7.9 6.6z"/></svg>';
 const cookedTotal8=()=>V().ev.filter(e=>e.n==='dish_cooked').length;
+const DIARY8='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3c.6 3.2 5 5.3 5 10.2A5 5 0 0 1 7 13.2c0-2.4 1.2-4 2.6-5.1.1 1.9.9 3 2 3.4-.6-2.8-.4-5.8.4-8.5z"/><path d="M10.2 16.5a1.9 1.9 0 0 0 3.6 0"/></svg>';
 const HAT8='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 14.5a4 4 0 0 1-.6-7.9A5 5 0 0 1 12 3a5 5 0 0 1 5.6 3.6 4 4 0 0 1-.6 7.9V20H7z"/><path d="M7 17h10"/></svg>';
 function appbar8(){
   const sub=PAGES8[S.tab];
   return `<header class="appbar">${sub?`<button class="iconbtn" data-act="back8" aria-label="Назад">←</button>`:`<button class="iconbtn burger" data-act="drawer" aria-label="Открыть меню">${IC.burger}</button>`}
    <span class="grow"></span>
-   <button class="cooked8" data-act="nav8d" data-v="diary" aria-label="Дневник: приготовлено блюд ${cookedTotal8()}">${HAT8}<b>${cookedTotal8()}</b></button></header>`;
+   <button class="cooked8" data-act="nav8d" data-v="diary" aria-label="Дневник питания: приготовлено блюд ${cookedTotal8()}">${DIARY8}<b>${cookedTotal8()}</b></button></header>`;
 }
 function tabs8(){
   const left=S.plan?shopping().items.filter(i=>!i.covered&&!i.bought).length:0,cur=PAGES8[S.tab]?'':S.tab;
@@ -425,7 +450,7 @@ function scrToday8(){
       :`<button class="btn ${hero?'grow':'small'}" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
   const row=k=>{nameSlot8(k); const r=slotRecipe(ti,k),s=d.slots[k]; if(!r) return '';
     return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${ti}:${k}"><div class="thumb">${dishArt(r)}</div>
-     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}"><span class="small muted">${SLOT_NAMES[k]}</span><span class="dish">${esc(r.n)}</span><span class="meta">${buyTag8(r)}<span>${r.t} мин</span><span>${r.kcal} ккал</span></span></button>${action(k)}</div>`};
+     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}"><span class="small muted">${SLOT_NAMES[k]}</span><span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}<span>${r.t} мин</span><span>${r.kcal} ккал</span></span></button>${action(k)}</div>`};
   nameSlot8(mk); const hr=slotRecipe(ti,mk),hs=d.slots[mk];
   const hero=hr?`<div class="hero hero8"><button class="heroimg" data-act="recipe" data-v="${srcRef(ti,mk)}" aria-label="Рецепт: ${esc(hr.n)}">${dishArt(hr)}</button><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}${hs.cooked?' · приготовлено':''}</p><p class="dish">${esc(hr.n)}</p>
      <div class="meta">${buyTag8(hr)}<span>${hr.t} мин</span><span>${hr.kcal} ккал на порцию</span><span>${hs.serv} ${plural(hs.serv,'порция','порции','порций')}</span></div>
@@ -559,7 +584,7 @@ function scrShop8(){
   const cats=CAT_ORDER.filter(c=>need_.some(i=>i.cat===c));
   const row=i=>`<div class="item ${i.bought?'done':''}"><input type="checkbox" class="chk" id="b_${i.k}" data-act="bought" data-v="${i.k}" ${i.bought?'checked':''} aria-label="Куплено: ${esc(i.name)}">
     <label class="grow" for="b_${i.k}" style="min-width:0;cursor:pointer"><div class="row between" style="align-items:flex-start"><span class="nm">${esc(i.name)}</span><span class="qty">${fmtQty(i.k,i.toBuy,true)}</span></div>
-    <div class="for8">${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
+    <div class="for8">${i.packs?`${i.packs} уп. × ${fmtQty(i.k,i.pack)}${i.left>=1?` · останется ${fmtQty(i.k,i.left)} — добавим в «Дома»`:''} · `:''}${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
     <button class="iconbtn" data-act="have" data-v="${i.k}" aria-label="Уже есть дома: ${esc(i.name)}" style="font-size:12px">есть</button></div>`;
   return `<div class="screen">
    <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — список обновится</p><button class="iconbtn tgbtn" data-act="share8" aria-label="Поделиться списком в Telegram" title="Поделиться в Telegram">${TG8}</button></div>
@@ -569,15 +594,26 @@ function scrShop8(){
     <span class="small ${left.reduce((a,i)=>a+i.cost,0)>budgetLimit8()+1?'over8':'muted'}">Бюджет на ${S.profile.days} ${plural(S.profile.days,'день','дня','дней')} меню: ${rub(budgetLimit8())} (${rub(S.profile.budget)} в неделю)</span>
     <span class="row"><b style="color:var(--accent)">Собрать корзину автоматически ›</b><span class="pill warn">Premium</span></span>
     <span class="small muted">Одинаковые продукты из разных блюд объединены. Цены на ${PRICE_DATE} — примерные.</span></button>
-   ${window.FamilyMenuStores?.card() || ''}
    ${cats.map(c=>`<section class="cat"><h3>${c}</h3>${need_.filter(i=>i.cat===c).map(row).join('')}</section>`).join('')}
    ${sh.spices.length?`<section class="cat"><h3>Специи — проверьте, есть ли дома</h3><div class="card small">${esc(sh.spices.join(', '))}<p class="muted">Количество «по вкусу», в список не суммируем.</p></div></section>`:''}
-   ${home.length?`<section class="cat"><h3>Уже есть дома</h3>${home.map(i=>`<div class="item done"><span class="grow nm">${esc(i.name)}</span><span class="small muted">${fromList(i.k)?'отмечено «есть»':'хватает запаса'}</span>${fromList(i.k)?`<button class="iconbtn" data-act="have" data-v="${i.k}">вернуть</button>`:''}</div>`).join('')}</section>`:''}
   </div>`;
 }
 function scrHome8(){return `<div class="screen">${pantry8(true)}<p class="small muted">Продукты отсюда вычитаются из покупок и учитываются при подборе меню.</p></div>`}
 
-function pFamily8(){const k=S.profile.kcalOn; S.profile.kcalOn=true; const h=famFields(); S.profile.kcalOn=k; return `<div class="screen">${head8('Настройки','Семья')}${h}</div>`}
+function pFamily8(){
+  const p=S.profile,k=p.kcalOn; p.kcalOn=true;
+  const macLine=m=>{const [P,F,C]=macroNeed8(m);return `<p class="small mac8">В день: <b>${num(need(m).kcal)} ккал</b> · белки ${P} г · жиры ${F} г · углеводы ${C} г</p>`};
+  const cards=p.members.map((m,i)=>{
+    if(m.open) return memberCard(m,i).replace(/(data-act="mopen" data-v="\d+">Скрыть<\/button><\/div>)/,'$1'+macLine(m));
+    const [P,F,C]=macroNeed8(m),age=+m.age;
+    return `<button class="card fam8" data-act="mopen" data-v="${i}"><span class="avatar">${esc((m.name||'?')[0].toUpperCase())}</span><span class="grow"><b>${esc(m.name)}</b> <span class="small muted">${m.kind==='child'?'ребёнок':'взрослый'}${age?`, ${age} ${plural(age,'год','года','лет')}`:''}</span>
+      <span class="famnums8"><b>${num(need(m).kcal)} ккал</b><span>Б ${P} г</span><span>Ж ${F} г</span><span>У ${C} г</span></span></span><span class="muted" aria-hidden="true">›</span></button>`}).join('');
+  p.kcalOn=k;
+  return `<div class="screen">${head8('Настройки','Семья')}
+   <div class="stack" style="gap:8px">${cards}</div>
+   <div class="row"><button class="btn secondary small" data-act="madd" data-v="adult">+ Взрослый</button><button class="btn secondary small" data-act="madd" data-v="child">+ Ребёнок</button></div>
+   <p class="small muted">Норма на человека в день. Нажмите на человека, чтобы указать пол, возраст, вес, рост и цель. Готовим на ${portions()} ${plural(portions(),'порцию','порции','порций')} за приём пищи.</p>
+   ${macNote8()}</div>`}
 function pFood8(){const p=S.profile;return `<div class="screen">${head8('Настройки','Питание и ограничения')}
   <div class="card"><h3>Цель</h3><p class="small muted">Можно выбрать несколько</p><div class="chips">${Object.entries(GOAL8).map(([k,l])=>`<button class="chip" data-act="goal8" data-v="${k}" aria-pressed="${k==='none'?!p.goals.length:p.goals.includes(k)}">${l}</button>`).join('')}</div></div>
   <div class="card"><h3>Тип питания</h3><div class="chips">${Object.entries(DIETS).map(([k,[l,d]])=>`<button class="chip" data-act="diet" data-v="${k}" aria-pressed="${p.diet===k}" title="${esc(d)}">${l}</button>`).join('')}</div></div>
@@ -597,7 +633,7 @@ function pRecipes8(){
    :`<p class="small muted">Свои рецепты попадают в подбор меню наравне с нашими — с учётом аллергий и ограничений.</p><button class="btn block" data-act="recNew">+ Добавить рецепт</button>
     ${S.myRecipes.length?S.myRecipes.map(r=>`<button class="card recrow" data-act="recEdit" data-v="${r.id}"><div class="row"><div class="thumb">${dishArt(r)}</div><span class="grow"><span class="dish">${esc(r.n)}</span><br><span class="small muted">${MYK8[kindOfMine(r)][0]} · ${r.t} мин · ${r.i.length} ${plural(r.i.length,'продукт','продукта','продуктов')}</span></span><span class="muted">›</span></div></button>`).join(''):'<div class="empty"><p>Пока пусто. Добавьте блюдо, которое любят в семье.</p></div>'}`}</div>`;
 }
-const kindOfMine=r=>r.m==='b'?'breakfast':r.m==='m'?(r.tags.includes('soup')?'soup':'dish'):r.m==='p'?'main':r.m==='g'?'side':r.m==='z'?'dessert':r.m==='k'?'drink':'snack';
+const kindOfMine=r=>r.m==='b'?'breakfast':r.m==='m'?(r.tags.includes('soup')?'soup':r.tags.includes('salad')?'salad':'dish'):r.m==='p'?'main':r.m==='g'?'side':r.m==='z'?'dessert':r.m==='k'?'drink':'snack';
 function pRecipe8(){
   const e=UI.edit||(UI.edit={id:null,n:'',kind:'dish',t:30,serv:4,i:[],s:['']});
   const q=(UI.rq||'').trim().toLowerCase(),found=q?Object.keys(ING).filter(k=>ING[k][0].toLowerCase().includes(q)&&!e.i.some(([x])=>x===k)).slice(0,10):[];
@@ -710,6 +746,9 @@ function v8Act(a,v,el){
    case 'fav8': {S.fav8=S.fav8||[]; if(isFav8(v)) S.fav8=S.fav8.filter(x=>x!==v); else {S.fav8.push(v); toast('Добавили в «Любимые» — будем чаще предлагать')} track('favourite',{on:isFav8(v)}); return true}
    case 'rtab8': UI.rtab8=v; return true;
    case 'openRec8': UI.recFrom8=S.tab; UI.rec8=v; UI.sheet=null; S.tab='rec8'; window.scrollTo(0,0); return true;
+   case 'bought': {if(!S.plan) return false; const it=shopping().items.find(i=>i.k===v); S.bought[v]=!S.bought[v];
+     S.pantry=S.pantry.filter(x=>!(x.key===v&&x.src==='left8'&&x.plan===S.plan.created));
+     if(S.bought[v]&&it&&it.left>=1){S.pantry.push({key:v,qty:Math.round(it.left),src:'left8',plan:S.plan.created}); toast(`Остаток ${fmtQty(v,it.left)} добавили в «Дома»`)} return true}
    case 'tpill8': openTimer8(v); return true;
    case 'swipeDel8': {const [d,k]=v.split(':'),day=S.plan.days[+d]; if(day&&day.slots[k]){const r=slotRecipe(+d,k); UI.undo8={d:+d,k,slot:day.slots[k]}; delete day.slots[k]; toast(`Убрали «${r?r.n:'блюдо'}» из меню`)} return true}
    case 'resetAll8': if(!UI.resetAsk8){UI.resetAsk8=true; setTimeout(()=>{UI.resetAsk8=false},4000); return true}
@@ -742,7 +781,7 @@ function v8Act(a,v,el){
    case 'rsAdd8': UI.edit.s.push(''); return true;
    case 'rsDel8': UI.edit.s.splice(+v,1); return true;
    case 'recSave': {const e=UI.edit,k=e.serv>0?4/e.serv:1,[,m]=MYK8[e.kind];
-     const r={id:e.id||'u'+Date.now().toString(36),n:e.n.trim(),m,t:Math.max(1,Math.round(+e.t||30)),tags:e.kind==='soup'?['soup','mine']:['mine'],i:e.i.map(([id,q])=>[id,Math.round(q*k*1000)/1000]),sp:[],s:e.s.map(x=>x.trim()).filter(Boolean)};
+     const r={id:e.id||'u'+Date.now().toString(36),n:e.n.trim(),m,t:Math.max(1,Math.round(+e.t||30)),tags:e.kind==='soup'?['soup','mine']:e.kind==='salad'?['salad','mine']:['mine'],i:e.i.map(([id,q])=>[id,Math.round(q*k*1000)/1000]),sp:[],s:e.s.map(x=>x.trim()).filter(Boolean)};
      S.myRecipes=S.myRecipes.filter(x=>x.id!==r.id).concat([r]); if(RBY[r.id]){delete RBY[r.id]; const i=R.findIndex(x=>x.id===r.id); if(i>=0) R.splice(i,1)}
      registerMine(r); track(e.id?'recipe_edited':'recipe_added',{kind:e.kind}); toast('Рецепт сохранён — он попадёт в меню'); UI.edit=null; S.tab='pRecipes'; return true}
    case 'recDel': {const id=UI.edit.id; S.myRecipes=S.myRecipes.filter(x=>x.id!==id); UI.edit=null; S.tab='pRecipes'; toast('Рецепт удалён'); return true}

@@ -153,6 +153,9 @@ try {
  await click('[data-act="board8"]');await wait(has('Вы на 10-м месте'),'Leaderboard missing');await shot('05b-board');await click('.sheet [data-act="close"]');await wait('!UI.board','Leaderboard did not close');await click('[data-act="back8"]');await click('[data-act="tab"][data-v="menu"]');
  await click('[data-act="tab"][data-v="shop"]');await wait('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(".screen h1")','Shopping without a heading');await shot('06-shop');
  assert.equal(await evaluate('document.querySelectorAll(".screen a[href*=\\"vkusvill\\"], .screen a[href*=\\"lavka\\"]").length'),0,'No store links in the list');
+ assert.equal(await evaluate('!!document.querySelector("#lavka-cart") || !!document.querySelector(\'[data-act="vkusvillCart"]\') || /Уже есть дома/.test(document.body.innerText)'),false,'No store blocks and no «Уже есть дома» in the list');
+ await click('.pricecard');await wait(has('Автосборка корзины'),'Auto cart opens during the 7 free days');
+ await wait(has('Утвердить меню'),'Auto cart needs an approved menu');await click('[data-act="approve8"]');
  // Generation never opens a tab; the ready basket gets its own explicit link.
  await evaluate('window.cartOpenCount=0;window.open=()=>{window.cartOpenCount++;return null};window.boughtBeforeCart=JSON.stringify(S.bought)');
  await click('[data-act="vkusvillCart"]');await wait(has('ВкусВилл отклонил подключение'),'Store connection error missing');
@@ -162,8 +165,6 @@ try {
  assert.equal(await evaluate('!!UI.cart'),false,'No per-product wizard for VkusVill');
  assert.equal(await evaluate('window.cartOpenCount'),0,'Generating must never open a tab');
  assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").textContent'),'Добавить в корзину');
- await click('.pricecard');await wait(has('Автосборка корзины'),'Auto cart opens during the 7 free days');
- await wait(has('Утвердить меню'),'Auto cart needs an approved menu');await click('[data-act="approve8"]');
  await click('[data-act="store"][data-v="lavka"]');
  await evaluate(`Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition:success=>success({coords:{longitude:37.615,latitude:55.757}})}})`);
  assert.ok(await evaluate('document.querySelector("#lavka-cart").textContent.includes("Beta")'),'Lavka Beta badge');
@@ -177,7 +178,11 @@ try {
  assert.ok(await evaluate('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(\'[data-act="copy"]\')'),'Telegram share instead of copy');
  await click('[data-act="drawer"]');assert.equal(await evaluate('!!document.querySelector(".dseg") || !!document.querySelector("#theme8")'),false,'No switcher and no theme');await click('[data-act="nav8"][data-v="sub"]');await click('[data-act="subscribe8"]');
  await click('[data-act="tab"][data-v="today"]');
- await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="pFamily"]');await click('[data-act="back8"]');await wait('UI.drawer','Drawer stays open after a page');
+ await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="pFamily"]');await wait('document.querySelectorAll(".fam8").length===S.profile.members.length && /Б \\d+ г/.test(document.querySelector(".fam8").innerText)','Family: compact cards with daily protein, fat and carbs');await shot('08-family');
+ assert.ok(await evaluate(`(()=>{const kp=S.pantry;S.pantry=[{key:'rice',qty:900}];const ok=[0,1,2,3,4].every(()=>sideFor(RBY.p9).i.some(([k])=>k==='rice'));S.pantry=kp;return ok})()`),'Side from what is at home');
+ assert.ok(await evaluate("pool8('salad').length>=12 && KOPT8.l.includes('salad')"),'Salad as a meal option');
+ assert.ok(await evaluate(`(()=>{const it=shopping().items.find(i=>i.packs&&i.left>=1&&!i.bought);if(!it)return false;act('bought',it.k);const ok=S.pantry.some(x=>x.key===it.k&&x.src==='left8')&&it.cost===it.toBuy*price(it.k);act('bought',it.k);return ok&&!S.pantry.some(x=>x.src==='left8')})()`),'Whole packs priced, the rest goes home');
+ await click('[data-act="back8"]');await wait('UI.drawer','Drawer stays open after a page');
  await click('[data-act="nav8"][data-v="pDays"]');await click('[data-act="kind8"][data-v="l:drink"]');await click('[data-act="kind8"][data-v="l:dessert"]');assert.deepEqual(await evaluate('S.profile.mealSetup.l'),['soup','drink','dessert'],'Several dishes for lunch');
  await click('[data-act="regen"]');await wait(`S.stage==='app' && !!S.plan.days[0].slots.l_drink && !!S.plan.days[0].slots.l_dessert`,'Lunch with soup, drink and dessert');
  assert.ok(await evaluate('S.plan.days.filter(d=>Object.keys(d.slots).length).every(d=>dayKcal8(d)<=KCAL_TARGET8)'),'Day calories never exceed the norm');
@@ -214,7 +219,7 @@ try {
  assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
  approved=false;user='b';await click('[data-act="telegramStart"]');await wait(has('4826'),'Second challenge missing');approved=true;
  await wait(has('Зачем вам Frigo?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
- assert.equal(errors.length,0);console.log('PASS v8.7: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
+ assert.equal(errors.length,0);console.log('PASS v8.8: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
 }catch(error){
  console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const info=await send('Runtime.evaluate',{expression:'JSON.stringify({url:location.href,ready:document.readyState,scripts:[...document.scripts].map(s=>s.src)})',returnByValue:true});console.error('Page:',info.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
  console.log('::error title=web-smoke::'+String(error.message).replace(/\n/g,'%0A'));process.exitCode=1;
