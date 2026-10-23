@@ -4,7 +4,7 @@
 
 const SLOT8={b:'Завтрак',l:'Обед',s:'Перекус',d:'Ужин'};
 const KIND8={breakfast:'Завтрак: каши, яйца, сырники',soup:'Суп',pair:'Второе с гарниром',dish:'Целое блюдо',salad:'Салат',dessert:'Десерт',drink:'Напиток',snack:'Перекус',none:'Не нужен'};
-const KOPT8={b:['breakfast','drink'],l:['salad','soup','pair','dish','drink','dessert'],s:['snack','salad','dessert','drink'],d:['salad','pair','dish','soup','drink','dessert']};
+const KOPT8={b:['breakfast','drink'],l:['salad','soup','pair','drink','dessert'],s:['snack','salad','dessert','drink'],d:['salad','pair','soup','drink','dessert']};
 const KSHORT8={breakfast:'Завтрак',soup:'Суп',pair:'Второе с гарниром',dish:'Целое блюдо',salad:'Салат',drink:'Напиток',dessert:'Десерт',snack:'Перекус'};
 const KTAG8={soup:'суп',pair:'второе',dish:'блюдо',salad:'салат',drink:'напиток',dessert:'десерт',snack:'перекус',breakfast:''};
 /* Snacks, desserts and drinks open with the subscription. */
@@ -21,7 +21,7 @@ function P8(){
   const p=S.profile;
   if(!p.mealSetup) p.mealSetup={b:p.meals&&p.meals.b?'breakfast':'none',l:p.meals&&p.meals.l===false?'none':'soup',s:'none',d:p.meals&&p.meals.d===false?'none':'pair'};
   // Since v8.4 every meal holds a list of kinds (several dishes per meal).
-  for(const k of ['b','l','s','d']){const v=p.mealSetup[k]; if(!Array.isArray(v)) p.mealSetup[k]=!v||v==='none'?[]:[v]; p.mealSetup[k]=p.mealSetup[k].filter(x=>KOPT8[k].includes(x))}
+  for(const k of ['b','l','s','d']){const v=p.mealSetup[k]; if(!Array.isArray(v)) p.mealSetup[k]=!v||v==='none'?[]:[v]; p.mealSetup[k]=[...new Set(p.mealSetup[k].map(x=>x==='dish'?'pair':x))].filter(x=>KOPT8[k].includes(x))}
   if(!(p.days>=1&&p.days<=7)) p.days=3;
   if(!Array.isArray(S.myRecipes)) S.myRecipes=[];
   if(!S.ans) S.ans={};
@@ -52,6 +52,18 @@ function registerMine(src){
   if(RBY[src.id]||src.i.some(([k])=>!ING[k])) return;
   const r={...src,tags:[...src.tags],i:src.i.map(x=>[...x]),sp:[...(src.sp||[])],s:[...src.s]}; deriveRecipe(r); RBY[r.id]=r; R.push(r);
 }
+/* v8.11: a person's own version of a dish — products crossed out or added; calories, proteins, fats and carbs are recalculated. */
+function ensureBase8(id){
+  if(RBY[id]) return RBY[id]; const m=/^c_(.+)_(g\d+)$/.exec(id); if(m&&RBY[m[1]]&&RBY[m[2]]) return comboOf(RBY[m[1]],RBY[m[2]]);
+  if(id.startsWith('h8~')){const [,p,b,sa,v]=id.split('~'); return homeRecipe8(p,b,sa||null,v||null)} return null;
+}
+function variant8(baseId,list){
+  const base=ensureBase8(baseId); if(!base||!list.length||list.some(([k])=>!ING[k])) return null;
+  let h=0; for(const c of list.map(([k,q])=>k+':'+q).join(',')) h=(h*31+c.charCodeAt(0))|0;
+  const id='v8~'+baseId+'~'+(h>>>0).toString(36); S.var8=S.var8||{}; S.var8[id]={b:baseId,i:list.map(x=>[...x])};
+  if(!RBY[id]){const r={...base,id,i:list.map(x=>[...x]),tags:[...(base.tags||[]).filter(t=>t!=='quick'),'var8'],base8:baseId}; deriveRecipe(r); RBY[id]=r; R.push(r)}
+  return RBY[id];
+}
 function ensureRecipes(){
   homeFromPlan8();
   (S.myRecipes||[]).forEach(registerMine);
@@ -59,6 +71,7 @@ function ensureRecipes(){
   if(S.plan) S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{
     const m=s&&s.rid&&!RBY[s.rid]&&/^c_(.+)_(g\d+)$/.exec(s.rid); if(m&&RBY[m[1]]&&RBY[m[2]]) comboOf(RBY[m[1]],RBY[m[2]]);
   }));
+  if(S.plan) S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{if(s&&s.rid&&!RBY[s.rid]&&String(s.rid).startsWith('v8~')&&S.var8&&S.var8[s.rid]) variant8(S.var8[s.rid].b,S.var8[s.rid].i)}));
 }
 const artOrig8=window.dishArt;
 window.dishArt=function(r){
@@ -67,13 +80,14 @@ window.dishArt=function(r){
 };
 const isSalad8=r=>(r.tags||[]).includes('salad')||/^(Салат|Винегрет|Табуле)/.test(r.n||'');
 function pool8(kind){
-  const all=R.filter(r=>r.m!=='c'&&allowed(r));
+  const all=R.filter(r=>r.m!=='c'&&!r.base8&&allowed(r));
   switch(kind){
    case 'breakfast': return all.filter(r=>r.m==='b');
    case 'soup': return all.filter(r=>r.m==='m'&&isSoup(r));
    case 'dish': return all.filter(r=>r.m==='m'&&!isSoup(r)&&!isSalad8(r));
    case 'salad': return all.filter(r=>r.m==='m'&&isSalad8(r));
-   case 'pair': return all.filter(r=>r.m==='p'||(r.tags||[]).includes('home8'));
+   case 'pair': return all.filter(r=>r.m==='p'||(r.m==='m'&&!isSoup(r)&&!isSalad8(r)));
+   case 'pairmain': return all.filter(r=>r.m==='p');
    case 'side': return all.filter(r=>r.m==='g');
    case 'dessert': return all.filter(r=>r.m==='z');
    case 'drink': return all.filter(r=>r.m==='k');
@@ -109,9 +123,15 @@ pick=(function(orig){return function(slot,used,weekend,ctx){
   const ch=pool.map(r=>({r,s:score(r,ctx)+Math.random()*.5})).sort((a,b)=>b.s-a.s)[0].r;
   used.cnt=used.cnt||{}; used.cnt[ch.id]=cnt(ch.id)+1; return ch;
 }})(pick);
-altList=(function(orig){return function(day,slot,reason){buildHome8(); return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r)}})(altList);
+altList=(function(orig){return function(day,slot,reason){buildHome8();
+  return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r);
+}})(altList);
 slotRow=(function(orig){return function(di,sk,compact){const h=orig(di,sk,compact),r=slotRecipe(di,sk); return r?h.replace('<span class="meta">','<span class="meta meta8">'+buyTag8(r,true)).replace(/<span>\d+ (?:порция|порции|порций)<\/span>/,''):h}})(slotRow);
-sheetReplace=(function(orig){return function(o){let h=orig(o); for(const r of altList(o.day,o.slot,o.reason||'none')) h=h.replace(new RegExp(`(data-act="altOpen" data-v="${r.id}"[\\s\\S]*?<span class="meta">)`),'$1'+buyTag8(r)); return h}})(sheetReplace);
+sheetReplace=(function(orig){return function(o){let h=orig(o);
+  // v8.11: «второе с гарниром» — keep the main, pick any other side (pasta, buckwheat, rice…)
+  const cur=slotRecipe(o.day,o.slot),mm=cur&&/^c_(.+)_(g\d+)$/.exec(cur.id);
+  if(mm&&RBY[mm[1]]){const sides=pool8('side').sort((a,b)=>missing8(a)-missing8(b));
+    h=h.replace(/(<\/h2>)/,`$1<div class="card"><h3>Другой гарнир к «${esc(RBY[mm[1]].n)}»</h3><div class="chips">${sides.map(x=>`<button class="chip" data-act="side8" data-v="${x.id}" aria-pressed="${x.id===mm[2]}">${esc(x.n)}${missing8(x)?'':' ✓'}</button>`).join('')}</div></div>`)} for(const r of altList(o.day,o.slot,o.reason||'none')) h=h.replace(new RegExp(`(data-act="altOpen" data-v="${r.id}"[\\s\\S]*?<span class="meta">)`),'$1'+buyTag8(r)); return h}})(sheetReplace);
 /* v8.9: dishes composed from what is at home — protein + grain + sauce (+ one vegetable).
    Calories, proteins, fats and carbs come from the products' nutrition per 100 g (open food composition tables, as for every recipe). */
 const HP8={fish_white:['Минтай','fish','fish',600],cod:['Треска','fish','fish',600],hake:['Хек','fish','fish',600],salmon:['Сёмга','salmon','fish',600],pink_salmon:['Горбуша','salmon','fish',600],
@@ -156,7 +176,7 @@ function homeFit8(){
       const s=d.slots[k]; if(!s||s.left||s.cooked||S.eaten[eatKey(di,k)]) continue;
       const cur=s.rid?RBY[s.rid]:null,kind=kindOfKey8(k); if(!KOPT8.b.concat(KOPT8.l,KOPT8.s,KOPT8.d).includes(kind)) continue;
       const taken=new Set(Object.values(d.slots).map(x=>x.rid)),room=KCAL_TARGET8-dayKcal8(d)+(cur?cur.kcal:0);
-      const pool=(kind==='pair'?poolFor('l_pair'):pool8(kind)).filter(r=>!taken.has(r.id)&&hits8(r)>0&&r.kcal<=room);
+      const pool=(kind==='pair'?poolFor('l_pair'):pool8(kind)).filter(r=>!taken.has(r.id)&&fresh8(r,cur)&&hits8(r)>0&&r.kcal<=room);
       if(!pool.length) continue;
       const best=pool.map(r=>({r,v:score(r,{})-(used[r.id]||0)*4})).sort((a,b)=>b.v-a.v)[0].r;
       if(missing8(best)<(cur?missing8(cur):99)){if(cur) used[cur.id]--; used[best.id]=(used[best.id]||0)+1; s.rid=best.id; n++}
@@ -181,7 +201,7 @@ const PACK8={chicken_fillet:500,chicken_thigh:700,chicken_liver:500,beef:400,por
  spinach_frozen:400,cauli_frozen:400,arugula:125,cherry:250,ginger:100,brussels:400,sauerkraut:500,oyster_mush:300,forest_mush:400,tomatoes_pickled:680,grapes:500,strawberry:300,cherry_frozen:300,plum:500,
  chicken_drum:800,chicken_wings:800,minced_chicken:400,minced_beef:400,beef_liver:500,lamb:500,pork_loin:500,bacon:150,ham:300,sausages:400,boiled_sausage:400,hake:400,pink_salmon:500,trout:250,mackerel:400,
  herring:300,mussels:500,crab_sticks:200,mozzarella:125,parmesan:150,suluguni:300,adyghe:300,cream_cheese:140,ricotta:250,cream33:200,ryazhenka:500,greek_yogurt:400,cottage9:300,cottage_grain:300,
- condensed_milk:380,oat_milk:1000,crispbread:150};
+ condensed_milk:380,oat_milk:1000,crispbread:150,fig_jam:350,berry_jam:350};
 shopping=(function(orig){return function(){
   const sh=orig(); let cost=0;
   sh.items.forEach(i=>{const pk=PACK8[i.k];
@@ -195,7 +215,10 @@ generate=function(){
   for(let d=0;d<7;d++){
     const date=addDays(start,d),wd=date.getDay(),weekend=wd===0||wd===6,slots={};
     if(d<p.days) for(const k of ['b','l','s','d']) for(const kind of KOPT8[k].filter(x=>p.mealSetup[k].includes(x))){
-      let r=pick('k:'+kind,used,weekend,k==='d'?{prevProtein:prev}:{});
+      if(p.noRepeat8) used.cnt=Object.assign(used.cnt||{},Object.fromEntries([...days.flatMap(x=>Object.values(x.slots)),...Object.values(slots)].filter(x=>x.rid).map(x=>[baseKey8(x.rid),99])));
+      // «Второе с гарниром»: a main with a side on even days, any second course (whole dishes, dishes from «Дома») on odd ones; with meat or fish at home — whatever fits best
+      const pk=kind==='pair'&&d%2===0&&!Object.keys(HP8).some(inPantry8)?'pairmain':kind;
+      let r=pick('k:'+pk,used,weekend,k==='d'?{prevProtein:prev}:{});
       if(r&&kind==='pair'&&r.m==='p'){const side=sideFor(r); if(side) r=comboOf(r,side)}
       const key=k+'_'+kind; nameSlot8(key); slots[key]={rid:r&&r.id,serv:por}; if(k==='d'&&r&&['pair','dish'].includes(kind)) prev=r.protein;
     }
@@ -213,10 +236,14 @@ function budgetLimit8(){const p=S.profile;return p.budget*p.days/7}
 function swapFor8(day,key,better){
   const kind=kindOfKey8(key),cur=RBY[day.slots[key].rid]; if(!cur) return false;
   const taken=new Set(Object.values(day.slots).map(x=>x.rid));
-  let pool=kind==='pair'?poolFor('l_pair'):pool8(kind); pool=pool.filter(r=>!taken.has(r.id)&&better(r,cur));
+  let pool=kind==='pair'?poolFor('l_pair'):pool8(kind); pool=pool.filter(r=>!taken.has(r.id)&&fresh8(r,cur)&&better(r,cur));
   if(!pool.length) return false; pool.sort((a,b)=>score(b,{})-score(a,{})); day.slots[key].rid=pool[0].id; return true;
 }
 const rcp8=r=>r.i.reduce((s,[k,q])=>s+(inPantry8(k)?0:q*price(k)),0)/4;
+/* v8.11: «Без повторений» — a dish (a main with any side counts as the same dish) appears once in the menu. */
+const baseKey8=id=>{id=String(id||''); const m=/^c_(.+)_((?:g)\d+)$/.exec(id); if(m) return m[1]; if(id.startsWith('v8~')) return id.split('~')[1]; return id};
+function usedKeys8(){const u=new Set(); if(S.plan) S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{if(s&&s.rid) u.add(baseKey8(s.rid))})); return u}
+const fresh8=(r,cur)=>!S.profile.noRepeat8||baseKey8(r.id)===baseKey8(cur&&cur.id)||!usedKeys8().has(baseKey8(r.id));
 function fit8(){
   const days=S.plan.days.filter(d=>Object.keys(d.slots).length),cap=KCAL_TARGET8;
   const live=d=>Object.keys(d.slots).filter(k=>d.slots[k].rid&&RBY[d.slots[k].rid]);
@@ -225,7 +252,8 @@ function fit8(){
     const keys=live(day).sort((a,b)=>RBY[day.slots[b].rid].kcal-RBY[day.slots[a].rid].kcal),over=dayKcal8(day)-cap,auto=keys.find(k=>day.slots[k].auto);
     if(auto){delete day.slots[auto]; continue}
     if(keys.some(k=>swapFor8(day,k,(r,cur)=>r.kcal<cur.kcal&&r.kcal>=cur.kcal-over-250))) continue;
-    const drop=keys.find(k=>OPTIONAL8.includes(kindOfKey8(k)))||(keys.length>1?keys[0]:null); if(!drop) break; delete day.slots[drop];
+    if(keys.some(k=>swapFor8(day,k,(r,cur)=>r.kcal<cur.kcal))) continue;
+    break; // v8.11: dishes the person chose for a meal stay — only lighter versions
   }
   // 2) budget: cheaper dishes (biggest saving first, never above the calorie cap); then drop the priciest meal
   const limit=budgetLimit8(),costOf=(k,d)=>{const sl=d.slots[k];return rc(RBY[sl.rid])*sl.serv/4};
@@ -233,11 +261,11 @@ function fit8(){
     let best=null;
     for(const d of days) for(const k of live(d)){
       const cur=RBY[d.slots[k].rid],kind=kindOfKey8(k),taken=new Set(Object.values(d.slots).map(x=>x.rid));
-      const pool=(kind==='pair'?poolFor('l_pair'):pool8(kind)).filter(r=>!taken.has(r.id)&&rcp8(r)<rcp8(cur)&&dayKcal8(d)-cur.kcal+r.kcal<=cap);
+      const pool=(kind==='pair'?poolFor('l_pair'):pool8(kind)).filter(r=>!taken.has(r.id)&&fresh8(r,cur)&&rcp8(r)<rcp8(cur)&&dayKcal8(d)-cur.kcal+r.kcal<=Math.max(cap,dayKcal8(d)));
       for(const r of pool){const save=(rcp8(cur)-rcp8(r))*d.slots[k].serv/4; if(!best||save>best.save) best={d,k,r,save}}
     }
     if(best&&best.save>1){best.d.slots[best.k].rid=best.r.id; continue}
-    const all=days.flatMap(d=>live(d).map(k=>[k,d])).filter(([,d])=>live(d).length>1).sort((a,b)=>(OPTIONAL8.includes(kindOfKey8(b[0]))-OPTIONAL8.includes(kindOfKey8(a[0])))||costOf(b[0],b[1])-costOf(a[0],a[1]));
+    const all=days.flatMap(d=>live(d).filter(k=>d.slots[k].auto).map(k=>[k,d])).sort((a,b)=>costOf(b[0],b[1])-costOf(a[0],a[1]));
     if(!all.length) break; delete all[0][1].slots[all[0][0]];
   }
 }
@@ -321,7 +349,8 @@ function budget8(){const p=S.profile;return `
 `}
 function mealKinds8(){const p=P8();return `<div class="card"><h3>Приёмы пищи</h3><p class="small muted">Можно выбрать несколько блюд на один приём пищи</p>
    ${Object.entries(SLOT8).map(([k,l])=>`<div class="mealrow8"><b>${l}</b><div class="chips">${KOPT8[k].map(o=>`<button class="chip" data-act="kind8" data-v="${k}:${o}" aria-pressed="${p.mealSetup[k].includes(o)}">${KSHORT8[o]}</button>`).join('')}</div></div>`).join('')}
-   ${anyMeal8()?'':'<p class="small" style="color:var(--danger)">Выберите хотя бы одно блюдо</p>'}</div>`}
+   ${anyMeal8()?'':'<p class="small" style="color:var(--danger)">Выберите хотя бы одно блюдо</p>'}
+   <label class="toggle"><span><b>Без повторений</b><br><span class="small muted">Каждое блюдо — один раз за меню</span></span><input type="checkbox" class="switch" id="norep8" data-act="norep8" ${p.noRepeat8?'checked':''}></label></div>`}
 function days8card(){const p=P8();return `<div class="card"><div class="row between"><h3>Дней в меню</h3>${stepper8('days8',p.days,p.days)}</div><p class="small muted">Максимум — неделя</p></div>`}
 function timeCard8(){const p=S.profile;return `<div class="card"><h3>Сколько готовить в будни</h3>${chips({30:'до 30 мин',45:'до 45 мин',60:'до часа',0:'не важно'},[String(p.maxTime)],'time')}<p class="small muted">В выходные — на 30 минут дольше</p></div>`}
 
@@ -360,9 +389,9 @@ function pantry8(full){
    <div class="cats8">${cats.map(c=>{const n=Object.keys(ING).filter(k=>ING[k][1]===c&&hasP8(k)).length;
      return `<button class="cat8" data-act="cat8" data-v="${esc(c)}" aria-expanded="${open===c}"><span class="oneline">${short[c]||esc(c)}</span>${n?`<span class="pill">${n}</span>`:''}<span class="plus">${open===c?'−':'+'}</span></button>`}).join('')}</div>
    ${open?`<div class="card"><h3>${esc(open)}</h3><div class="chips">${ks.map(k=>`<button class="chip" data-act="pt8" data-v="${k}" aria-pressed="${hasP8(k)}">${esc(ING[k][0])}</button>`).join('')}</div></div>`:''}
-   ${full&&S.pantry.length?`<h3>Детали</h3>${S.pantry.map((p,i)=>`<div class="card prow8">${ingPic8(p.key)}<span class="grow prname8">${esc(ING[p.key][0])}${p.src==='list'?'<br><span class="small muted">из списка покупок</span>':p.src==='left8'?'<br><span class="small muted">остаток упаковки</span>':''}</span>
+   ${full&&S.pantry.length?`<h3>Детали</h3><div class="card list8">${S.pantry.map((p,i)=>`<div class="prow8">${ingPic8(p.key)}<span class="grow prname8">${esc(ING[p.key][0])}${p.src==='list'?'<br><span class="small muted">из списка покупок</span>':p.src==='left8'?'<br><span class="small muted">остаток упаковки</span>':''}</span>
      <input type="number" inputmode="decimal" id="pqty_${i}" value="${p.qty}" min="0" max="1000000000" step="0.001" style="width:84px" data-act="pqty" data-v="${i}" aria-label="Количество: ${esc(ING[p.key][0])}"><span class="small muted" style="width:34px">${unitLabel(p.key)}</span>
-     <button class="iconbtn" data-act="delP" data-v="${i}" aria-label="Удалить ${esc(ING[p.key][0])}">✕</button></div>`).join('')}`:''}`;
+     <button class="iconbtn" data-act="delP" data-v="${i}" aria-label="Удалить ${esc(ING[p.key][0])}">✕</button></div>`).join('')}</div>`:''}`;
 }
 function scanResult8(){
   const sc=UI.scan;
@@ -445,13 +474,13 @@ function auth8(){
 /* ---------- app shell: burger (left), title, cooked-dishes counter (right), three tabs ---------- */
 const TG8='<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M21.4 4.6 2.9 11.7c-1 .4-1 1.6 0 1.9l4.6 1.5 1.8 5.5c.2.7 1.1.9 1.6.4l2.6-2.5 4.6 3.4c.6.4 1.4.1 1.6-.6l3.1-14.6c.2-.9-.6-1.5-1.4-1.1zM9.8 14.6l-.4 3.6-1.3-4 9.6-6.2-7.9 6.6z"/></svg>';
 const cookedTotal8=()=>V().ev.filter(e=>e.n==='dish_cooked').length;
-const DIARY8='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3c.6 3.2 5 5.3 5 10.2A5 5 0 0 1 7 13.2c0-2.4 1.2-4 2.6-5.1.1 1.9.9 3 2 3.4-.6-2.8-.4-5.8.4-8.5z"/><path d="M10.2 16.5a1.9 1.9 0 0 0 3.6 0"/></svg>';
+const DIARY8='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3c.6 3.2 5 5.3 5 10.2A5 5 0 0 1 7 13.2c0-2.4 1.2-4 2.6-5.1.1 1.9.9 3 2 3.4-.6-2.8-.4-5.8.4-8.5z"/><path d="M10.2 16.5a1.9 1.9 0 0 0 3.6 0"/></svg>';
 const HAT8='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 14.5a4 4 0 0 1-.6-7.9A5 5 0 0 1 12 3a5 5 0 0 1 5.6 3.6 4 4 0 0 1-.6 7.9V20H7z"/><path d="M7 17h10"/></svg>';
 function appbar8(){
   const sub=PAGES8[S.tab];
   return `<header class="appbar">${sub?`<button class="iconbtn" data-act="back8" aria-label="Назад">←</button>`:`<button class="iconbtn burger" data-act="drawer" aria-label="Открыть меню">${IC.burger}</button>`}
    <span class="grow"></span>
-   <button class="cooked8" data-act="nav8d" data-v="diary" aria-label="Дневник питания">${DIARY8}</button></header>`;
+   ${(()=>{const f=S.plan?familyToday8():null;return `<button class="cooked8 kc8" data-act="nav8d" data-v="diary" aria-label="Дневник питания${f?`: съедено ${f.eat} из ${f.need} ккал`:''}">${DIARY8}${f?`<span><b>${num(f.eat)}</b> / ${num(f.need)}</span>`:''}</button>`})()}</header>`;
 }
 function tabs8(){
   const left=S.plan?shopping().items.filter(i=>!i.covered&&!i.bought).length:0,cur=PAGES8[S.tab]?'':S.tab;
@@ -510,16 +539,24 @@ function scrToday8(){
      <div class="row">${action(mk,true)}</div></div>`:'';
   const groups=groups8(d).map(g=>({...g,keys:g.keys.filter(k=>k!==mk)})).filter(g=>g.keys.length);
   return `<div class="screen"><h1 class="range8" style="text-transform:capitalize">${DOWL[date.getDay()]}, ${date.getDate()} ${MON[date.getMonth()]}</h1>
-   ${kcalAll8(ti)}
+   ${ateForm8(ti)}
    ${hero}
    ${groups.length?`<div class="day today"><header><b>Ещё сегодня</b><span class="small muted">≈${num(dayKcal(ti))} ккал за день</span></header>
-   ${groups.map(g=>`<div class="meal8 ${g.b===nextB?'next8m':''}"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(row).join('')}</div>`).join('')}</div>`:''}</div>`;
+   ${groups.map(g=>`<div class="meal8"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(row).join('')}</div>`).join('')}</div>`:''}</div>`;
 }
 /* Favourites: heart on the recipe sheet and on the recipe page; liked recipes are offered more often. */
 const isFav8=id=>(S.fav8||[]).includes(id);
 const favBtn8=id=>`<button class="iconbtn fav8 ${isFav8(id)?'on':''}" data-act="fav8" data-v="${id}" aria-pressed="${isFav8(id)}" aria-label="${isFav8(id)?'Убрать из любимых':'В любимые'}">${isFav8(id)?'♥':'♡'}</button>`;
 sheetRecipe=(function(orig){return function(o){const s0=S.plan.days[o.day].slots[o.slot],id=s0&&s0.rid;let h=orig(o);
-  const rr=slotRecipe(o.day,o.slot); if(rr) h=h.replace('<div class="card"><div class="row between"><h3>Порции</h3>',buyLine8(rr)+'<div class="card"><div class="row between"><h3>Порции</h3>');
+  const rr=slotRecipe(o.day,o.slot),own=s0&&!s0.left;
+  if(rr&&own){let n=0; h=h.replace(/<div class="ingr"><span>/g,m=>n<rr.i.length?`<div class="ingr"><button class="iconbtn xs8" data-act="ingDrop8" data-v="${rr.i[n++][0]}" aria-label="Убрать ${esc(ING[rr.i[n-1][0]][0])}">✕</button><span class="grow">`:m);
+    const q=(UI.ia8||'').trim().toLowerCase(),found=q?Object.keys(ING).filter(k=>ING[k][0].toLowerCase().includes(q)&&!rr.i.some(([x])=>x===k)).slice(0,8):[],base=rr.base8&&RBY[rr.base8];
+    const diff=base?[...base.i.filter(([k])=>!rr.i.some(([x])=>x===k)).map(([k])=>'без: '+ING[k][0].toLowerCase()),...rr.i.filter(([k])=>!base.i.some(([x])=>x===k)).map(([k])=>'+ '+ING[k][0].toLowerCase())]:[];
+    h=h.replace('<p class="small muted">Количества пересчитываются вместе со списком покупок</p>',`<input type="search" id="ia8" data-act="ia8" placeholder="+ Добавить продукт, например: варенье" value="${esc(UI.ia8||'')}" autocomplete="off" aria-label="Добавить продукт в блюдо">
+      ${found.length?`<div class="chips">${found.map(k=>`<button class="chip" data-act="ingAdd8" data-v="${k}">+ ${esc(ING[k][0])}</button>`).join('')}</div>`:q?'<p class="small muted">Ничего не нашли</p>':''}
+      ${diff.length?`<div class="row between"><span class="small">Изменено: ${esc(diff.join(', '))}</span><button class="linkbtn small" data-act="ingReset8">Как было</button></div>`:''}
+      <p class="small muted">Уберите продукт крестиком или добавьте свой — калории и список покупок пересчитаются.</p>`)}
+  if(rr) h=h.replace('<div class="card"><div class="row between"><h3>Порции</h3>',buyLine8(rr)+'<div class="card"><div class="row between"><h3>Порции</h3>');
   return id?h.replace('<h1 class="dish" style="font-size:26px">',`<div class="row between" style="align-items:flex-start"><h1 class="dish grow" style="font-size:26px">`).replace(/(<h1 class="dish grow"[^>]*>[^<]*<\/h1>)/,`$1${favBtn8(id)}</div>`):h}})(sheetRecipe);
 score=(function(orig){return function(r,ctx){return orig(r,ctx)+(isFav8(r.id)?2:0)}})(score);
 function recipeById8(id){
@@ -554,6 +591,13 @@ const macNote8=()=>`<details class="macnote8"><summary class="small muted">Ка�
 /* Calories for every family member, children included; the extra-food field adds to the chosen person. */
 function eatenToday8(ti,m){const dk=S.plan.days[ti].date.slice(0,10),ex=((S.extra[dk]||{})[m.id])||[];return Math.round(eatenKcal(ti)*pfactor(m)+ex.reduce((a,b)=>a+(typeof b==='number'?b:b.kcal),0))}
 function familyToday8(){const ti=todayIdx(); if(!S.plan||ti<0) return null; const ms=S.profile.members; return {n:ms.length,eat:ms.reduce((a,m)=>a+eatenToday8(ti,m),0),need:ms.reduce((a,m)=>a+need(m).kcal,0)}}
+function ateForm8(ti){
+  const ms=S.profile.members; if(!UI.member||!ms.find(m=>m.id===UI.member)) UI.member=ms[0].id;
+  const dk=S.plan.days[ti].date.slice(0,10),ex=((S.extra[dk]||{})[UI.member])||[];
+  return `<div class="card ate8"><h3>Что ещё съели</h3><form class="row" data-form="kadd">${ms.length>1?`<select id="kwho8" data-act="kwho8" aria-label="Кто съел">${ms.map(m=>`<option value="${m.id}" ${m.id===UI.member?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:''}<input type="text" id="kadd" placeholder="Например: банан, латте" autocomplete="off" aria-label="Что ещё съели" style="flex:1;min-width:0"><button class="btn secondary small" type="submit">Добавить</button></form>
+   <p class="small muted" id="kmsg"></p>
+   ${ex.length?`<div class="chips">${ex.map((v,i)=>{const o=typeof v==='number'?{label:'Вручную',kcal:v}:v;return `<button class="chip" data-act="kdel" data-v="${i}" aria-label="Удалить ${esc(o.label)}">${esc(o.label)} · ${num(o.kcal)} ккал ✕</button>`}).join('')}</div>`:''}</div>`;
+}
 function kcalAll8(ti){
   const ms=S.profile.members; if(!UI.member||!ms.find(m=>m.id===UI.member)) UI.member=ms[0].id;
   const dk=S.plan.days[ti].date.slice(0,10),plan=dayKcal(ti);
@@ -804,6 +848,18 @@ function v8Act(a,v,el){
    case 'bought': {if(!S.plan) return false; const it=shopping().items.find(i=>i.k===v); S.bought[v]=!S.bought[v];
      S.pantry=S.pantry.filter(x=>!(x.key===v&&x.src==='left8'&&x.plan===S.plan.created));
      if(S.bought[v]&&it&&it.left>=1){S.pantry.push({key:v,qty:Math.round(it.left),src:'left8',plan:S.plan.created}); toast(`Остаток ${fmtQty(v,it.left)} добавили в «Дома»`)} return true}
+   case 'side8': {const sh=UI.sheet; if(!sh||sh.type!=='replace') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid],mm=cur&&/^c_(.+)_(g\d+)$/.exec(cur.id); if(!mm||!RBY[v]) return true;
+     sl.rid=comboOf(RBY[mm[1]],RBY[v]).id; UI.sheet=null; toast('Гарнир заменён'); return true}
+   case 'ingDrop8': case 'ingAdd8': case 'ingReset8': {const sh=UI.sheet; if(!sh||sh.type!=='recipe') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid]; if(!cur||sl.left) return true;
+     const baseId=cur.base8||cur.id;
+     if(a==='ingReset8'){sl.rid=baseId; return true}
+     let list=cur.i.map(x=>[...x]);
+     if(a==='ingDrop8'){const was=list.find(([k])=>k===v); list=list.filter(([k])=>k!==v); if(!list.length){toast('В блюде должен остаться хотя бы один продукт'); return true} UI.drop8=was}
+     else {const u=ING[v][2],d=UI.drop8&&ING[UI.drop8[0]][2]===u?UI.drop8[1]:(u==='g'||u==='ml')?150:1; list.push([v,d]); UI.ia8=''; UI.drop8=null}
+     const base=ensureBase8(baseId),same=base&&base.i.length===list.length&&base.i.every(([k,q])=>list.some(([x,y])=>x===k&&y===q));
+     const r=same?base:variant8(baseId,list); if(r) sl.rid=r.id; return true}
+   case 'kwho8': UI.member=v; return true;
+   case 'norep8': p.noRepeat8=!!el.checked; return true;
    case 'tpill8': openTimer8(v); return true;
    case 'swipeDel8': {const [d,k]=v.split(':'),day=S.plan.days[+d]; if(day&&day.slots[k]){const r=slotRecipe(+d,k); UI.undo8={d:+d,k,slot:day.slots[k]}; delete day.slots[k]; toast(`Убрали «${r?r.n:'блюдо'}» из меню`)} return true}
    case 'resetAll8': if(!UI.resetAsk8){UI.resetAsk8=true; setTimeout(()=>{UI.resetAsk8=false},4000); return true}
@@ -858,12 +914,13 @@ document.addEventListener('input',e=>{const t=e.target,a=t.dataset&&t.dataset.ac
   if(a==='search8'){UI.q8=t.value; render(); refocus('pq8')}
   else if(a==='rsearch8'){UI.rs8=UI.rs8||{}; UI.rs8[t.dataset.v]=t.value; render(); refocus('rs8_'+t.dataset.v)}
   else if(a==='rq8'){UI.rq=t.value; render(); refocus('rq8')}
+  else if(a==='ia8'){UI.ia8=t.value; render(); refocus('ia8')}
   else if(a==='rf8'&&UI.edit){const f=t.dataset.v; UI.edit[f]=f==='n'?t.value:+t.value; const b=document.querySelector('[data-act="recSave"]'); if(b) b.disabled=!(UI.edit.n.trim()&&UI.edit.i.length&&UI.edit.s.some(x=>x.trim()))}
   else if(a==='ri8'&&UI.edit){const q=+String(t.value).replace(',','.'); if(q>0) UI.edit.i[+t.dataset.v][1]=q}
   else if(a==='rstep8'&&UI.edit){UI.edit.s[+t.dataset.v]=t.value; const b=document.querySelector('[data-act="recSave"]'); if(b) b.disabled=!(UI.edit.n.trim()&&UI.edit.i.length&&UI.edit.s.some(x=>x.trim()))}
 },true);
 document.addEventListener('change',e=>{const t=e.target,a=t.dataset&&t.dataset.act; if(!a) return;
-  if(a==='rk8'||a==='theme8'){act(a,t.value,t)}
+  if(a==='rk8'||a==='theme8'||a==='kwho8'||a==='norep8'){act(a,a==='norep8'?t.checked:t.value,t)}
   else if(a==='scanSel'){act(a,t.dataset.v,t)}
 });
 window.addEventListener('resize',()=>clampChips());

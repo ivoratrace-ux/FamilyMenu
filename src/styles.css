@@ -452,3 +452,30 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .kcal8 .kbar{height:6px}
 .kcal8 .kbar>b{top:-2px;height:10px}
 .kcal8 h3{font-size:16px}
+
+/* ===== v8.11: one visual system — white cards with a thin border, one heading size, green accents ===== */
+.cooked8.kc8{background:var(--accent-soft);border-color:transparent;color:var(--accent);height:40px;padding:0 12px 0 8px;gap:6px;font-size:14px}
+.cooked8.kc8 svg{width:24px;height:24px}
+.cooked8.kc8 b{color:var(--accent)}
+.cooked8.kc8 span{color:var(--fg)}
+.hero.hero8{background:var(--card);color:var(--fg);border:1px solid var(--line);padding:14px}
+.hero8 .meta{color:var(--muted);opacity:1}
+.hero8 p.small{color:var(--muted);opacity:1 !important}
+.hero8 .btn{background:var(--accent);color:var(--accent-fg)}
+.hero8 .buy8{background:var(--saffron-soft)}
+.hero8 .dish{font-size:22px}
+.next8m{background:none}
+#pq8.bigsearch{min-height:40px!important;font-size:15px;padding:8px 12px;border-radius:10px!important}
+.iconbtn.xs8{width:26px;height:26px;min-width:26px;min-height:26px;padding:0;font-size:12px;margin-right:8px;flex:none}
+.ingr{align-items:center}
+.ate8 .row{gap:8px}
+.ate8 select{width:auto;max-width:34%;flex:none}
+.screen>.card,.screen>.day,.screen>.hero,.screen>.note,.screen>.pricecard{border-radius:16px}
+.card h3,.day header b{font-size:16px}
+.note{background:var(--card);border:1px solid var(--line)}
+.note>b{color:var(--saffron)}
+.phototile{aspect-ratio:auto;height:76px;flex-direction:row;gap:10px}
+.phototile .plusbig{width:34px;height:34px;font-size:20px}
+.card.list8{padding:0 14px;gap:0}
+.list8 .prow8{display:flex;border-top:1px solid var(--line);padding:8px 0;height:56px}
+.list8 .prow8:first-child{border-top:0}
