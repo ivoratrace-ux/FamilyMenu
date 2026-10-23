@@ -162,11 +162,20 @@ function generate(){
 }
 function slotRecipe(day,key){const s=S.plan.days[day].slots[key]; if(!s) return null; if(s.left){const src=S.plan.days[s.from].slots[s.of||'l']; return src&&src.rid?RBY[src.rid]:null} return s.rid?RBY[s.rid]:null}
 const srcRef=(di,k)=>{const s=S.plan.days[di].slots[k];return s&&s.left?`${s.from}:${s.of||'l'}`:`${di}:${k}`};
+function completeDish(di,k){
+  const slot=srcSlot(di,k);if(!slot||slot.cooked)return false;
+  const recipe=RBY[slot.rid];if(!recipe)return false;
+  const pantry=FamilyMenuScanInventory.consume(S.pantry,recipe.i.map(([key,qty])=>({key,qty:qty*slot.serv/4})));
+  S.pantry=pantry;slot.cooked=true;
+  // Spending food must not trigger automatic replacement of the selected menu.
+  if(typeof pantrySig8==='function')S.hfSig8=pantrySig8();
+  return true;
+}
 const srcSlot=(di,k)=>{const s=S.plan.days[di].slots[k];return s.left?S.plan.days[s.from].slots[s.of||'l']:s};
 function needMap(plan){
   const m={},spices=new Set();
   plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{
-    if(!s||s.left||!s.rid||!s.serv) return; const r=RBY[s.rid],f=s.serv/4; if(!r) return;
+    if(!s||s.left||s.cooked||!s.rid||!s.serv) return; const r=RBY[s.rid],f=s.serv/4; if(!r) return;
     r.i.forEach(([k,q])=>{if(!m[k]) m[k]={qty:0,dishes:new Set()}; m[k].qty+=q*f; m[k].dishes.add(r.n)});
     (r.sp||[]).forEach(x=>spices.add(x));
   }));
@@ -578,7 +587,7 @@ function act(a,v,el){
    case 'treset': {const r=UI.sheet&&UI.sheet.type==='recipe'?RBY[srcSlot(UI.sheet.day,UI.sheet.slot).rid]:RBY[UI.cook.rid]; timerReset(tKey(r.id,+v)); return}
    case 'tplus': {timerAdd(tKey(UI.cook.rid,+v),60); return}
    case 'cook': {const [d,k]=v.split(':'),sl=S.plan.days[+d].slots[k]; UI.sheet=null; UI.cook={rid:sl.rid,day:+d,slot:k,step:-1}; requestWake(); break}
-   case 'cnext': {const r=RBY[UI.cook.rid]; if(UI.cook.step<r.s.length-1) UI.cook.step++; else {const sl=S.plan.days[UI.cook.day].slots[UI.cook.slot]; sl.cooked=true; UI.cook.step=r.s.length} break}
+   case 'cnext': {const r=RBY[UI.cook.rid]; if(UI.cook.step<r.s.length-1) UI.cook.step++; else {completeDish(UI.cook.day,UI.cook.slot); UI.cook.step=r.s.length} break}
    case 'cprev': UI.cook.step=Math.max(-1,UI.cook.step-1); break;
    case 'cclose': UI.cook=null; releaseWake(); break;
    case 'cfb': {const id=UI.cook.rid,h=S.history; h.liked=h.liked.filter(x=>x!==id); h.disliked=h.disliked.filter(x=>x!==id); h[v].push(id); toast(v==='liked'?'Будем предлагать чаще':'Будем предлагать реже'); break}
@@ -596,7 +605,7 @@ function act(a,v,el){
    case 'altOpen': UI.sheet.open=UI.sheet.open===v?null:v; break;
    case 'doReplace': {const {day,slot}=UI.sheet,old=slotRecipe(day,slot),ch=diffFor(day,slot,v).length; S.history.replaced.push({from:old.id,to:v,reason:UI.sheet.reason}); const sl=S.plan.days[day].slots[slot]; sl.rid=v; sl.cooked=false; fixLeftovers(); UI.sheet=null; toast(`Заменено. Список покупок пересчитан: ${ch} ${plural(ch,'изменение','изменения','изменений')}`); break}
    case 'step': {const i=+v,d=UI.sheet.done; UI.sheet.done=d.includes(i)?d.filter(x=>x!==i):[...d,i]; break}
-   case 'cooked': {const sl=S.plan.days[UI.sheet.day].slots[UI.sheet.slot]; sl.cooked=!sl.cooked; if(sl.cooked) toast('Отмечено. Как вам блюдо?'); break}
+   case 'cooked': {if(completeDish(UI.sheet.day,UI.sheet.slot))toast('Отмечено. Как вам блюдо?'); break}
    case 'fb': {const id=S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid,h=S.history; h.liked=h.liked.filter(x=>x!==id); h.disliked=h.disliked.filter(x=>x!==id); h[v].push(id); toast(v==='liked'?'Будем предлагать чаще':'Будем предлагать реже'); break}
    case 'block': {const {day,slot}=UI.sheet,id=S.plan.days[day].slots[slot].rid; if(!S.history.blocked.includes(id)) S.history.blocked.push(id); UI.sheet={type:'replace',day,slot,reason:'none',open:null}; toast('Больше не предложим. Выберите замену'); break}
    case 'unblock': S.history.blocked=S.history.blocked.filter(x=>x!==v); break;

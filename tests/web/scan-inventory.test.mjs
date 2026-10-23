@@ -18,3 +18,15 @@ test('invalid additions or excessive aggregate stock fail atomically',()=>{
  const original=[{key:'eggs',qty:1e9}];assert.throws(()=>scan.add(original,[{key:'rice',qty:500},{key:'eggs',qty:1}]));assert.equal(original.length,1);
  assert.throws(()=>scan.add([],[{key:'milk',qty:NaN}]));
 });
+test('cooking consumes summed ingredients across stock entries and preserves remaining metadata',()=>{
+ const pantry=[{key:'milk',qty:100.1,src:'list'},{key:'milk',qty:200.2,src:'left8',plan:'current'},{key:'eggs',qty:3},{key:'rice',qty:500}];
+ const result=scan.consume(pantry,[{key:'milk',qty:100.1},{key:'milk',qty:50.2},{key:'eggs',qty:1.5}]);
+ assert.deepEqual(plain(result),[{key:'milk',qty:150,src:'left8',plan:'current'},{key:'eggs',qty:1.5},{key:'rice',qty:500}]);assert.equal(pantry[0].qty,100.1);
+});
+test('cooking clamps missing stock at zero and never creates absent ingredients',()=>{
+ assert.deepEqual(plain(scan.consume([{key:'milk',qty:100}],[{key:'milk',qty:300},{key:'eggs',qty:2}])),[]);
+ assert.deepEqual(plain(scan.consume([{key:'milk',qty:0.3}],[{key:'milk',qty:0.1},{key:'milk',qty:0.2}])),[]);
+});
+test('invalid recipe amounts fail before changing any inventory',()=>{
+ const original=[{key:'milk',qty:100}];assert.throws(()=>scan.consume(original,[{key:'milk',qty:50},{key:'eggs',qty:NaN}]));assert.equal(original[0].qty,100);
+});

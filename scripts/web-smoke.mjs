@@ -181,7 +181,18 @@ try {
  await click('#layer [data-act="cook"]');await wait('!!UI.cook && !UI.sheet','Preview starts the full cooking flow');
  const timed=await evaluate('RBY[UI.cook.rid].s.findIndex(t=>stepDur(t)>0)');
  if(timed>=0){await evaluate(`(()=>{for(let i=-1;i<${timed};i++)act('cnext')})()`);await click('#cooklayer [data-act="tgo"]');assert.ok(await evaluate('Object.values(TIMERS).some(t=>t.running)'),'Timers still run in the cooking flow');await click('#cooklayer [data-act="treset"]');}
+ await evaluate(`(()=>{const sl=S.plan.days[UI.cook.day].slots[UI.cook.slot],r=RBY[sl.rid];window.pantryBeforeCooking8=structuredClone(S.pantry);window.cookedSlot8={day:UI.cook.day,slot:UI.cook.slot};const needed=new Map();for(const [key,q] of r.i)needed.set(key,(needed.get(key)||0)+q*sl.serv/4);S.pantry=S.pantry.filter(p=>!needed.has(p.key));for(const [key,qty] of needed)S.pantry.push({key,qty:Math.round(qty*1000)/1000+123});S.hfSig8=pantrySig8();window.cookingExpected8=[...needed.keys()].map(key=>({key,qty:123}));})()`);
  await evaluate(`(()=>{const n=RBY[UI.cook.rid].s.length;while(UI.cook.step<n)act('cnext')})()`);
+ assert.ok(await evaluate(`window.cookingExpected8.every(p=>S.pantry.filter(x=>x.key===p.key).reduce((n,x)=>n+x.qty,0)===p.qty)`),'Cooking subtracts actual family recipe quantities from stock');
+ const spentStock=await evaluate('JSON.stringify(S.pantry)');await evaluate(`act('cnext');act('cprev');act('cnext')`);assert.equal(await evaluate('JSON.stringify(S.pantry)'),spentStock,'Repeated completion does not consume ingredients twice');
+ await wait('!window.FamilyMenuBridge.pending','Cooking stock did not finish saving');
+ for(const item of await evaluate('window.cookingExpected8'))assert.equal(stocks.get('a').items.find(i=>i.ingredientId===item.key)?.quantity,item.qty,'Spent inventory is saved');
+ const completed=await evaluate('window.cookedSlot8');assert.equal(documents.get('a').menu.days[completed.day].slots.find(x=>x.meal===completed.slot).cooked,true,'Completion is persisted');
+ const originalPantryBeforeCooking=await evaluate('window.pantryBeforeCooking8'),finishedCooking=await evaluate('UI.cook');
+ await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Completed cooking did not reload');
+ assert.ok(await evaluate(`(()=>{const before=JSON.stringify(S.pantry);return S.plan.days[${completed.day}].slots[${JSON.stringify(completed.slot)}].cooked&&!completeDish(${completed.day},${JSON.stringify(completed.slot)})&&before===JSON.stringify(S.pantry)})()`),'Reloaded completion does not spend stock again');
+ await evaluate(`S.pantry=${JSON.stringify(originalPantryBeforeCooking)};S.hfSig8=pantrySig8();UI.cook=${JSON.stringify(finishedCooking)};save();render()`);
+
  await wait('cookedTotal8()===1','Cooking completion still marks the dish');assert.ok(await evaluate(`!!document.querySelector('#cooklayer [data-act="cfb"]')`),'Rating remains in full cooking mode');
  await click('#cooklayer [data-act="cclose"]');await click('.cooked8');await wait(`S.tab==='diary' && !!document.querySelector('#hscroll8 .wday8.sel8 .cookdot8') && !document.querySelector('.mchart8')`,'Diary: scrollable days with today cooked');assert.ok(await evaluate(has('Норма калорийности по дням')));assert.ok(await evaluate(has('Сегодня: ')+' && '+has('Миффлина')+' && !document.querySelector(\'[data-act="board8"]\')'),'Diary: family calories today, no tournament');
  assert.ok(await evaluate('!!document.querySelector(".donuts8") && !/В этот день ничего не отмечено|Калорий за этот день нет/.test(document.body.innerText)'),'Diary: macros instead of the day details');
@@ -296,6 +307,7 @@ try {
  assert.equal(stocks.get('a').items.find(p=>p.ingredientId==='cucumber').quantity,await evaluate('window.cucumberBeforeScan8+350'));
  const scannedStock=await evaluate(`JSON.stringify(S.pantry.filter(p=>['eggs','cucumber'].includes(p.key)).map(p=>({key:p.key,qty:p.qty})).sort((a,b)=>a.key.localeCompare(b.key)))`);
  await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Scanned stock reload failed');assert.equal(await evaluate(`JSON.stringify(S.pantry.filter(p=>['eggs','cucumber'].includes(p.key)).map(p=>({key:p.key,qty:p.qty})).sort((a,b)=>a.key.localeCompare(b.key)))`),scannedStock,'Saved sums survive a real reload');
+
 
  for(let n=0;n<100 && !stocks.get('a').items.some(i=>i.ingredientId==='cucumber');n++)await delay(100);
  assert.ok(['eggs','cucumber','potato'].every(k=>stocks.get('a').items.some(i=>i.ingredientId===k)),'Recognized products saved');await shot('07-home');

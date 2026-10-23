@@ -37,5 +37,18 @@
     }
     return result;
   }
-  window.FamilyMenuScanInventory={quantity,parseAmount,add};
+  function consume(pantry,ingredients){
+    const needed=new Map();
+    for(const {key,qty} of ingredients){
+      if(typeof key!=='string'||!Number.isFinite(qty)||qty<0)throw Error('Не удалось определить количество ингредиентов блюда.');
+      needed.set(key,(needed.get(key)||0)+qty);
+    }
+    for(const [key,qty] of needed)needed.set(key,Math.round(qty*1000));
+    return pantry.map(item=>{
+      const available=Math.max(0,Math.round(Number(item.qty||0)*1000)),used=Math.min(available,needed.get(item.key)||0);
+      needed.set(item.key,Math.max(0,(needed.get(item.key)||0)-used));
+      return {...item,qty:(available-used)/1000};
+    }).filter(item=>item.qty>0);
+  }
+  window.FamilyMenuScanInventory={quantity,parseAmount,add,consume};
 })();
