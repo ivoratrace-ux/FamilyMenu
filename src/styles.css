@@ -445,3 +445,10 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .card.fam8{flex-direction:row;align-items:center;text-align:left;cursor:pointer}
 .fam8>.grow{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
 .fam8 .avatar{flex:none}
+
+/* ===== v8.9 ===== */
+.kcal8{gap:6px !important;padding-top:12px;padding-bottom:12px}
+.kcal8 .kmem8{padding:5px 10px;gap:3px;border-radius:10px}
+.kcal8 .kbar{height:6px}
+.kcal8 .kbar>b{top:-2px;height:10px}
+.kcal8 h3{font-size:16px}
