@@ -61,6 +61,10 @@ try {
     cartCalls++;assert.ok(data.items.length>0);assert.ok(data.items.every(i=>catalog.ingredients.some(c=>c.id===i.ingredientId) && i.quantity>0));
     await respond(cartCalls===1?{error:'ВкусВилл отклонил подключение'}:{store:'vkusvill',carts:[{url:'https://vkusvill.ru/mobile?basket&share=1001',productCount:data.items.length}],ingredientCount:data.items.length},cartCalls===1?502:200);return;
    }
+   if(path==='/api/stores/lavka/cart'){
+    assert.ok(data.items.length>0);assert.deepEqual(data.location,[37.615,55.757]);
+    await respond({store:'lavka',carts:[{url:'https://lavka.yandex.ru/cart?sharedCartId=fcff2c28-0215-4691-89b5-cf7619580282&countryCode=RU',productCount:data.items.length}]});return;
+   }
    if(path==='/api/ingredients'){searchCalls++;const q=url.searchParams.get('q');assert.ok(q.length>=3);await respond({ingredients:catalog.ingredients.filter(i=>i.name.toLowerCase().includes(q.toLowerCase())).map(({id,name,unit})=>({id,name,unit}))});return;}
    if(path==='/api/user-state'){
     let document=documents.get(owner) || {revision:0,preferences:null,menu:null};
@@ -154,7 +158,15 @@ try {
  assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").textContent'),'Добавить в корзину');
  await click('.pricecard');await wait(has('Автосборка корзины'),'Auto cart opens during the 7 free days');
  await wait(has('Утвердить меню'),'Auto cart needs an approved menu');await click('[data-act="approve8"]');
- await click('[data-act="store"][data-v="lavka"]');await click('[data-act="cartStart"]');await wait('!!document.querySelector(\'[data-act="cartAdd"]\')','Cart missing');await click('[data-act="cartAdd"]');await click('[data-act="cartClose"]');
+ await click('[data-act="store"][data-v="lavka"]');
+ await evaluate(`Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition:success=>success({coords:{longitude:37.615,latitude:55.757}})}})`);
+ assert.ok(await evaluate('document.querySelector("#lavka-cart").textContent.includes("Beta")'),'Lavka Beta badge');
+ await click('[data-act="lavkaCart"]');await wait('!!document.querySelector("[data-store-cart-link][data-store=lavka]")','Lavka ready link missing');
+ assert.match(await evaluate('document.querySelector("[data-store-cart-link][data-store=lavka]").href'),/^https:\/\/lavka.yandex.ru\/cart\?sharedCartId=/);
+ assert.equal(await evaluate('window.cartOpenCount'),0,'Lavka generation must never open a tab');
+ assert.equal(await evaluate('JSON.stringify(S.bought)===window.boughtBeforeCart'),true,'Lavka must not mark groceries as bought');
+ assert.equal(await evaluate('!!UI.cart'),false,'No product wizard for Lavka');
+ await shot('06b-lavka-ready');
  await click('[data-act="back8"]');await wait(`S.tab==='shop'`,'Back returns to the tab it came from');
  assert.ok(await evaluate('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(\'[data-act="copy"]\')'),'Telegram share instead of copy');
  await click('[data-act="drawer"]');assert.equal(await evaluate('!!document.querySelector(".dseg") || !!document.querySelector("#theme8")'),false,'No switcher and no theme');await click('[data-act="nav8"][data-v="sub"]');await click('[data-act="subscribe8"]');

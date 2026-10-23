@@ -572,13 +572,13 @@ function autocart8(){
   if(!premium8()) return offer8('Автосборка корзины','Соберём корзину из утверждённого меню на нужную сумму и подскажем, в каком магазине дешевле.');
   if(!S.plan) return `<div class="screen"><div class="empty"><p>Сначала составьте меню.</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   if(S.plan.status==='draft') return `<div class="screen">${head8('Premium','Автосборка корзины')}<div class="card"><p class="muted">Корзина собирается из утверждённого меню.</p><button class="btn block" data-act="approve8">Утвердить меню</button></div></div>`;
-  const vv=basketBy('vv'),lv=basketBy('lavka'),best=lv<vv?'lavka':'vv',st=S.store||'vv',sum=st==='lavka'?lv:vv,b=S.profile.budget,left=shopping().items.filter(i=>!i.covered&&!i.bought).length;
+  const vv=basketBy('vv'),lv=basketBy('lavka'),best=lv<vv?'lavka':'vv',st=S.store||'vv',sum=st==='lavka'?lv:vv,b=S.profile.budget;
   return `<div class="screen">${head8('Premium','Автосборка корзины')}
    <div class="card"><label class="field" for="budget">Бюджет на эту корзину<b id="budgetv" style="color:var(--fg);font-size:20px;font-variant-numeric:tabular-nums">${rub(b)}</b></label>
     <input type="range" id="budget" min="1000" max="30000" step="500" value="${b}" data-act="budget" aria-label="Бюджет"></div>
-   <div class="card"><h3>Где купить</h3><div class="compare"><button class="${st==='vv'?'win':''}" data-act="store" data-v="vv"><span class="small muted">ВкусВилл</span><b>${rub(vv)}</b>${best==='vv'?'<span class="pill">дешевле</span>':''}</button><button class="${st==='lavka'?'win':''}" data-act="store" data-v="lavka"><span class="small muted">Яндекс Лавка</span><b>${rub(lv)}</b>${best==='lavka'?'<span class="pill">дешевле</span>':''}</button></div></div>
+   <div class="card"><h3>Где купить</h3><div class="compare"><button class="${st==='vv'?'win':''}" data-act="store" data-v="vv"><span class="small muted">ВкусВилл</span><b>${rub(vv)}</b>${best==='vv'?'<span class="pill">дешевле</span>':''}</button><button class="${st==='lavka'?'win':''}" data-act="store" data-v="lavka"><span class="small muted">Яндекс Лавка · Beta</span><b>${rub(lv)}</b>${best==='lavka'?'<span class="pill">дешевле</span>':''}</button></div></div>
    ${sum>b?`<div class="note"><b>!</b><span>Не укладываемся: ≈${rub(sum)} из ${rub(b)}. Замените самые дорогие блюда или увеличьте бюджет.</span></div>`:`<p class="small muted">Укладываемся: ≈${rub(sum)} из ${rub(b)}.</p>`}
-   ${st==='vv'?(window.FamilyMenuStores?.card() || ''):`<button class="btn block" data-act="cartStart" ${left?'':'disabled'}>${IC.cart} Собрать корзину в ${STORES[st]} · ${left} ${plural(left,'продукт','продукта','продуктов')}</button>`}</div>`;
+   ${window.FamilyMenuStores?.card(st==='lavka'?'lavka':'vkusvill') || ''}</div>`;
 }
 const SCR8={rec8:rec8,today:scrToday8,menu:()=>scrMenu8(false),shop:scrShop8,home:scrHome8,pFamily:pFamily8,pFood:pFood8,pRecipes:pRecipes8,pRecipe:pRecipe8,pDays:pDays8,
   autocart:autocart8,promo:()=>premium8()?`${trialOn8()?`<div class="trialbar8">${premiumNote8()}</div>`:''}`+scrPromo():offer8('Акции и сравнение цен','Каждую неделю — скидки ВкусВилла и Лавки на продукты из вашего меню и сравнение корзины.'),
