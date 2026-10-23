@@ -594,6 +594,15 @@ function board8(){
 /* Menu as in v4: day cards with drag ⠿, calories for today and per day; no prices here (they live in «Покупки»). */
 function range8(a,b){const sameM=a.getMonth()===b.getMonth();return a.getTime()===b.getTime()?`${a.getDate()} ${MON[a.getMonth()]}`:sameM?`${a.getDate()} – ${b.getDate()} ${MON[b.getMonth()]}`:`${a.getDate()} ${MONS[a.getMonth()]} – ${b.getDate()} ${MONS[b.getMonth()]}`}
 function groups8(d){const g=[];keysOf8(d).forEach(k=>{const b=baseOf8(k),x=g.find(y=>y.b===b);x?x.keys.push(k):g.push({b,keys:[k]})});return g}
+/* Shared list row: one action, with image, text and action vertically centred. */
+function dishListRow8(di,k,{today=false,preview=false}={}){
+  nameSlot8(k);const slot=S.plan.days[di].slots[k],recipe=slotRecipe(di,k);if(!recipe)return '';
+  const ref=srcRef(di,k),eaten=!!S.eaten[eatKey(di,k)];
+  const action=slot.cooked?(preview?'':`<button class="eat" data-act="eat" data-v="${di}:${k}" aria-pressed="${eaten}">${eaten?'Съели ✓':'Съели'}</button>`):today?`<button class="btn small" data-act="cook" data-v="${ref}">Готовить</button>`:`<button class="iconbtn" data-act="replace" data-v="${di}:${k}" aria-label="Заменить блюдо">${IC.replace}</button>`;
+  const handle=!today&&!preview&&!slot.left?`<button class="drag" data-drag="${di}:${k}" aria-label="Перетащить блюдо" title="Перетащите в другой приём пищи или день">⠿</button>`:'';
+  const content=`<span class="dish">${esc(recipe.n)}</span><span class="meta meta8">${buyTag8(recipe,true)}<span>${recipe.t} мин</span><span>${Math.round(recipe.kcal*slot.serv/portions())} ккал</span></span>`;
+  return `<div class="menu-slot8 slot ${slot.cooked?'cooked':''}" data-slot="${di}:${k}" ${slot.left?'data-left="1"':''}>${handle}<div class="thumb">${dishArt(recipe)}</div>${preview?`<div class="open">${content}</div>`:`<button class="open" data-act="recipe" data-v="${ref}">${content}</button>`}<div class="dishrowaction8">${action}</div></div>`;
+}
 function scrToday8(){
   if(S.plan&&S.plan.status!=='approved')return `<div class="screen"><h1 class="range8">Сегодня</h1><div class="empty"><h2>Утвердите меню</h2><p class="muted">Проверьте блюда во вкладке «Меню» и утвердите план, чтобы начать готовить.</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   const ti=todayIdx();
@@ -602,11 +611,9 @@ function scrToday8(){
   const action=(k,hero)=>{const s=d.slots[k],eaten=!!S.eaten[eatKey(ti,k)];
     return s.cooked?`<button class="eat" ${hero?'style="background:transparent;color:inherit;border-color:currentColor"':''} data-act="eat" data-v="${ti}:${k}" aria-pressed="${eaten}">${eaten?'Съели ✓':'Съели'}</button>`
       :`<button class="btn small ${hero?'herobtn8':''}" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
-  const row=k=>{nameSlot8(k); const r=slotRecipe(ti,k),s=d.slots[k]; if(!r) return '';
-    return `<div class="menu-slot8 slot ${s.cooked?'cooked':''}" data-slot="${ti}:${k}"><div class="thumb">${dishArt(r)}</div>
-     <div class="menucontent8"><div class="menustatus8">${action(k)}</div><button class="open" data-act="recipe" data-v="${srcRef(ti,k)}">${kindLabel8(k)?`<span class="small muted">${esc(kindLabel8(k))}</span>`:''}<span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}<span>${r.t} мин</span><span>${Math.round(r.kcal*s.serv/portions())} ккал</span></span></button></div></div>`};
+  const row=k=>dishListRow8(ti,k,{today:true});
   nameSlot8(mk); const hr=slotRecipe(ti,mk),hs=d.slots[mk];
-  const hero=hr?`<div class="hero hero8"><button class="heroimg" data-act="recipe" data-v="${srcRef(ti,mk)}" aria-label="Рецепт: ${esc(hr.n)}">${dishArt(hr)}</button><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}${hs.cooked?' · приготовлено':''}</p><p class="dish">${esc(hr.n)}</p>
+  const hero=hr?`<div class="hero hero8"><button class="heroimg" data-act="recipe" data-v="${srcRef(ti,mk)}" aria-label="Рецепт: ${esc(hr.n)}">${dishArt(hr)}</button><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}</p><p class="dish">${esc(hr.n)}</p>
      <div class="meta">${missing8(hr)?buyTag8(hr):''}<span>${hr.t} мин</span><span>${Math.round(hr.kcal*hs.serv/portions())} ккал</span></div>
      <div class="heroactions8">${action(mk,true)}</div></div>`:'';
   const groups=groups8(d).map(g=>({...g,keys:g.keys.filter(k=>k!==mk)})).filter(g=>g.keys.length);
@@ -718,14 +725,7 @@ function scrMenu8(preview){
   const vis=visibleDays();
   if(!vis.length) return `<div class="screen"><div class="empty"><h2>Меню ещё нет</h2><p>Составим по вашим ответам: цель, тип питания, ограничения и продукты дома.</p><button class="btn" data-act="regen">Составить меню</button></div></div>`;
   const ti=todayIdx(),d0=new Date(vis[0][0].date),dn=new Date(vis[vis.length-1][0].date);
-  const eatBtn=(di,k)=>`<button class="eat" data-act="eat" data-v="${di}:${k}" aria-pressed="${!!S.eaten[eatKey(di,k)]}">${S.eaten[eatKey(di,k)]?'Съели ✓':'Съели'}</button>`;
-  const row=(di,k)=>{nameSlot8(k);let h=slotRow(di,k,!!preview).replace(partTag8(),'').replace(' ккал в среднем',' ккал');
-    if(preview)h=h.replace(/<button class="eat"[^>]*>[^<]*<\/button>/,`<button class="iconbtn" data-act="replace" data-v="${di}:${k}" aria-label="Заменить блюдо">${IC.replace}</button>`);
-    const slot=S.plan.days[di].slots[k],status=!preview&&di===ti&&slot?.cooked?`<div class="menustatus8">${eatBtn(di,k)}</div>`:'';
-    if(slot?.cooked)h=h.replace(/<button class="iconbtn" data-act="replace"[^>]*>[\s\S]*?<\/button>/g,'');
-    h=h.replace('class="slot','class="menu-slot8 slot').replace(/(<button class="open"[\s\S]*?<\/button>)/,`<div class="menucontent8">${status}$1</div>`);
-    return preview?h.replace(/<button class="open"[^>]*>([\s\S]*?)<\/button>/g,'<div class="open">$1</div>'):h;
-  };
+  const row=(di,k)=>dishListRow8(di,k,{preview:!!preview});
   return `<div class="screen${preview?' preview8':''}">
    ${preview?'<div class="note"><b>✓</b><span>Ваше меню готово! Сохраните его — и список покупок соберётся сам.</span></div>':''}
    ${shopping().cost>budgetLimit8()+1?`<div class="note"><b>!</b><span class="grow">Для выбранной калорийности меню дороже бюджета на ≈${rub(shopping().cost-budgetLimit8())}. Увеличьте бюджет или измените блюда</span><button class="btn ghost small" data-act="cheaper8">Подобрать подешевле</button></div>`:''}

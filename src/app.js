@@ -320,7 +320,7 @@ function slotRow(di,sk,compact){
   const eatBtn=compact?`<button class="eat" data-act="eat" data-v="${di}:${sk}" aria-pressed="${!!S.eaten[eatKey(di,sk)]}">${S.eaten[eatKey(di,sk)]?'Съели ✓':'Съели'}</button>`:'';
   if(s.left) return `<div class="slot" data-slot="${di}:${sk}" data-left="1">${handle}<div class="thumb">${dishArt(r)}</div><button class="open" data-act="recipe" data-v="${srcRef(di,sk)}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span class="pill grey">остатки со вчера</span>${KC()?`<span>${r.kcal} ккал</span>`:''}</span></button>${eatBtn}</div>`;
   return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${di}:${sk}">${handle}<div class="thumb">${dishArt(r)}</div>
-   <button class="open" data-act="recipe" data-v="${di}:${sk}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span>${r.t} мин</span>${KC()?`<span>${r.kcal} ккал</span>`:''}<span>${portions()} ${plural(portions(),'порция','порции','порций')}</span>${s.cooked?'<span class="pill">приготовлено</span>':''}</span></button>
+   <button class="open" data-act="recipe" data-v="${di}:${sk}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span>${r.t} мин</span>${KC()?`<span>${r.kcal} ккал</span>`:''}<span>${portions()} ${plural(portions(),'порция','порции','порций')}</span></span></button>
    ${compact?eatBtn:`<button class="iconbtn" data-act="replace" data-v="${di}:${sk}" aria-label="Заменить блюдо">${IC.replace}</button>`}</div>`;
 }
 function kcalCard(ti){
