@@ -26,7 +26,7 @@ const KEY='family-menu-web-draft-v1';
 let mid=1; const newMember=(kind,name)=>({id:'m'+Date.now().toString(36)+(mid++),name,kind,sex:'',age:kind==='child'?'7':'',weight:'',height:'',act:'mid',goal:'keep',custom:'',open:false});
 const blank=()=>({
   stage:'intro', tab:'today', onbStep:0, introIdx:0, qStep:0, user:null, store:'vv',
-  profile:{members:[newMember('adult','Я'),newMember('adult','Партнёр'),newMember('child','Ребёнок')],likes:['t:kids','i:chicken_fillet'],dislikes:[],allergies:[],diet:'all',goals:[],budget:8000,budgetSet:false,kcalOn:false,city:'msk',maxTime:45,meals:{b:false,l:true,s:false,d:true,z:false,k:false},soupBatch:true,reminder:{on:true,time:'20:00'}},
+  profile:{members:[newMember('adult','Я'),newMember('adult','Партнёр')],likes:['t:kids','i:chicken_fillet'],dislikes:[],allergies:[],diet:'all',goals:[],budget:8000,budgetSet:false,kcalOn:false,city:'msk',maxTime:45,days:7,meals:{b:false,l:true,s:false,d:true,z:false,k:false},soupBatch:true,reminder:{on:true,time:'20:00'}},
   pantry:[], plan:null, bought:{}, eaten:{}, extra:{}, history:{liked:[],disliked:[],blocked:[],replaced:[]}, remShown:'',
   v4:{trialStart:null,sub:null,shift:0,ul:{},seen:{},ev:[],weeks:0}
 });

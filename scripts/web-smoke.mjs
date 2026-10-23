@@ -112,6 +112,10 @@ try {
  const potato=catalog.ingredients.find(i=>i.id==='potato');
  await click(`[data-act="cat8"][data-v="${potato.category}"]`);await click('[data-act="pt8"][data-v="potato"]');await shot('03-fridge');await click('[data-act="qNext8"]');
  await wait(has('Ещё немного деталей'),'Details step missing');
+ assert.deepEqual(await evaluate(`[...document.querySelectorAll('.bigcount .stepper span')].map(e=>e.textContent)`),['7','2'],'Onboarding defaults: 7 days and 2 people');
+ // Exercise the remaining regression scenarios with the existing three-day family fixture.
+ await evaluate(`S.profile.days=3;S.profile.members.push(newMember('child','Ребёнок'));render()`);
+
  assert.equal(await evaluate('!!document.querySelector("#kind_l")'),false,'Meal kinds live in settings');await click('[data-act="persons8"][data-v="1"]');assert.equal(await evaluate('S.profile.members.length'),4);
  await click('[data-act="days8"][data-v="1"]');await wait('S.profile.days===4','Days counter');await click('[data-act="days8"][data-v="-1"]');
  await click('[data-act="qNext8"]');await wait(has('Неделя и бюджет'),'Budget step missing');await fill('#budget','12000');assert.equal(await evaluate('S.profile.budget'),12000);

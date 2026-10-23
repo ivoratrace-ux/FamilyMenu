@@ -22,7 +22,7 @@ function P8(){
   if(!p.mealSetup) p.mealSetup={b:p.meals&&p.meals.b?'breakfast':'none',l:p.meals&&p.meals.l===false?'none':'soup',s:'none',d:p.meals&&p.meals.d===false?'none':'pair'};
   // Since v8.4 every meal holds a list of kinds (several dishes per meal).
   for(const k of ['b','l','s','d']){const v=p.mealSetup[k]; if(!Array.isArray(v)) p.mealSetup[k]=!v||v==='none'?[]:[v]; p.mealSetup[k]=[...new Set(p.mealSetup[k].map(x=>x==='dish'?'pair':x))].filter(x=>KOPT8[k].includes(x))}
-  if(!(p.days>=1&&p.days<=7)) p.days=3;
+  if(!(p.days>=1&&p.days<=7)) p.days=7;
   if(!Array.isArray(S.myRecipes)) S.myRecipes=[];
   if(!S.ans) S.ans={};
   p.soupBatch=false; p.kcalOn=true;
@@ -968,7 +968,7 @@ function v8Act(a,v,el){
    case 'tpill8': openTimer8(v); return true;
    case 'swipeDel8': {const [d,k]=v.split(':'),day=S.plan.days[+d]; if(day&&day.slots[k]){const r=slotRecipe(+d,k); UI.undo8={d:+d,k,slot:day.slots[k]}; delete day.slots[k]; toast(`Убрали «${r?r.n:'блюдо'}» из меню`)} return true}
    case 'resetAll8': if(!UI.resetAsk8){UI.resetAsk8=true; setTimeout(()=>{UI.resetAsk8=false},4000); return true}
-     UI.resetAsk8=false; {const b=blank(); S.profile={...b.profile,members:S.profile.members.map(m=>({...m,custom:''}))}; S.profile.mealSetup={b:['breakfast'],l:['soup'],s:[],d:['pair']}; S.profile.days=3; S.profile.kcalOn=true; S.store='vv'; S.theme='system'; S.history.blocked=[]; S.ans={}}
+     UI.resetAsk8=false; {const b=blank(); S.profile={...b.profile,members:S.profile.members.map(m=>({...m,custom:''}))}; S.profile.mealSetup={b:['breakfast'],l:['soup'],s:[],d:['pair']}; S.profile.days=7; S.profile.kcalOn=true; S.store='vv'; S.theme='system'; S.history.blocked=[]; S.ans={}}
      toast('Настройки сброшены. Меню пересоберётся с настройками по умолчанию'); return true;
    case 'extrasSeen8': V().seen.extras8=1; return true;
    case 'extrasGo8': V().seen.extras8=1; S.tab='pDays'; UI.fromDrawer8=false; window.scrollTo(0,0); return true;
