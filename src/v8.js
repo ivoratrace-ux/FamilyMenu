@@ -182,7 +182,7 @@ function buildHome8(){
   const ps=Object.keys(HP8).filter(inPantry8),bs=Object.keys(HB8).filter(inPantry8),ss=Object.keys(HS8).filter(inPantry8),vs=Object.keys(HV8).filter(k=>inPantry8(k)&&k!=='onion');
   const out=[]; ps.forEach((p,pi)=>bs.forEach((b,bi)=>{const r=homeRecipe8(p,b,ss.length?ss[(pi+bi)%ss.length]:null,vs.length?vs[(pi+bi)%vs.length]:null); if(r) out.push(r)})); return out.slice(0,16);
 }
-const KCAL8=()=>!S.profile.noKcal8;
+const KCAL8=()=>!!S.profile.kcalOn8; // v8.15.1: calories are off until the person turns them on
 const pantrySig8=()=>S.pantry.filter(x=>(+x.qty||0)>0).map(x=>x.key).sort().join(',');
 function homeFit8(){
   if(!S.plan) return 0; buildHome8();
@@ -976,7 +976,7 @@ function v8Act(a,v,el){
    case 'tgd8': p.tgDinner8=!!el.checked; return true;
    case 'tgmT8': p.tgMorningT8=v; return true;
    case 'tgdT8': p.tgDinnerT8=v; return true;
-   case 'kcal8': p.noKcal8=!el.checked; track('calories_switch',{on:!p.noKcal8}); return true;
+   case 'kcal8': p.kcalOn8=!!el.checked; track('calories_switch',{on:p.kcalOn8}); return true;
    case 'approve': if(!S.plan) return false; S.plan.status='approved'; S.tab='shop'; UI.sheet=null; track('menu_approved'); toast('Меню утверждено, список покупок готов'); setTimeout(()=>window.scrollTo(0,0),0); return true;
    case 'ksel8': {const [t,id]=[v.slice(0,1),v.slice(2)]; UI.ksel8={t,id}; UI.kq8=t==='r'?RBY[id].n:ING[id][0].replace(/\s*\(.*?\)/,''); setTimeout(()=>{const q=document.getElementById('kqty8'); if(q) q.focus()},0); return true}
    case 'kadd8': {if(!UI.ksel8){const f=eatFind8(UI.kq8||'')[0]; if(!f){toast('Начните вводить и выберите продукт из списка'); return true} UI.ksel8={t:f.t,id:f.id}} const x=UI.ksel8; UI.ksel8=null; return v8Act('kpick8',x.t+':'+x.id,el)}
