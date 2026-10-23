@@ -595,6 +595,7 @@ function board8(){
 function range8(a,b){const sameM=a.getMonth()===b.getMonth();return a.getTime()===b.getTime()?`${a.getDate()} ${MON[a.getMonth()]}`:sameM?`${a.getDate()} – ${b.getDate()} ${MON[b.getMonth()]}`:`${a.getDate()} ${MONS[a.getMonth()]} – ${b.getDate()} ${MONS[b.getMonth()]}`}
 function groups8(d){const g=[];keysOf8(d).forEach(k=>{const b=baseOf8(k),x=g.find(y=>y.b===b);x?x.keys.push(k):g.push({b,keys:[k]})});return g}
 function scrToday8(){
+  if(S.plan&&S.plan.status!=='approved')return `<div class="screen"><h1 class="range8">Сегодня</h1><div class="empty"><h2>Утвердите меню</h2><p class="muted">Проверьте блюда во вкладке «Меню» и утвердите план, чтобы начать готовить.</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   const ti=todayIdx();
   if(!S.plan||ti<0||!Object.keys(S.plan.days[ti].slots).length) return `<div class="screen"><h1 class="range8">Сегодня</h1><div class="empty"><p>${S.plan?'На сегодня в меню блюд нет.':'Меню ещё нет.'}</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   const d=S.plan.days[ti],date=new Date(d.date),mk=nextSlotKey(ti),nextB=baseOf8(mk);
@@ -602,12 +603,12 @@ function scrToday8(){
     return s.cooked?`<button class="eat" ${hero?'style="background:transparent;color:inherit;border-color:currentColor"':''} data-act="eat" data-v="${ti}:${k}" aria-pressed="${eaten}">${eaten?'Съели ✓':'Съели'}</button>`
       :`<button class="btn small ${hero?'herobtn8':''}" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
   const row=k=>{nameSlot8(k); const r=slotRecipe(ti,k),s=d.slots[k]; if(!r) return '';
-    return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${ti}:${k}"><div class="thumb">${dishArt(r)}</div>
-     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}">${kindLabel8(k)?`<span class="small muted">${esc(kindLabel8(k))}</span>`:''}<span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}${partTag8(d,k)}<span>${r.t} мин</span><span>${Math.round(r.kcal*s.serv/portions())} ккал в среднем</span></span></button>${action(k)}</div>`};
+    return `<div class="menu-slot8 slot ${s.cooked?'cooked':''}" data-slot="${ti}:${k}"><div class="thumb">${dishArt(r)}</div>
+     <div class="menucontent8"><div class="menustatus8">${action(k)}</div><button class="open" data-act="recipe" data-v="${srcRef(ti,k)}">${kindLabel8(k)?`<span class="small muted">${esc(kindLabel8(k))}</span>`:''}<span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}<span>${r.t} мин</span><span>${Math.round(r.kcal*s.serv/portions())} ккал</span></span></button></div></div>`};
   nameSlot8(mk); const hr=slotRecipe(ti,mk),hs=d.slots[mk];
   const hero=hr?`<div class="hero hero8"><button class="heroimg" data-act="recipe" data-v="${srcRef(ti,mk)}" aria-label="Рецепт: ${esc(hr.n)}">${dishArt(hr)}</button><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}${hs.cooked?' · приготовлено':''}</p><p class="dish">${esc(hr.n)}</p>
-     <div class="meta">${missing8(hr)?buyTag8(hr):''}${partTag8(d,mk)}<span>${hr.t} мин</span><span>${Math.round(hr.kcal*hs.serv/portions())} ккал в среднем</span></div>
-     <div class="row">${action(mk,true)}</div></div>`:'';
+     <div class="meta">${missing8(hr)?buyTag8(hr):''}<span>${hr.t} мин</span><span>${Math.round(hr.kcal*hs.serv/portions())} ккал</span></div>
+     <div class="heroactions8">${action(mk,true)}</div></div>`:'';
   const groups=groups8(d).map(g=>({...g,keys:g.keys.filter(k=>k!==mk)})).filter(g=>g.keys.length);
   return `<div class="screen"><h1 class="range8" style="text-transform:capitalize">${DOWL[date.getDay()]}, ${date.getDate()} ${MON[date.getMonth()]}</h1>
    ${ateForm8(ti)}
@@ -721,6 +722,7 @@ function scrMenu8(preview){
   const row=(di,k)=>{nameSlot8(k);let h=slotRow(di,k,!!preview).replace(partTag8(),'').replace(' ккал в среднем',' ккал');
     if(preview)h=h.replace(/<button class="eat"[^>]*>[^<]*<\/button>/,`<button class="iconbtn" data-act="replace" data-v="${di}:${k}" aria-label="Заменить блюдо">${IC.replace}</button>`);
     const slot=S.plan.days[di].slots[k],status=!preview&&di===ti&&slot?.cooked?`<div class="menustatus8">${eatBtn(di,k)}</div>`:'';
+    if(slot?.cooked)h=h.replace(/<button class="iconbtn" data-act="replace"[^>]*>[\s\S]*?<\/button>/g,'');
     h=h.replace('class="slot','class="menu-slot8 slot').replace(/(<button class="open"[\s\S]*?<\/button>)/,`<div class="menucontent8">${status}$1</div>`);
     return preview?h.replace(/<button class="open"[^>]*>([\s\S]*?)<\/button>/g,'<div class="open">$1</div>'):h;
   };
@@ -946,9 +948,10 @@ function v8Act(a,v,el){
    case 'bought': {if(!S.plan) return false; const it=shopping().items.find(i=>i.k===v); S.bought[v]=!S.bought[v];
      S.pantry=S.pantry.filter(x=>!(x.key===v&&x.src==='left8'&&x.plan===S.plan.created));
      if(S.bought[v]&&it&&it.left>=1){S.pantry.push({key:v,qty:Math.round(it.left),src:'left8',plan:S.plan.created}); toast(`Остаток ${fmtQty(v,it.left)} добавили в «Дома»`)} return true}
-   case 'doReplace': {const sh=UI.sheet;if(!sh||sh.type!=='replace')return true;
+   case 'doReplace': {const sh=UI.sheet;if(!sh||sh.type!=='replace')return true;if(S.plan.days[sh.day].slots[sh.slot].cooked){toast('Приготовленное блюдо нельзя заменить');return true}
      if(!replacementPool8(sh.day,sh.slot).some(r=>r.id===v)){toast('Выберите замену из той же категории');return true}return false}
-   case 'side8': {const sh=UI.sheet; if(!sh||sh.type!=='replace') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid],mm=cur&&/^c_(.+)_(g\d+)$/.exec(cur.id); if(!mm||!RBY[v]) return true;
+   case 'cook': if(S.plan?.status!=='approved'){UI.sheet=null;S.tab='menu';toast('Сначала утвердите меню');return true}return false;
+   case 'side8': {const sh=UI.sheet; if(!sh||sh.type!=='replace') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid],mm=cur&&!sl.cooked&&/^c_(.+)_(g\d+)$/.exec(cur.id); if(!mm||!RBY[v]) return true;
      sl.rid=comboOf(RBY[mm[1]],RBY[v]).id; UI.sheet=null; toast('Гарнир заменён'); return true}
    case 'ingDrop8': case 'ingAdd8': case 'ingReset8': case 'iq8': {const sh=UI.sheet; if(!sh||sh.type!=='recipe') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid]; if(!cur||sl.left) return true;
      const baseId=cur.base8||cur.id;

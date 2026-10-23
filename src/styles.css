@@ -501,3 +501,6 @@ input.pqtyinput8{width:100%;appearance:textfield;-moz-appearance:textfield}
 .menu-slot8 .menustatus8{display:flex;justify-content:flex-end}
 .menu-slot8 .open{width:100%}
 .menu-slot8 .meta8{flex-wrap:wrap !important;white-space:normal;overflow:visible;row-gap:4px !important}
+
+.heroactions8{display:flex;align-items:center;justify-content:flex-start}
+.heroactions8 .eat,.menustatus8 .eat{min-height:32px;flex:none;align-self:center;padding:6px 14px;line-height:18px}
