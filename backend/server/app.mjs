@@ -24,7 +24,7 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
 }
 
-export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, buildStoreCart = buildVkusvillCart, storeHealth = createVkusvillHealth(), hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
+export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, buildStoreCart = buildVkusvillCart, storeHealth = createVkusvillHealth(), lavkaResearch, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
   const storeCartRouter=createStoreCartRouter({catalog,apiKey,build:buildStoreCart,hourlyLimit});
   const userStateRouter=createUserStateRouter(userState);
   const inventoryRouter = createInventoryRouter({inventory,catalog});
@@ -37,6 +37,10 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
     };
     const path = new URL(req.url, 'http://localhost').pathname;
+    if(path==='/health/lavka-research' && lavkaResearch){
+      if(req.method!=='GET')return send(405,{error:'Method not supported'});
+      return send(lavkaResearch.status==='pending'?202:lavkaResearch.status==='ok'?200:503,lavkaResearch);
+    }
     if (path === '/health/vkusvill' || path === '/api/stores/vkusvill/cart' || path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
       const origin = req.headers.origin;
       if (origin && !allowedOrigins.includes(origin) && origin !== `http://${req.headers.host}` && origin !== `https://${req.headers.host}`) return send(403, { error: 'Этот сайт не подключён к API.' });
