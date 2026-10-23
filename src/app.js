@@ -69,6 +69,7 @@ function portions(){return Math.max(1,S.profile.members.length)}
 function cookingScale(){return Math.round(S.profile.members.reduce((s,m)=>s+pfactor(m),0)*10000)/10000}
 function fmtQty(k,q,buy){
   const u=ING[k][2];
+  if(buy&&['g','ml'].includes(u)){const amount=Math.ceil(q-1e-9);return amount>=1000?(amount/1000).toLocaleString('ru-RU',{maximumFractionDigits:3})+(u==='g'?' кг':' л'):amount+(u==='g'?' г':' мл')}
   if(u==='g'){ if(q>=1000) return dec(q/1000)+' кг'; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+' г'}
   if(u==='ml'){ if(q>=1000) return dec(q/1000)+' л'; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+' мл'}
   let v= buy? Math.ceil(q-0.001) : Math.round(q*2)/2; if(v===0) v=0.5;
@@ -178,8 +179,9 @@ function shopping(){
   if(!S.plan) return {items:[],spices:[],cost:0};
   const {m,spices}=needMap(S.plan),items=[];
   Object.entries(m).forEach(([k,v])=>{
-    const pq=pantryQty(k),toBuy=Math.max(0,v.qty-pq),u=ING[k][2],buyQ=(u==='g'||u==='ml')?toBuy:Math.ceil(toBuy-0.001);
-    items.push({k,name:ING[k][0],cat:ING[k][1],need:v.qty,pq,toBuy:buyQ,dishes:[...v.dishes],covered:toBuy<=0.0001,bought:!!S.bought[k],cost:buyQ*price(k)});
+    // Match inventory precision; buy whole grams/ml/items, never floating-point remnants.
+    const pq=pantryQty(k),missing=Math.max(0,Math.round(v.qty*1000)-Math.round(pq*1000)),buyQ=Math.ceil(missing/1000);
+    items.push({k,name:ING[k][0],cat:ING[k][1],need:v.qty,pq,toBuy:buyQ,dishes:[...v.dishes],covered:missing===0,bought:!!S.bought[k],cost:buyQ*price(k)});
   });
   items.sort((a,b)=>CAT_ORDER.indexOf(a.cat)-CAT_ORDER.indexOf(b.cat)||a.name.localeCompare(b.name,'ru'));
   return {items,spices:[...spices].sort((a,b)=>a.localeCompare(b,'ru')),cost:items.filter(i=>!i.covered).reduce((s,i)=>s+i.cost,0)};

@@ -222,7 +222,7 @@ const PACK8={chicken_fillet:500,chicken_thigh:700,chicken_liver:500,beef:400,por
 shopping=(function(orig){return function(){
   const sh=orig(); let cost=0;
   sh.items.forEach(i=>{const pk=PACK8[i.k];
-    if(pk&&!i.covered&&i.toBuy>0&&['g','ml'].includes(ING[i.k][2])){const n=Math.ceil(i.toBuy/pk-1e-6),b=n*pk; i.packs=n; i.pack=pk; i.left=b-i.toBuy; i.toBuy=b; i.cost=b*price(i.k)}
+    if(pk&&!i.covered&&i.toBuy>0&&['g','ml'].includes(ING[i.k][2])){const n=Math.ceil(i.toBuy/pk),b=n*pk; i.packs=n; i.pack=pk; i.left=b-i.toBuy; i.toBuy=b; i.cost=b*price(i.k)}
     if(!i.covered) cost+=i.cost});
   sh.cost=cost; return sh;
 }})(shopping);
