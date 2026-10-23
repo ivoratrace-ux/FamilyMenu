@@ -569,13 +569,16 @@ const isFav8=id=>(S.fav8||[]).includes(id);
 const favBtn8=id=>`<button class="iconbtn fav8 ${isFav8(id)?'on':''}" data-act="fav8" data-v="${id}" aria-pressed="${isFav8(id)}" aria-label="${isFav8(id)?'Убрать из любимых':'В любимые'}">${isFav8(id)?'♥':'♡'}</button>`;
 sheetRecipe=(function(orig){return function(o){const s0=S.plan.days[o.day].slots[o.slot],id=s0&&s0.rid;let h=orig(o);
   const rr=slotRecipe(o.day,o.slot),own=s0&&!s0.left;
-  if(rr&&own){let n=0; h=h.replace(/<div class="ingr"><span>/g,m=>n<rr.i.length?`<div class="ingr"><button class="iconbtn xs8" data-act="ingDrop8" data-v="${rr.i[n++][0]}" aria-label="Убрать ${esc(ING[rr.i[n-1][0]][0])}">✕</button><span class="grow">`:m);
+  if(rr&&own){let n=0; const f=s0.serv/4;
+    // v8.14: every product can be crossed out or get its own amount (for the portions of this dish)
+    h=h.replace(/<div class="ingr"><span>[^<]*<\/span><span class="qty">[^<]*<\/span><\/div>/g,m=>{if(n>=rr.i.length) return m; const [k,q]=rr.i[n++],u=ING[k][2],per=u==='g'||u==='ml',v=per?Math.round(q*f):Math.round(q*f*2)/2;
+      return `<div class="ingr"><button class="iconbtn xs8" data-act="ingDrop8" data-v="${k}" aria-label="Убрать ${esc(ING[k][0])}">✕</button><span class="grow">${esc(ING[k][0])}</span><input type="number" class="iq8" inputmode="decimal" min="0" step="${per?10:0.5}" value="${v}" data-act="iq8" data-v="${k}" aria-label="Количество: ${esc(ING[k][0])}"><span class="small muted iu8">${esc(unitLabel(k))}</span></div>`});
     const q=(UI.ia8||'').trim().toLowerCase(),found=q?Object.keys(ING).filter(k=>ING[k][0].toLowerCase().includes(q)&&!rr.i.some(([x])=>x===k)).slice(0,8):[],base=rr.base8&&RBY[rr.base8];
     const diff=base?[...base.i.filter(([k])=>!rr.i.some(([x])=>x===k)).map(([k])=>'без: '+ING[k][0].toLowerCase()),...rr.i.filter(([k])=>!base.i.some(([x])=>x===k)).map(([k])=>'+ '+ING[k][0].toLowerCase())]:[];
     h=h.replace('<p class="small muted">Количества пересчитываются вместе со списком покупок</p>',`<input type="search" id="ia8" data-act="ia8" placeholder="+ Добавить продукт, например: варенье" value="${esc(UI.ia8||'')}" autocomplete="off" aria-label="Добавить продукт в блюдо">
       ${found.length?`<div class="chips">${found.map(k=>`<button class="chip" data-act="ingAdd8" data-v="${k}">+ ${esc(ING[k][0])}</button>`).join('')}</div>`:q?'<p class="small muted">Ничего не нашли</p>':''}
       ${diff.length?`<div class="row between"><span class="small">Изменено: ${esc(diff.join(', '))}</span><button class="linkbtn small" data-act="ingReset8">Как было</button></div>`:''}
-      <p class="small muted">Уберите продукт крестиком или добавьте свой — калории и список покупок пересчитаются.</p>`)}
+      <p class="small muted">Меняйте количество, убирайте продукт крестиком или добавляйте свой — калории и список покупок пересчитаются.</p>`)}
   if(rr) h=h.replace('<div class="card"><div class="row between"><h3>Порции</h3>',buyLine8(rr)+'<div class="card"><div class="row between"><h3>Порции</h3>');
   return id?h.replace('<h1 class="dish" style="font-size:26px">',`<div class="row between" style="align-items:flex-start"><h1 class="dish grow" style="font-size:26px">`).replace(/(<h1 class="dish grow"[^>]*>[^<]*<\/h1>)/,`$1${favBtn8(id)}</div>`):h}})(sheetRecipe);
 score=(function(orig){return function(r,ctx){return orig(r,ctx)+(isFav8(r.id)?2:0)}})(score);
@@ -899,12 +902,13 @@ function v8Act(a,v,el){
      if(S.bought[v]&&it&&it.left>=1){S.pantry.push({key:v,qty:Math.round(it.left),src:'left8',plan:S.plan.created}); toast(`Остаток ${fmtQty(v,it.left)} добавили в «Дома»`)} return true}
    case 'side8': {const sh=UI.sheet; if(!sh||sh.type!=='replace') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid],mm=cur&&/^c_(.+)_(g\d+)$/.exec(cur.id); if(!mm||!RBY[v]) return true;
      sl.rid=comboOf(RBY[mm[1]],RBY[v]).id; UI.sheet=null; toast('Гарнир заменён'); return true}
-   case 'ingDrop8': case 'ingAdd8': case 'ingReset8': {const sh=UI.sheet; if(!sh||sh.type!=='recipe') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid]; if(!cur||sl.left) return true;
+   case 'ingDrop8': case 'ingAdd8': case 'ingReset8': case 'iq8': {const sh=UI.sheet; if(!sh||sh.type!=='recipe') return false; const sl=S.plan.days[sh.day].slots[sh.slot],cur=RBY[sl.rid]; if(!cur||sl.left) return true;
      const baseId=cur.base8||cur.id;
      if(a==='ingReset8'){sl.rid=baseId; return true}
      let list=cur.i.map(x=>[...x]);
+     if(a==='iq8'){const [k,val]=[v.slice(0,v.lastIndexOf(':')),+v.slice(v.lastIndexOf(':')+1)],f=sl.serv/4; if(!(val>0)){if(list.length<2) return true; list=list.filter(([x])=>x!==k)} else list=list.map(([x,q])=>x===k?[x,Math.round(val/f*1000)/1000]:[x,q])}
      if(a==='ingDrop8'){const was=list.find(([k])=>k===v); list=list.filter(([k])=>k!==v); if(!list.length){toast('В блюде должен остаться хотя бы один продукт'); return true} UI.drop8=was}
-     else {const u=ING[v][2],d=UI.drop8&&ING[UI.drop8[0]][2]===u?UI.drop8[1]:(u==='g'||u==='ml')?150:1; list.push([v,d]); UI.ia8=''; UI.drop8=null}
+     else if(a==='ingAdd8'){const u=ING[v][2],d=UI.drop8&&ING[UI.drop8[0]][2]===u?UI.drop8[1]:(u==='g'||u==='ml')?150:1; list.push([v,d]); UI.ia8=''; UI.drop8=null}
      const base=ensureBase8(baseId),same=base&&base.i.length===list.length&&base.i.every(([k,q])=>list.some(([x,y])=>x===k&&y===q));
      const r=same?base:variant8(baseId,list); if(r) sl.rid=r.id; return true}
    case 'lighter8': {const day=S.plan.days[+v],cap=KCAL_TARGET8,before=dayKcal8(day);
@@ -985,6 +989,7 @@ document.addEventListener('input',e=>{const t=e.target,a=t.dataset&&t.dataset.ac
 document.addEventListener('change',e=>{const t=e.target,a=t.dataset&&t.dataset.act; if(!a) return;
   if(a==='rk8'||a==='theme8'||a==='kwho8'||a==='norep8'||a==='tgmT8'||a==='tgdT8'){act(a,a==='norep8'?t.checked:t.value,t)}
   else if(['tg8','tgm8','tgd8'].includes(a)){act(a,t.checked,t)}
+  else if(a==='iq8'){act('iq8',t.dataset.v+':'+String(t.value).replace(',','.'),t)}
   else if(a==='scanSel'){act(a,t.dataset.v,t)}
 });
 document.addEventListener('submit',e=>{const f=e.target; if(!f.dataset||f.dataset.form!=='kadd') return; const first=eatFind8(UI.kq8||'')[0]; if(first){e.preventDefault(); e.stopImmediatePropagation(); act('kpick8',first.t+':'+first.id)}},true);

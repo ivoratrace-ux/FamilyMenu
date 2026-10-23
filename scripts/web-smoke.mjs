@@ -157,6 +157,8 @@ try {
   await click('#layer [data-act="ingDrop8"]');await wait(`String(S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid).startsWith('v8~')`,'Crossing out a product makes an own version');
   await fill('#ia8','инжир');await click('#layer [data-act="ingAdd8"][data-v="fig_jam"]');await wait(`RBY[S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid].i.some(([k])=>k==='fig_jam')`,'Added product');
   assert.notEqual(await evaluate('RBY[S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid].kcal'),k0.kcal,'Calories recalculated');await shot('05d-edit');
+  await evaluate(`(()=>{const i=document.querySelector('#layer .iq8');i.value='100';i.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+  assert.ok(await evaluate(`(()=>{const sl=S.plan.days[UI.sheet.day].slots[UI.sheet.slot],r=RBY[sl.rid],k=document.querySelector('#layer .iq8').dataset.v;return Math.abs(r.i.find(([x])=>x===k)[1]*sl.serv/4-100)<1 && document.querySelector('#layer .iq8').value==='100'})()`),'Amount of a product can be changed');
   await click('#layer [data-act="ingReset8"]');await wait(`S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid===${JSON.stringify(k0.rid)}`,'Back to the original');}
  await click('#layer [data-act="fav8"]');assert.equal(await evaluate('S.fav8.length'),1,'Favourite from the recipe card');await click('#layer [data-act="cooked"]');await wait('cookedTotal8()===1','Cooked counter');
  assert.equal(await evaluate('/₽/.test(document.querySelector("#layer").innerText)'),false,'No price on the dish card');
@@ -242,7 +244,7 @@ try {
  assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
  approved=false;user='b';await click('[data-act="telegramStart"]');await wait(has('4826'),'Second challenge missing');approved=true;
  await wait(has('Зачем вам Frigo?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
- assert.equal(errors.length,0);console.log('PASS v8.13: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
+ assert.equal(errors.length,0);console.log('PASS v8.14: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
 }catch(error){
  console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const info=await send('Runtime.evaluate',{expression:'JSON.stringify({url:location.href,ready:document.readyState,scripts:[...document.scripts].map(s=>s.src)})',returnByValue:true});console.error('Page:',info.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
  console.log('::error title=web-smoke::'+String(error.message).replace(/\n/g,'%0A'));process.exitCode=1;
