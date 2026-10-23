@@ -424,10 +424,9 @@ function renderSheet(){
   const html=sh.type==='share'?sheetShare(sh):sh.type==='recipe'?sheetRecipe(sh):sh.type==='replace'?sheetReplace(sh):sh.type==='move'?sheetMove(sh):sheetRemind(sh);
   L.innerHTML=`<div class="scrim" data-act="close"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
 }
-function sheetRecipe({day,slot,done=[]}){
+function sheetRecipe({day,slot}){
   const s=S.plan.days[day].slots[slot],r=RBY[s.rid],f=s.serv/4;
   const al=r.allerg.map(a=>ALLERG[a].split(' (')[0].toLowerCase());
-  const fb=S.history.liked.includes(r.id)?'liked':S.history.disliked.includes(r.id)?'disliked':'';
   return `<div class="grab"></div>
    <div class="row between"><p class="eyebrow">${SLOT_NAMES[slot]} · ${dateLabel(S.plan.days[day].date)}</p><button class="iconbtn" data-act="close" aria-label="Закрыть">✕</button></div>
    <div class="cover">${dishArt(r)}</div>
@@ -440,18 +439,14 @@ function sheetRecipe({day,slot,done=[]}){
     <p class="small muted">Количества пересчитываются вместе со списком покупок</p></div>
    ${al.length?`<div class="note"><b>!</b><span>По рецепту содержит: ${esc(al.join(', '))}. Состав конкретных продуктов проверяйте по упаковке.</span></div>`:''}
    <div class="stack"><div class="row between"><h2>Как готовить</h2><span class="small muted">${r.s.length} ${plural(r.s.length,'шаг','шага','шагов')}</span></div>
-   <div class="card small"><b>Понадобится:</b> ${esc(equipment(r).join(', ')||'миска')}. <span class="muted">Шаги можно отмечать нажатием, таймер запускается кнопкой.</span></div>
-   <button class="btn block" data-act="cook" data-v="${day}:${slot}">Готовить по шагам с таймером</button>
-   ${r.s.map((t,i)=>{const d=stepDur(t),a=stepAction(t),ing=stepIngs(r,t),key=tKey(r.id,i);return `<div class="stepcard ${done.includes(i)?'done':''}">
+   <div class="card small"><b>Понадобится:</b> ${esc(equipment(r).join(', ')||'миска')}.</div>
+   <button class="btn block" data-act="cook" data-v="${day}:${slot}">Готовить по шагам</button>
+   ${r.s.map((t,i)=>{const a=stepAction(t),ing=stepIngs(r,t);return `<div class="stepcard">
      <div class="stepimg">${stepArt(r,i)}</div>
-     <div class="stack" style="gap:6px"><button class="steptext" data-act="step" data-v="${i}" aria-pressed="${done.includes(i)}"><span class="stepn">${done.includes(i)?'✓':i+1}</span><span>${esc(t)}</span></button>
+     <div class="stack" style="gap:6px"><div class="steptext"><span class="stepn">${i+1}</span><span>${esc(t)}</span></div>
      ${ing.length?`<div class="chips">${ing.map(([k,q])=>`<span class="pill grey">${esc(ING[k][0])} · ${fmtQty(k,q*f)}</span>`).join('')}</div>`:''}
      <p class="small muted">${esc(a[2])}</p>
-     ${d?`<div class="row"><span class="qty" data-timer="${key}" data-total="${d}">${fmtTime(TIMERS[key]?timerLeft(TIMERS[key]):d)}</span><button class="btn secondary small" data-act="tgo" data-v="${i}" data-tbtn="${key}">Старт таймера</button><button class="iconbtn" data-act="treset" data-v="${i}" aria-label="Сбросить таймер">↺</button></div>`:''}</div></div>`}).join('')}</div>
-   <div class="card"><h3>Как прошло?</h3>
-    <button class="btn ${s.cooked?'secondary':''} block" data-act="cooked">${s.cooked?'Приготовлено ✓':'Отметить: приготовила'}</button>
-    <div class="chips"><button class="chip" data-act="fb" data-v="liked" aria-pressed="${fb==='liked'}">Понравилось</button><button class="chip danger" data-act="fb" data-v="disliked" aria-pressed="${fb==='disliked'}">Не понравилось</button></div>
-    <div class="row" style="flex-wrap:wrap"><button class="btn ghost small" data-act="replace" data-v="${day}:${slot}">Заменить блюдо</button><button class="btn ghost small" data-act="moveOpen">Перенести</button><button class="btn ghost small" data-act="block">Больше не предлагать</button></div></div>`;
+     </div></div>`}).join('')}</div>`;
 }
 let WL=null; async function requestWake(){try{WL=await navigator.wakeLock.request('screen')}catch(e){WL=null}} function releaseWake(){try{WL&&WL.release()}catch(e){} WL=null}
 function renderCook(){
