@@ -207,7 +207,7 @@ function sideFor(main){const sides=pool8('side'); if(!sides.length) return null;
   const home=sides.filter(r=>hits8(r)>0);return variedPick8(home.length?home:sides,r=>hits8(r)*3-missing8(r)+((main.tags||[]).includes('pair:'+r.id)?2:0)-recentPenalty8(r));}
 
 
-/* v8.8: shops sell packs. The list buys whole packs (the price counts the whole pack); what is left after cooking goes to «Дома». */
+/* Shops sell whole packs. Checking a purchase adds the full purchased amount to available stock. */
 const PACK8={chicken_fillet:500,chicken_thigh:700,chicken_liver:500,beef:400,pork:500,minced_mix:400,minced_turkey:400,turkey:500,fish_white:400,cod:400,salmon:250,shrimp:300,squid:500,
  milk:1000,kefir:900,yogurt:400,sour_cream:300,cheese:200,feta:200,cottage:300,butter:180,cream:500,tofu:300,broccoli:400,green_peas:400,spinach:250,lettuce:150,mushrooms:400,berries:300,cranberries:300,
  rice:900,buckwheat:900,bulgur:500,millet:800,quinoa:400,pasta:450,noodles:400,oats:500,flour:1000,lentils:450,tomato_paste:140,sugar:1000,honey:300,oil:1000,soy_sauce:250,mustard:150,sesame:100,walnuts:150,
@@ -784,13 +784,13 @@ function scrShop8(){
   const cats=CAT_ORDER.filter(c=>need_.some(i=>i.cat===c));
   const row=i=>`<div class="item ${i.bought?'done':''}"><input type="checkbox" class="chk" id="b_${i.k}" data-act="bought" data-v="${i.k}" ${i.bought?'checked':''} aria-label="Куплено: ${esc(i.name)}">
     <label class="grow" for="b_${i.k}" style="min-width:0;cursor:pointer"><div class="row between" style="align-items:flex-start"><span class="nm">${esc(i.name)}</span><span class="qty">${fmtQty(i.k,i.toBuy,true)}</span></div>
-    <div class="for8">${i.packs?`${i.packs} уп. × ${fmtQty(i.k,i.pack)}${i.left>=1?` · останется ${fmtQty(i.k,i.left)} — добавим в «Дома»`:''} · `:''}${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
-    <button class="iconbtn" data-act="have" data-v="${i.k}" aria-label="Уже есть дома: ${esc(i.name)}" style="font-size:12px">есть</button></div>`;
+    <div class="for8">${i.packs?`${i.packs} уп. × ${fmtQty(i.k,i.pack)}${i.left>=1?` · останется ${fmtQty(i.k,i.left)} после готовки`:''} · `:''}${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
+    </div>`;
   return `<div class="screen">
-   <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — список обновится</p><button class="iconbtn" data-act="share8" aria-label="Поделиться списком покупок" title="Поделиться списком">${IC.share}</button></div>
+   <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — продукты добавятся в «Дома»</p><button class="iconbtn" data-act="share8" aria-label="Поделиться списком покупок" title="Поделиться списком">${IC.share}</button></div>
    ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
    <button class="card pricecard" data-act="navPrices" aria-label="Сравнить цены в магазинах"><span class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty" style="font-size:18px">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></span>
-    <div class="progress"><i style="width:${need_.length?Math.round((need_.length-left.length)/need_.length*100):100}%"></i></div>
+    <div class="progress"><i style="width:${sh.items.length?Math.round((sh.items.length-left.length)/sh.items.length*100):100}%"></i></div>
     <span class="small ${left.reduce((a,i)=>a+i.cost,0)>budgetLimit8()+1?'over8':'muted'}">Бюджет на ${S.profile.days} ${plural(S.profile.days,'день','дня','дней')} меню: ${rub(budgetLimit8())} (${rub(S.profile.budget)} в неделю)</span>
     <span class="row between small"><span>ВкусВилл ≈ ${rub(basketBy('vv'))}</span><span>Лавка ≈ ${rub(basketBy('lavka'))}</span></span>
     <span style="color:var(--accent);font-weight:600">Сравнить цены в магазинах ›</span>
@@ -945,9 +945,11 @@ function v8Act(a,v,el){
    case 'fav8': {S.fav8=S.fav8||[]; if(isFav8(v)) S.fav8=S.fav8.filter(x=>x!==v); else {S.fav8.push(v); toast('Добавили в «Любимые» — будем чаще предлагать')} track('favourite',{on:isFav8(v)}); return true}
    case 'rtab8': UI.rtab8=v; return true;
    case 'openRec8': UI.recFrom8=S.tab; UI.rec8=v; UI.sheet=null; S.tab='rec8'; window.scrollTo(0,0); return true;
-   case 'bought': {if(!S.plan) return false; const it=shopping().items.find(i=>i.k===v); S.bought[v]=!S.bought[v];
-     S.pantry=S.pantry.filter(x=>!(x.key===v&&x.src==='left8'&&x.plan===S.plan.created));
-     if(S.bought[v]&&it&&it.left>=1){S.pantry.push({key:v,qty:Math.round(it.left),src:'left8',plan:S.plan.created}); toast(`Остаток ${fmtQty(v,it.left)} добавили в «Дома»`)} return true}
+   case 'bought': {if(!S.plan)return true;const item=shopping().items.find(i=>i.k===v);
+     if(!item||item.covered||!(item.toBuy>0))return true;
+     try{S.pantry=FamilyMenuScanInventory.add(S.pantry,[{key:v,qty:Math.round(item.toBuy*1000)/1000}])}catch(error){toast(error.message);return true}
+     // Buying a planned product changes stock, not the selected menu.
+     S.hfSig8=pantrySig8();delete S.bought[v];toast(`Добавили в «Дома»: ${ING[v][0]} — ${fmtQty(v,item.toBuy,true)}`);return true}
    case 'doReplace': {const sh=UI.sheet;if(!sh||sh.type!=='replace')return true;if(S.plan.days[sh.day].slots[sh.slot].cooked){toast('Приготовленное блюдо нельзя заменить');return true}
      if(!replacementPool8(sh.day,sh.slot).some(r=>r.id===v)){toast('Выберите замену из той же категории');return true}return false}
    case 'cook': if(S.plan?.status!=='approved'){UI.sheet=null;S.tab='menu';toast('Сначала утвердите меню');return true}return false;

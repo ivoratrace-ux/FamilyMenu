@@ -385,7 +385,7 @@ function scrShop(){
     <div class="for">${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div>
     <div class="for">ВВ ${rub(i.toBuy*storePrice('vv',i.k)*cityCoef())}${LAVKA[i.k]?` · Лавка ${rub(i.toBuy*storePrice('lavka',i.k)*cityCoef())}`:''}</div></label>
     <a class="iconbtn vv" href="${storeLink(S.store||'vv',i.k)}" target="_blank" rel="noopener" aria-label="Открыть в магазине ${STORES[S.store||'vv']}: ${esc(i.name)}" title="Открыть в магазине">${(S.store||'vv')==='lavka'?'Лавка':'ВВ'} ↗</a>
-    <button class="iconbtn" data-act="have" data-v="${i.k}" aria-label="Уже есть дома: ${esc(i.name)}" style="font-size:12px">есть</button></div>`;
+    </div>`;
   return `<div class="screen">
    <div class="row between"><div><p class="eyebrow">Покупки</p><h1>Список на неделю</h1></div><button class="iconbtn" data-act="copy">Копировать</button></div>
    ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
