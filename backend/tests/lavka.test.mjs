@@ -1,7 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {once} from 'node:events';
-import {createApp} from '../server/app.mjs';
 import {StoreError} from '../server/vkusvill-mcp.mjs';
 import {selectStoreProducts} from '../server/store-cart.mjs';
 import {lavkaInput,createLavkaClient,lavkaProducts,selectedLavkaProducts,buildLavkaCart} from '../server/lavka.mjs';
@@ -74,18 +72,4 @@ test('one complete basket and a verified shared link are returned only after upd
 test('missing stock, partial basket, nonempty guest cart or unreadable shared cart never produce a ready link',async()=>{
  for(const overrides of [{retrieve:async()=>({...cart,items:products})},{search:async()=>({cacheProducts:[]})},{update:async()=>({...cart,items:[]})},{shared:async()=>({items:[]})}])await assert.rejects(build({clientFactory:()=>client(overrides)}),StoreError);
  let called=0;await assert.rejects(build({clientFactory:()=>client({search:async()=>({cacheProducts:[]}),update:()=>{called++;}}),select:()=>assert.fail('No paid call for empty catalog')}),e=>e.status===422);assert.equal(called,0);
-});
-test('new endpoint requires bearer/CORS/location and shares abuse quotas with VkusVill; personal data is untouched',async t=>{
- let lavka=0,vv=0;
- const app=createApp({apiKey:'key',hourlyLimit:1,auth:{getUser:async()=>({id:'user'})},catalog:{load:async()=>({ingredients})},buildLavkaStoreCart:async args=>{lavka++;assert.deepEqual(args.location,location);return {store:'lavka'};},buildStoreCart:async()=>{vv++;return {};},inventory:{load:()=>assert.fail('No inventory access')},userState:{load:()=>assert.fail('No menu access')}});
- app.listen(0,'127.0.0.1');await once(app,'listening');t.after(()=>{app.close();app.closeAllConnections();});
- const base=`http://127.0.0.1:${app.address().port}`,path='/api/stores/lavka/cart';
- const post=(body,headers={})=>fetch(base+path,{method:'POST',headers:{Authorization:'Bearer valid','Content-Type':'application/json',...headers},body:JSON.stringify(body)});
- assert.equal((await fetch(base+path,{method:'POST'})).status,401);
- assert.equal((await fetch(base+path,{method:'OPTIONS',headers:{Origin:'https://ivoratrace-ux.github.io'}})).status,204);
- assert.equal((await post({},{Origin:'https://evil.example'})).status,403);
- assert.equal((await post({items:[{ingredientId:'milk',quantity:1500}]})).status,400);assert.equal(lavka,0);
- assert.equal((await post({items:[{ingredientId:'milk',quantity:1500}],location})).status,200);
- assert.equal((await fetch(base+'/api/stores/vkusvill/cart',{method:'POST',headers:{Authorization:'Bearer valid','Content-Type':'application/json'},body:JSON.stringify({items:[{ingredientId:'milk',quantity:1500}]})})).status,429);
- assert.equal(lavka,1);assert.equal(vv,0);
 });

@@ -11,7 +11,7 @@ const KTAG8={soup:'суп',pair:'второе',dish:'блюдо',salad:'сала
 const kopt8=k=>KOPT8[k];
 const MYK8={breakfast:['Завтрак','b'],soup:['Суп','m'],main:['Основное: мясо, рыба','p'],side:['Гарнир','g'],dish:['Целое блюдо','m'],salad:['Салат','m'],dessert:['Десерт','z'],drink:['Напиток','k'],snack:['Перекус','s']};
 const GOAL8={lose:'Похудение',mass:'Набор массы',pp:'Правильное питание',protein:'Больше белка',lowcarb:'Меньше углеводов',none:'Просто вкусно и разнообразно'};
-const PAGES8={pNotify:'Уведомления',rec8:'Рецепт',diary:'Дневник',pBudget:'Бюджет и цены',pFamily:'Семья',pFood:'Питание и ограничения',pRecipes:'Мои рецепты',pRecipe:'Рецепт',pDays:'Дни и приёмы пищи',autocart:'Автосборка корзины',promo:'Подборка акций',kcal:'Калории и КБЖУ',sub:'Premium',metrics:'Метрики пилота'};
+const PAGES8={pNotify:'Уведомления',rec8:'Рецепт',diary:'Дневник',pBudget:'Бюджет и цены',pFamily:'Семья',pFood:'Питание и ограничения',pRecipes:'Мои рецепты',pRecipe:'Рецепт',pDays:'Дни и приёмы пищи',promo:'Подборка акций',kcal:'Калории и КБЖУ',sub:'Premium',metrics:'Метрики пилота'};
 const trialOn8=()=>!!V().trialStart&&!subscribed()&&dayN()<7;
 const premium8=()=>subscribed()||trialOn8();
 const premiumNote8=()=>subscribed()?'Подписка подключена':trialOn8()?`Открыто бесплатно ещё ${daysW(7-dayN())}`:V().trialStart?'Пробные 7 дней закончились':'Откроется на 7 дней с первым меню';
@@ -487,10 +487,10 @@ async function scan8(){
 const SLIDES8=[
  {t:'Меню для всей семьи',d:'Неделя блюд, которые съедят все: суп на обед, второе на ужин. Аллергии учтём.',btn:'А что ещё?',art:()=>`<div class="collage">${['m5','m3','b1','m66'].filter(id=>RBY[id]).map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
  {t:'Из того, что есть',d:'Отметьте продукты дома — подберём блюда, где докупать меньше всего, и поведём по шагам с таймером.',btn:'Дальше',art:()=>`<div class="heroimg">${stepArt(RBY.m2,3)}</div><div class="card timerbox" style="margin-top:-30px;width:70%;align-self:center"><span class="bigtime" style="font-size:40px">4:59</span></div>`},
- {t:'Покупки соберутся сами',d:'Точные граммы, без дублей, с учётом упаковок. Корзину во ВкусВилле или Лавке — в одно касание.',btn:'Ух ты, понял',art:()=>`<div class="card introlist">${[['potato',1.4],['chicken_fillet',700],['buckwheat',300],['tomato',400]].filter(([k])=>ING[k]).map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(ING[k][0])}</span><span class="qty">${q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="pill">ВкусВилл ≈ 1 240 ₽</span><span class="pill warn">Лавка ≈ 1 090 ₽</span></div></div>`},
- {t:'В рамках бюджета',premium:true,d:'Соберём корзину на нужную сумму и подскажем, где купить дешевле.',btn:'Интересно',art:()=>`<div class="card"><h3>Корзина на неделю</h3><p><b style="font-size:30px">3 480 ₽</b> <span class="muted">из 4 000 ₽</span></p><div class="progress"><i style="width:87%"></i></div><div class="row"><span class="pill">ВкусВилл · 3 480 ₽</span><span class="pill warn">Лавка · 3 910 ₽</span></div><p class="small muted">Дешевле во ВкусВилле на 430 ₽</p></div>`},
+ {t:'Покупки соберутся сами',d:'Точные граммы, без дублей, с учётом упаковок и продуктов, которые уже есть дома.',btn:'Ух ты, понял',art:()=>`<div class="card introlist">${[['potato',1.4],['chicken_fillet',700],['buckwheat',300],['tomato',400]].filter(([k])=>ING[k]).map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(ING[k][0])}</span><span class="qty">${q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="pill">ВкусВилл ≈ 1 240 ₽</span><span class="pill warn">Лавка ≈ 1 090 ₽</span></div></div>`},
+ {t:'В рамках бюджета',premium:true,d:'Подберём меню под ваш бюджет и покажем примерную стоимость покупок.',btn:'Интересно',art:()=>`<div class="card"><h3>Покупки на неделю</h3><p><b style="font-size:30px">3 480 ₽</b> <span class="muted">из 4 000 ₽</span></p><div class="progress"><i style="width:87%"></i></div><div class="row"><span class="pill">ВкусВилл · 3 480 ₽</span><span class="pill warn">Лавка · 3 910 ₽</span></div><p class="small muted">Дешевле во ВкусВилле на 430 ₽</p></div>`},
  {t:'Калории и БЖУ',d:'Норма для каждого в семье, дневник питания и меню под вашу цель.',btn:'Здорово',art:()=>`<div class="card"><h3>Сегодня</h3><p><b style="font-size:30px">1 640</b> <span class="muted">из 2 100 ккал</span></p><div class="kbar"><i style="width:78%"></i></div><div class="macros">${[['82','белки'],['54','жиры'],['190','углеводы']].map(([v,l])=>`<div class="macro"><b>${v}</b><span>${l}, г</span></div>`).join('')}</div><div class="row"><span class="pill">Похудение</span><span class="pill">Без свинины</span></div></div>`},
- {t:'Неделя Premium бесплатно',d:`${R.filter(r=>r.m!=='c').length} рецептов, акции, сравнение цен и автосборка корзины — 7 дней без оплаты.`,btn:'Начать',art:()=>`<div class="collage">${['x80','x76','x71','x63'].filter(id=>RBY[id]).map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
+ {t:'Неделя Premium бесплатно',d:`${R.filter(r=>r.m!=='c').length} рецептов, акции и сравнение цен — 7 дней без оплаты.`,btn:'Начать',art:()=>`<div class="collage">${['x80','x76','x71','x63'].filter(id=>RBY[id]).map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
 ];
 function intro8(){
   const i=Math.min(S.introIdx||0,SLIDES8.length-1),s=SLIDES8[i];
@@ -562,7 +562,6 @@ function drawer8(){
    ${it('pRecipes',IC.pot,'Мои рецепты',S.myRecipes.length?`${S.myRecipes.length} — попадают в меню`:'Свои блюда попадут в меню')}
    ${S.plan&&S.plan.status!=='draft'?`<button class="ditem" data-act="share">${IC.share}<span class="grow"><b>Отправить меню семье</b></span></button>`:''}
    <p class="eyebrow dhead">Премиум <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:400">· ${premiumNote8()}</span></p>
-   ${it('autocart',IC.cart,'Автосборка корзины','Из меню, под ваш бюджет',!premium8())}
    ${it('promo',IC.tag,'Акции и сравнение цен',`${VV_PROMO.length} акций ВкусВилла, скидки Лавки, где дешевле`,!premium8())}
    ${it('sub',IC.card,'Подписка',subscribed()?'Подключена':'299 ₽ в месяц или 1 990 ₽ в год')}
    <div style="flex:1"></div>
@@ -773,11 +772,10 @@ function scrShop8(){
   return `<div class="screen">
    <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — список обновится</p><button class="iconbtn tgbtn" data-act="share8" aria-label="Поделиться списком в Telegram" title="Поделиться в Telegram">${TG8}</button></div>
    ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
-   <button class="card pricecard" data-act="tab" data-v="autocart"><span class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty" style="font-size:18px">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></span>
+   <div class="card pricecard"><span class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty" style="font-size:18px">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></span>
     <div class="progress"><i style="width:${need_.length?Math.round((need_.length-left.length)/need_.length*100):100}%"></i></div>
     <span class="small ${left.reduce((a,i)=>a+i.cost,0)>budgetLimit8()+1?'over8':'muted'}">Бюджет на ${S.profile.days} ${plural(S.profile.days,'день','дня','дней')} меню: ${rub(budgetLimit8())} (${rub(S.profile.budget)} в неделю)</span>
-    <span class="row"><b style="color:var(--accent)">Собрать корзину автоматически ›</b><span class="pill warn">Premium</span></span>
-    <span class="small muted">Одинаковые продукты из разных блюд объединены. Цены на ${PRICE_DATE} — примерные.</span></button>
+    <span class="small muted">Одинаковые продукты из разных блюд объединены. Цены на ${PRICE_DATE} — примерные.</span></div>
    ${cats.map(c=>`<section class="cat"><h3>${c}</h3>${need_.filter(i=>i.cat===c).map(row).join('')}</section>`).join('')}
    ${sh.spices.length?`<section class="cat"><h3>Специи — проверьте, есть ли дома</h3><div class="card small">${esc(sh.spices.join(', '))}<p class="muted">Количество «по вкусу», в список не суммируем.</p></div></section>`:''}
   </div>`;
@@ -848,7 +846,7 @@ function pRecipe8(){
 function offer8(title,text){
   const sel=UI.tariff||'year';
   return `<div class="screen">${head8('Premium',title)}<p class="muted">${text}</p>
-   <div class="card"><h3>Что входит в Premium</h3><ul class="plain8">${['Автосборка корзины из утверждённого меню под ваш бюджет','Сравнение цен: где купить дешевле','Подборка акций ВкусВилла и Лавки','Перекусы, десерты и напитки в меню'].map(x=>`<li>${x}</li>`).join('')}</ul></div>
+   <div class="card"><h3>Что входит в Premium</h3><ul class="plain8">${['Сравнение цен: где купить дешевле','Подборка акций ВкусВилла и Лавки','Перекусы, десерты и напитки в меню'].map(x=>`<li>${x}</li>`).join('')}</ul></div>
    <div class="stack" style="gap:8px">${[['year','На год','1 990 ₽','≈166 ₽ в месяц — на 45% выгоднее'],['month','На месяц','299 ₽','отмена в любой момент']].map(([k,l,pp,d])=>`<button class="optcard tariff" data-act="tariff" data-v="${k}" aria-pressed="${sel===k}"><span class="row between"><b>${l}</b><b>${pp}</b></span><span class="small muted">${d}</span></button>`).join('')}</div>
    <button class="btn block" data-act="subscribe8">Подключить за ${sel==='year'?'1 990 ₽':'299 ₽'} — оплата по СБП</button>
    <p class="small muted">${premiumNote8()}. Прототип: деньги не списываются. Меню, список покупок и калории — бесплатно.</p></div>`;
@@ -859,20 +857,8 @@ function scrSub8(){
   return `<div class="screen">${head8('Premium','Подписка подключена')}<div class="card"><p>${v.sub.plan==='year'?'На год — 1 990 ₽':'На месяц — 299 ₽'}, с ${dateLabel(v.sub.since,true)}.</p>
    <p class="small muted">Напомним за 3 дня до продления. Отменить можно в любой момент — меню, рецепты и настройки сохранятся.</p><button class="btn ghost block" data-act="unsub8">Отменить подписку (прототип)</button></div></div>`;
 }
-function autocart8(){
-  if(!premium8()) return offer8('Автосборка корзины','Соберём корзину из утверждённого меню на нужную сумму и подскажем, в каком магазине дешевле.');
-  if(!S.plan) return `<div class="screen"><div class="empty"><p>Сначала составьте меню.</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
-  if(S.plan.status==='draft') return `<div class="screen">${head8('Premium','Автосборка корзины')}<div class="card"><p class="muted">Корзина собирается из утверждённого меню.</p><button class="btn block" data-act="approve8">Утвердить меню</button></div></div>`;
-  const vv=basketBy('vv'),lv=basketBy('lavka'),best=lv<vv?'lavka':'vv',st=S.store||'vv',sum=st==='lavka'?lv:vv,b=S.profile.budget;
-  return `<div class="screen">${head8('Premium','Автосборка корзины')}
-   <div class="card"><label class="field" for="budget">Бюджет на эту корзину<b id="budgetv" style="color:var(--fg);font-size:20px;font-variant-numeric:tabular-nums">${rub(b)}</b></label>
-    <input type="range" id="budget" min="1000" max="30000" step="500" value="${b}" data-act="budget" aria-label="Бюджет"></div>
-   <div class="card"><h3>Где купить</h3><div class="compare"><button class="${st==='vv'?'win':''}" data-act="store" data-v="vv"><span class="small muted">ВкусВилл</span><b>${rub(vv)}</b>${best==='vv'?'<span class="pill">дешевле</span>':''}</button><button class="${st==='lavka'?'win':''}" data-act="store" data-v="lavka"><span class="small muted">Яндекс Лавка · Beta</span><b>${rub(lv)}</b>${best==='lavka'?'<span class="pill">дешевле</span>':''}</button></div></div>
-   ${sum>b?`<div class="note"><b>!</b><span>Не укладываемся: ≈${rub(sum)} из ${rub(b)}. Замените самые дорогие блюда или увеличьте бюджет.</span></div>`:`<p class="small muted">Укладываемся: ≈${rub(sum)} из ${rub(b)}.</p>`}
-   ${window.FamilyMenuStores?.card(st==='lavka'?'lavka':'vkusvill') || ''}</div>`;
-}
 const SCR8={pNotify:pNotify8,rec8:rec8,today:scrToday8,menu:()=>scrMenu8(false),shop:scrShop8,home:scrHome8,pFamily:pFamily8,pFood:pFood8,pRecipes:pRecipes8,pRecipe:pRecipe8,pDays:pDays8,
-  autocart:autocart8,promo:()=>premium8()?`${trialOn8()?`<div class="trialbar8">${premiumNote8()}</div>`:''}`+scrPromo():offer8('Акции и сравнение цен','Каждую неделю — скидки ВкусВилла и Лавки на продукты из вашего меню и сравнение корзины.'),
+  promo:()=>premium8()?`${trialOn8()?`<div class="trialbar8">${premiumNote8()}</div>`:''}`+scrPromo():offer8('Акции и сравнение цен','Каждую неделю — скидки ВкусВилла и Лавки на продукты из вашего меню и сравнение корзины.'),
   kcal:()=>`<div class="screen">${head8('Настройки','Подсчёт калорий')}${kcalToggle()}</div>`,sub:scrSub8,metrics:scrMetrics,diary:diary8,pBudget:pBudget8};
 kcalToggle=(function(orig){return function(){const was=V().ul.kcal; V().ul.kcal=V().ul.kcal||'v8'; const h=orig(); if(!was) delete V().ul.kcal; return h}})(kcalToggle);
 
@@ -905,7 +891,7 @@ render=function(){
   else if(!signed) app.innerHTML=auth8();
   else {if(S.plan&&pantrySig8()!==S.hfSig8){S.hfSig8=pantrySig8(); const n=homeFit8(); if(n){save(); setTimeout(()=>toast(`Подобрали ${n} ${plural(n,'блюдо','блюда','блюд')} из продуктов «Дома»`),50)}}
    if(S.plan) snapDiary8(); app.innerHTML=appbar8()+SCR8[S.tab]()+tabs8()+drawer8()+(UI.board?board8():'')}
-  renderSheet(); renderCook(); renderCart(); paintTimers(); clampChips();
+  renderSheet(); renderCook(); paintTimers(); clampChips();
   const hs=document.getElementById('hscroll8'); if(hs){const on=hs.querySelector('.sel8'); if(on&&!hs.dataset.done){hs.scrollLeft=on.offsetLeft-hs.clientWidth/2+on.clientWidth/2; hs.dataset.done=1}}
 };
 /* ---------- actions ---------- */

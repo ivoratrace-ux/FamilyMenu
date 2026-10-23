@@ -1,3 +1,4 @@
+// DISABLED for V1: retained for future use; no routes are mounted in app.mjs.
 // Public Streamable HTTP MCP. No customer credentials, cookies or OAuth tokens.
 export const VKUSVILL_MCP_URL = 'https://mcp.vkusvill.ru/mcp';
 export class StoreError extends Error {

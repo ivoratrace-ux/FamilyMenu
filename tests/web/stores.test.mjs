@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-const source=await readFile(new URL('../../src/stores.js',import.meta.url),'utf8');
+const source=await readFile(new URL('../../legacy/disabled-stores.js',import.meta.url),'utf8');
 const tick=()=>new Promise(r=>setImmediate(r));
 function setup() {
   const calls=[],navigated=[],prior=[],notices=[];

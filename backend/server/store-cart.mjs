@@ -1,3 +1,4 @@
+// DISABLED for V1: retained for future use; no routes are mounted in app.mjs.
 import {createVkusvillMcp,cartUrl,StoreError} from './vkusvill-mcp.mjs';
 
 export function cartIngredients(body,ingredients) {

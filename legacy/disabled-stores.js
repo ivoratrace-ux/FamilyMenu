@@ -1,3 +1,4 @@
+/* DISABLED for V1. Archive only; not loaded or copied to the published Web. */
 /* Prepare store baskets first; links open only with a separate user click. */
 (() => {
   const api=FamilyMenuApi;

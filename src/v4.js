@@ -58,7 +58,7 @@ act=(function(orig){return function(a,v,el){
   const c0=countCooked(),b0=countBought(),t0=S.tab;
   const r=orig(a,v,el);
   try{
-    const E={approve:'menu_approved',recipe:'recipe_opened',cook:'cook_started',doReplace:'dish_replaced',copy:'list_copied',share:'share_opened',cartStart:'cart_started',famOpen:'family_view_opened'};
+    const E={approve:'menu_approved',recipe:'recipe_opened',cook:'cook_started',doReplace:'dish_replaced',copy:'list_copied',share:'share_opened',famOpen:'family_view_opened'};
     if(E[a]) track(E[a]);
     if(S.tab!==t0){track('screen',{s:S.tab}); if(S.tab==='shop') track('list_opened'); if(S.tab==='sub'&&!subscribed()) track('paywall_shown',{from:a})}
     if(countCooked()>c0) track('dish_cooked');
@@ -148,39 +148,13 @@ function scrSub(){
    ${v.trialStart?`<div class="card"><h3>${over?'Ваша первая неделя':'Эта неделя'}</h3><div class="statgrid"><div><b>${st.dishes}</b><span>блюд в меню</span></div><div><b>${st.cooked}</b><span>приготовлено</span></div><div><b>${st.items}</b><span>продуктов в списке</span></div></div>
     <p class="small muted">Обычно на то, чтобы придумать меню и составить список, уходит 30–60 минут в неделю.</p></div>`:''}
    <div class="stack" style="gap:8px">${[['year','На год','1 990 ₽','≈166 ₽ в месяц — на 45% выгоднее'],['month','На месяц','299 ₽','отмена в любой момент']].map(([k,l,p,d])=>`<button class="optcard tariff" data-act="tariff" data-v="${k}" aria-pressed="${sel===k}"><span class="row between"><b>${l}</b><b>${p}</b></span><span class="small muted">${d}</span></button>`).join('')}</div>
-   <div class="card small"><b>Что входит:</b> новое меню каждую неделю, список покупок и сборка корзины, замены блюд, готовка по шагам, акции и сравнение цен, меню для всей семьи.</div>
+   <div class="card small"><b>Что входит:</b> новое меню каждую неделю, список покупок, замены блюд, готовка по шагам, акции и сравнение цен, меню для всей семьи.</div>
    <button class="btn block" data-act="subscribe">Оформить за ${sel==='year'?'1 990 ₽':'299 ₽'} — оплата по СБП</button>
    <p class="small muted">Прототип: деньги не списываются. В пилоте будет ссылка на оплату по СБП: без привязки карты, а о продлении напомним за 3 дня.</p>
    ${over?`<button class="btn ghost block" data-act="tab" data-v="menu">Не сейчас — открыть прошлое меню</button>`:''}
   </div>`;
 }
 
-/* ---------- cart assembly, step by step ---------- */
-function renderCart(){
-  const L=$('#cartlayer'); document.documentElement.classList.toggle('cooking',!!(UI.cook||UI.cart));
-  if(!L) return; if(!UI.cart){L.innerHTML='';return}
-  const st=S.store||'vv',sn=st==='lavka'?'Лавке':'ВкусВилле',all=shopping().items,list=UI.cart.list.map(k=>all.find(i=>i.k===k)).filter(Boolean),i=UI.cart.i,n=list.length;
-  let body;
-  if(i>=n){
-    body=`<div class="stack" style="gap:8px;margin-top:12px"><p class="eyebrow">Готово</p><h1>Корзина собрана</h1>
-     <p class="muted">Положили ${UI.cart.added} ${plural(UI.cart.added,'товар','товара','товаров')} из ${n}${UI.cart.sum?` — примерно на ${rub(UI.cart.sum)}`:''}. ${UI.cart.home?`${UI.cart.home} отметили «есть дома». `:''}Время доставки и оплату выберите в приложении магазина.</p></div>
-     <a class="btn block" href="${st==='lavka'?'https://lavka.yandex.ru/':'https://vkusvill.ru/cart/'}" target="_blank" rel="noopener">Открыть корзину в ${sn} ↗</a>
-     <p class="small muted">Купленное отмечено в списке. Пропущенные продукты остались в нём — их можно докупить позже.</p>`;
-  } else {
-    const it=list[i],lv=st==='lavka'&&LAVKA[it.k];
-    body=`<p class="eyebrow">Продукт ${i+1} из ${n}</p><h1 style="font-size:28px">${esc(it.name)}</h1>
-     <p class="cartqty">${fmtQty(it.k,it.toBuy,true)}</p>
-     <p class="small muted">Для: ${esc(it.dishes.join(', '))}</p>
-     <div class="card"><div class="row between"><span>${STORES[st]}</span><b>≈${rub(it.toBuy*storePrice(st,it.k)*cityCoef())}</b></div>${lv?`<p class="small muted">${esc(LAVKA[it.k][2])}</p>`:''}</div>
-     <a class="btn secondary block" href="${storeLink(st,it.k)}" target="_blank" rel="noopener">${lv?'Открыть товар':'Найти'} в ${sn} ↗</a>
-     <p class="small muted">Откроется ${lv?'карточка товара':'поиск'} в новой вкладке. Положите в корзину и вернитесь — нажмите «Положила».</p>
-     <div class="row"><button class="btn ghost grow" data-act="cartHave">Есть дома</button><button class="btn ghost grow" data-act="cartSkip">Пропустить</button></div>`;
-  }
-  L.innerHTML=`<div class="cook" role="dialog" aria-modal="true" aria-label="Сборка корзины">
-   <header class="cookhead"><button class="iconbtn" data-act="cartClose" aria-label="Закрыть">✕</button><div class="grow"><b class="small">Корзина в ${sn}</b><div class="progress" style="margin-top:6px"><i style="width:${n?Math.round(Math.min(i,n)/n*100):100}%"></i></div></div></header>
-   <div class="cookbody">${body}</div>
-   <footer class="cookfoot">${i>0?'<button class="btn ghost" data-act="cartPrev">← Назад</button>':'<span></span>'}${i<n?'<button class="btn" data-act="cartAdd">Положила ✓</button>':'<button class="btn" data-act="cartClose">Готово</button>'}</footer></div>`;
-}
 
 /* ---------- family: share sheet & read-only family view ---------- */
 function shareText(){
@@ -213,7 +187,7 @@ function famView(){
 }
 
 /* ---------- pilot metrics ---------- */
-const FUNNEL=[['onboarding_done','Прошли онбординг'],['menu_built','Получили меню'],['menu_approved','Утвердили меню'],['list_opened','Открыли список покупок'],['cart_started','Собирали корзину по шагам'],['dish_cooked','Приготовили блюдо из меню'],['share_opened','Делились меню с семьёй'],['paywall_shown','Увидели тарифы'],['subscribed','Оформили подписку']];
+const FUNNEL=[['onboarding_done','Прошли онбординг'],['menu_built','Получили меню'],['menu_approved','Утвердили меню'],['list_opened','Открыли список покупок'],['dish_cooked','Приготовили блюдо из меню'],['share_opened','Делились меню с семьёй'],['paywall_shown','Увидели тарифы'],['subscribed','Оформили подписку']];
 function scrMetrics(){
   const ev=V().ev,cnt=n=>ev.filter(e=>e.n===n).length,wk2=ev.some(e=>e.n==='menu_built'&&e.p&&e.p.week>=2),st=weekStats();
   return `<div class="screen"><div><p class="eyebrow">Для пилота</p><h1>Метрики</h1></div>
@@ -247,12 +221,6 @@ function v4Act(a,v,el){
    case 'famOpen': UI.sheet=null; UI.fam=true; UI.famTab='menu'; window.scrollTo(0,0); return true;
    case 'famClose': UI.fam=false; window.scrollTo(0,0); return true;
    case 'famTab': UI.famTab=v; return true;
-   case 'cartStart': {const list=shopping().items.filter(i=>!i.covered&&!i.bought).map(i=>i.k); if(!list.length){toast('Всё уже куплено');return false} UI.cart={list,i:0,added:0,sum:0,home:0}; return true}
-   case 'cartAdd': {const c=UI.cart,k=c.list[c.i],it=shopping().items.find(x=>x.k===k); if(it&&!S.bought[k]){S.bought[k]=true; c.added++; c.sum+=it.toBuy*storePrice(S.store||'vv',k)*cityCoef(); track('cart_item_added')} c.i++; if(c.i>=c.list.length) track('cart_done',{added:c.added,of:c.list.length}); return true}
-   case 'cartSkip': UI.cart.i++; if(UI.cart.i>=UI.cart.list.length) track('cart_done',{added:UI.cart.added,of:UI.cart.list.length}); return true;
-   case 'cartHave': {const c=UI.cart,k=c.list[c.i]; const m=needMap(S.plan).m[k]; if(m) markHave(k,m.qty); c.home++; c.i++; if(c.i>=c.list.length) track('cart_done',{added:c.added,of:c.list.length}); return true}
-   case 'cartPrev': UI.cart.i=Math.max(0,UI.cart.i-1); return true;
-   case 'cartClose': UI.cart=null; return true;
    case 'metricsCopy': {const t=JSON.stringify(V4.ev,null,1); if(navigator.clipboard) navigator.clipboard.writeText(t).then(()=>toast('События скопированы'),()=>toast('Не удалось скопировать')); return false}
   }
   return false;

@@ -36,13 +36,6 @@ test('public dependency health coalesces concurrent probes and caches failures; 
   assert.deepEqual(await Promise.all([check(),check(),check()]),[true,true,true]);assert.equal(connected,1);assert.equal(closed,1);
   time=60001;fail=true;assert.equal(await check(),false);assert.equal(await check(),false);assert.equal(connected,2);
 });
-test('public health reports only dependency status and leaves core API ready',async t=>{
-  const app=createApp({apiKey:'server-only',storeHealth:async()=>{throw Error('private upstream error');}});
-  app.listen(0,'127.0.0.1');await once(app,'listening');t.after(()=>{app.close();app.closeAllConnections();});
-  const base=`http://127.0.0.1:${app.address().port}`;
-  const response=await fetch(base+'/health/vkusvill');assert.equal(response.status,503);assert.deepEqual(await response.json(),{status:'error',publicMcp:'unavailable'});
-  assert.equal((await fetch(base+'/health')).status,200);assert.equal((await fetch(base+'/health/vkusvill',{method:'POST'})).status,405);
-});
 test('real current product IDs only; malformed search and fake/model URLs cannot enter the cart',()=>{
   assert.deepEqual(searchProducts({products:[{xml_id:10,name:'Молоко'}]}),[]);
   assert.throws(()=>searchProducts({other:[]}),StoreError);
@@ -96,17 +89,13 @@ test('current live public search envelope uses data.items and HTML-encoded packa
   const actual=searchProducts(payload);
   assert.equal(actual[0].productId,36296);assert.equal(actual[0].name,'Молоко 2,5% в бутылке, 900 мл');assert.equal(actual[0].unit,'"шт"');
 });
-test('cart HTTP endpoint enforces authentication, CORS, validation, method, quotas, and never writes personal data',async t=>{
-  let built=0;
-  const app=createApp({apiKey:'server-only',hourlyLimit:1,auth:{getUser:async token=>{assert.equal(token,'valid');return {id:'user-a'};}},catalog:{load:async()=>({ingredients})},buildStoreCart:async args=>{built++;assert.deepEqual(args.items,[items[0]]);return {store:'vkusvill',carts:[{url:'https://vkusvill.ru/?share_basket=1',productCount:1}],ingredientCount:1,productCount:1};},inventory:{load:()=>assert.fail('No inventory writes')},userState:{load:()=>assert.fail('No document writes')}});
+test('V1 does not register store cart or integration health routes, even with a valid bearer',async t=>{
+  const app=createApp({apiKey:'server-only',auth:{getUser:()=>assert.fail('Disabled routes must not authenticate or call a store')},catalog:{load:()=>assert.fail('No catalog access')}});
   app.listen(0,'127.0.0.1');await once(app,'listening');t.after(()=>{app.close();app.closeAllConnections();});
-  const url=`http://127.0.0.1:${app.address().port}/api/stores/vkusvill/cart`;
-  const post=(body,extra={})=>fetch(url,{method:'POST',headers:{Authorization:'Bearer valid','Content-Type':'application/json',...extra},body:JSON.stringify(body)});
-  assert.equal((await fetch(url,{method:'POST'})).status,401);
-  assert.equal((await post({}, {Origin:'https://evil.example'})).status,403);
-  const preflight=await fetch(url,{method:'OPTIONS',headers:{Origin:'https://ivoratrace-ux.github.io'}});assert.equal(preflight.status,204);
-  assert.equal((await fetch(url,{headers:{Authorization:'Bearer valid'}})).status,405);
-  assert.equal((await post({items:[]})).status,400);assert.equal(built,0);
-  const response=await post({items:[{ingredientId:'milk',quantity:1500}]});assert.equal(response.status,200);assert.equal((await response.json()).carts[0].url,'https://vkusvill.ru/?share_basket=1');
-  assert.equal((await post({items:[{ingredientId:'milk',quantity:1500}]})).status,429);assert.equal(built,1);
+  const base=`http://127.0.0.1:${app.address().port}`;
+  for(const path of ['/api/stores/vkusvill/cart','/api/stores/lavka/cart','/health/vkusvill']){
+    assert.equal((await fetch(base+path)).status,404);
+    for(const method of ['POST','OPTIONS'])assert.equal((await fetch(base+path,{method,headers:{Authorization:'Bearer valid','Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify({items:[{ingredientId:'milk',quantity:1500}],location:[37,55]})}:{})})).status,405);
+  }
+  assert.equal((await fetch(base+'/health')).status,200);
 });

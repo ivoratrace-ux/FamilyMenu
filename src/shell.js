@@ -20,7 +20,7 @@ function appbar(){return `<header class="appbar"><button class="iconbtn burger" 
 /* ---------- intro ---------- */
 const SLIDES=[
  {t:'Меню на неделю для всей семьи',d:'Блюда, которые семья правда съест: суп на обед, второе на ужин — как привыкли. Аллергии учтём.',art:()=>`<div class="collage">${['m5','m3','b1','m66'].map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
- {t:'Список покупок соберётся сам',d:'С точными граммами и без дублей. Корзину во ВкусВилле или Лавке соберёте по шагам за пару минут.',art:()=>`<div class="card introlist">${[['potato',1.4,'кг'],['chicken_fillet',700,'г'],['buckwheat',300,'г'],['tomato',400,'г']].map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(ING[k][0])}</span><span class="qty">${typeof q==='number'&&q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="pill">ВкусВилл ≈ 1 240 ₽</span><span class="pill warn">Лавка ≈ 1 090 ₽</span></div></div>`},
+ {t:'Список покупок соберётся сам',d:'С точными граммами и без дублей. Отмечайте купленное и делитесь списком с семьёй.',art:()=>`<div class="card introlist">${[['potato',1.4,'кг'],['chicken_fillet',700,'г'],['buckwheat',300,'г'],['tomato',400,'г']].map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(ING[k][0])}</span><span class="qty">${typeof q==='number'&&q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="pill">ВкусВилл ≈ 1 240 ₽</span><span class="pill warn">Лавка ≈ 1 090 ₽</span></div></div>`},
  {t:'Первая неделя — бесплатно',d:'Без привязки карты. Готовьте по шагам с таймером и решите, нужно ли вам это дальше.',art:()=>`<div class="heroimg">${stepArt(RBY.m2,3)}</div><div class="card timerbox" style="margin-top:-30px;width:70%;align-self:center"><span class="bigtime" style="font-size:40px">4:59</span></div>`},
 ];
 function intro(){
@@ -100,7 +100,7 @@ function render(){
   else if(S.stage==='quiz') app.innerHTML=quiz();
   else if(S.stage==='gen') app.innerHTML=`<div class="screen"><div class="loader"><div class="spin" aria-hidden="true"></div><h2>Подбираем меню на неделю</h2><p class="muted small">Учитываем семью, ограничения, время готовки и то, что понравилось</p></div></div>`;
   else app.innerHTML=appbar()+({today:scrToday,menu:scrMenu,shop:scrShop,home:scrHome,profile:scrProfile,promo:scrPromo,sub:scrSub,metrics:scrMetrics}[S.tab]||scrToday)()+tabsV4()+drawer();
-  renderSheet(); renderCook(); renderCart(); paintTimers();
+  renderSheet(); renderCook(); paintTimers();
 }
 function shellAct(a,v,el){
   const p=S.profile; if(v4Act(a,v,el)) return true;

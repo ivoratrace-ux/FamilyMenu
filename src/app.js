@@ -389,7 +389,6 @@ function scrShop(){
    ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
    <div class="card"><div class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></div>
    <div class="seg small" role="tablist" aria-label="Магазин">${Object.entries(STORES).map(([k,l])=>`<button role="tab" aria-selected="${(S.store||'vv')===k}" data-act="store" data-v="${k}">${l} · ${rub(basketBy(k))}</button>`).join('')}</div>
-   ${left.length?`<button class="btn block" data-act="cartStart">${IC.cart} Собрать корзину по шагам</button>`:''}
    <p class="small muted">Одинаковые продукты из разных блюд объединены. Цены на ${PRICE_DATE} — в магазине могут отличаться. «есть» — продукт уже дома, купить не нужно.${UL('promo')?' <button class="linkbtn" data-act="navPrices">Сравнить магазины</button>':''}</p></div>
    ${cats.map(c=>`<section class="cat"><h3>${c}</h3>${need_.filter(i=>i.cat===c).map(row).join('')}</section>`).join('')}
    ${sh.spices.length?`<section class="cat"><h3>Специи — проверьте, есть ли дома</h3><div class="card small">${esc(sh.spices.join(', '))}<p class="muted">Количество «по вкусу», в список не суммируем.</p></div></section>`:''}

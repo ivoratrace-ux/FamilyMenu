@@ -24,7 +24,6 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
 let ws,send,chromeError;chrome.on('error',e=>chromeError=e);
 const catalog=JSON.parse(await readFile('backend/data/catalog.seed.json','utf8'));
 const documents=new Map(),stocks=new Map(['a','b'].map(id=>[id,{revision:0,userLogin:'@'+id,userApplication:'telegram',items:[]}]))
-let cartCalls=0;
 let approved=false,user='a',scanCalls=0,catalogCalls=0,searchCalls=0,privateCalls=0,refreshCalls=0,failSave=false;
 const bundle=(id=user)=>({user:{id,application:'telegram',providerUserId:id,login:'@'+id,displayName:id},session:{accessToken:id+'-access',refreshToken:id+'-refresh',expiresAt:Math.floor(Date.now()/1000)+3600}});
 const bodyText=`(document.body?.innerText || '')`;
@@ -57,14 +56,7 @@ try {
    if(path==='/api/auth/me'){await respond({user:bundle(owner).user});return;}
    if(path==='/api/auth/logout'){await respond(null,204);return;}
    privateCalls++;
-   if(path==='/api/stores/vkusvill/cart'){
-    cartCalls++;assert.ok(data.items.length>0);assert.ok(data.items.every(i=>catalog.ingredients.some(c=>c.id===i.ingredientId) && i.quantity>0));
-    await respond(cartCalls===1?{error:'ВкусВилл отклонил подключение'}:{store:'vkusvill',carts:[{url:'https://vkusvill.ru/mobile?basket&share=1001',productCount:data.items.length}],ingredientCount:data.items.length},cartCalls===1?502:200);return;
-   }
-   if(path==='/api/stores/lavka/cart'){
-    assert.ok(data.items.length>0);assert.deepEqual(data.location,[37.615,55.757]);
-    await respond({store:'lavka',carts:[{url:'https://lavka.yandex.ru/cart?sharedCartId=fcff2c28-0215-4691-89b5-cf7619580282&countryCode=RU',productCount:data.items.length}]});return;
-   }
+   if(path.startsWith('/api/stores/'))assert.fail('Store integrations are disabled in V1');
    if(path==='/api/ingredients'){searchCalls++;const q=url.searchParams.get('q');assert.ok(q.length>=3);await respond({ingredients:catalog.ingredients.filter(i=>i.name.toLowerCase().includes(q.toLowerCase())).map(({id,name,unit})=>({id,name,unit}))});return;}
    if(path==='/api/user-state'){
     let document=documents.get(owner) || {revision:0,preferences:null,menu:null};
@@ -167,32 +159,17 @@ try {
  await click('[data-act="gran8"][data-v="month"]');await wait('document.querySelectorAll("#hscroll8 .wday8").length===12','Month granularity');await click('[data-act="gran8"][data-v="day"]');
  await click('.histrow8');await wait(`S.tab==='rec8' && ${has('Как готовить')}`,'Recipe from the cooking history');await click('[data-act="back8"]');await wait(`S.tab==='diary'`,'Back to the diary');await shot('05c-diary');
  await click('[data-act="back8"]');await click('[data-act="tab"][data-v="menu"]');
- await click('[data-act="tab"][data-v="shop"]');await wait('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(".screen h1")','Shopping without a heading');await shot('06-shop');
+ assert.equal(await evaluate('/автосбор|сборк[аиу] корзин|собрать корзин|корзину.*касание/i.test(SLIDES8.map(x=>x.t+" "+x.d).join(" "))'),false,'No onboarding promises for store baskets');
+ assert.equal(await evaluate(`!!document.querySelector('[data-v="autocart"]')`),false,'No drawer entry for the deleted screen');
+ await click('[data-act="tab"][data-v="shop"]');await wait('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(".screen h1")','Shopping without a heading');await shot('06-shop');assert.equal(await evaluate('!!window.FamilyMenuStores || [...document.scripts].some(s=>s.src.endsWith("/stores.js"))'),false,'Store client is not shipped or loaded');
  assert.equal(await evaluate('document.querySelectorAll(".screen a[href*=\\"vkusvill\\"], .screen a[href*=\\"lavka\\"]").length'),0,'No store links in the list');
  assert.equal(await evaluate('!!document.querySelector("#lavka-cart") || !!document.querySelector(\'[data-act="vkusvillCart"]\') || /Уже есть дома/.test(document.body.innerText)'),false,'No store blocks and no «Уже есть дома» in the list');
- await click('.pricecard');await wait(has('Автосборка корзины'),'Auto cart opens during the 7 free days');
- await wait(has('Утвердить меню'),'Auto cart needs an approved menu');await click('[data-act="approve8"]');
- // Generation never opens a tab; the ready basket gets its own explicit link.
- await evaluate('window.cartOpenCount=0;window.open=()=>{window.cartOpenCount++;return null};window.boughtBeforeCart=JSON.stringify(S.bought)');
- await click('[data-act="vkusvillCart"]');await wait(has('ВкусВилл отклонил подключение'),'Store connection error missing');
- await click('[data-act="vkusvillCart"]');await wait('!!document.querySelector("[data-store-cart-link]")','Ready basket link missing');
- assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").href'),'https://vkusvill.ru/mobile?basket&share=1001');
- assert.equal(await evaluate('JSON.stringify(S.bought)===window.boughtBeforeCart'),true,'Cart creation must not mark groceries as bought');
- assert.equal(await evaluate('!!UI.cart'),false,'No per-product wizard for VkusVill');
- assert.equal(await evaluate('window.cartOpenCount'),0,'Generating must never open a tab');
- assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").textContent'),'Добавить в корзину');
- await click('[data-act="store"][data-v="lavka"]');
- await evaluate(`Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition:success=>success({coords:{longitude:37.615,latitude:55.757}})}})`);
- assert.ok(await evaluate('document.querySelector("#lavka-cart").textContent.includes("Beta")'),'Lavka Beta badge');
- await click('[data-act="lavkaCart"]');await wait('!!document.querySelector("[data-store-cart-link][data-store=lavka]")','Lavka ready link missing');
- assert.match(await evaluate('document.querySelector("[data-store-cart-link][data-store=lavka]").href'),/^https:\/\/lavka.yandex.ru\/cart\?sharedCartId=/);
- assert.equal(await evaluate('window.cartOpenCount'),0,'Lavka generation must never open a tab');
- assert.equal(await evaluate('JSON.stringify(S.bought)===window.boughtBeforeCart'),true,'Lavka must not mark groceries as bought');
- assert.equal(await evaluate('!!UI.cart'),false,'No product wizard for Lavka');
- await shot('06b-lavka-ready');
- await click('[data-act="back8"]');await wait(`S.tab==='shop'`,'Back returns to the tab it came from');
+ assert.equal(await evaluate('document.querySelector(".pricecard").tagName'),'DIV','Shopping totals are informational');
+ assert.equal(await evaluate('/автосбор|собрать корзину|корзину автоматически/i.test(document.body.innerText)'),false,'Shopping has no basket feature copy');
+ await evaluate('act("tab","autocart");render()');assert.equal(await evaluate('S.tab'),'today','A stale basket navigation cannot open the removed screen');
+ await click('[data-act="tab"][data-v="shop"]');
  assert.ok(await evaluate('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(\'[data-act="copy"]\')'),'Telegram share instead of copy');
- await click('[data-act="drawer"]');assert.equal(await evaluate('!!document.querySelector(".dseg") || !!document.querySelector("#theme8")'),false,'No switcher and no theme');await click('[data-act="nav8"][data-v="sub"]');await click('[data-act="subscribe8"]');
+ await click('[data-act="drawer"]');assert.equal(await evaluate('!!document.querySelector(".dseg") || !!document.querySelector("#theme8")'),false,'No switcher and no theme');await click('[data-act="nav8"][data-v="sub"]');assert.equal(await evaluate('/автосбор|собрать корзину|корзину автоматически/i.test(document.body.innerText)'),false,'Premium has no basket promises');await click('[data-act="subscribe8"]');
  await click('[data-act="tab"][data-v="today"]');
  await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="pFamily"]');await wait('document.querySelectorAll(".fam8").length===S.profile.members.length && /Б \\d+ г/.test(document.querySelector(".fam8").innerText)','Family: compact cards with daily protein, fat and carbs');await shot('08-family');
  assert.ok(await evaluate(`(()=>{const kp=S.pantry;S.pantry=[{key:'rice',qty:900}];const ok=[0,1,2,3,4].every(()=>sideFor(RBY.p9).i.some(([k])=>k==='rice'));S.pantry=kp;return ok})()`),'Side from what is at home');
@@ -264,13 +241,13 @@ try {
  await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Account did not restore');assert.ok(refreshCalls>0);
  assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),true,'Own recipe did not load');
  assert.ok(await evaluate(`pool8('dish').some(r=>r.id===${JSON.stringify(own)})`),'Own recipe joins menu selection');
- await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="autocart"]');await evaluate('document.querySelector(\'[data-act="approve8"]\')?.click()');await wait('!!document.querySelector("#budget")','Auto cart budget');
+ await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="pBudget"]');await wait('!!document.querySelector("#budget")','Budget settings');
  failSave=true;await fill('#budget','10000');await wait(has('Данные изменились на другом устройстве'),'Conflict was not shown');await click('#sync-error button');await wait('S.profile.budget===9000','Conflict reload ignored canonical server fields');
  await evaluate('S.tab="menu",render()');await click('[data-act="drawer"]');await click('.drawer [data-act="logout"]');await wait(has('Войти через Telegram'),'Logout failed');
  assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
  approved=false;user='b';await click('[data-act="telegramStart"]');await wait(has('4826'),'Second challenge missing');approved=true;
  await wait(has('Зачем вам Frigo?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
- assert.equal(errors.length,0);console.log('PASS v8.14: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
+ assert.equal(errors.length,0);console.log('PASS v8.14: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; store baskets absent; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
 }catch(error){
  console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const info=await send('Runtime.evaluate',{expression:'JSON.stringify({url:location.href,ready:document.readyState,scripts:[...document.scripts].map(s=>s.src)})',returnByValue:true});console.error('Page:',info.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
  console.log('::error title=web-smoke::'+String(error.message).replace(/\n/g,'%0A'));process.exitCode=1;

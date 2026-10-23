@@ -1,7 +1,4 @@
 import http from 'node:http';
-import {createStoreCartRouter,buildVkusvillCart,cartIngredients} from './store-cart.mjs';
-import {buildLavkaCart,lavkaInput} from './lavka.mjs';
-import {createVkusvillHealth} from './vkusvill-mcp.mjs';
 import { readFile } from 'node:fs/promises';
 import {createSupabaseAuth,AuthError} from './auth.mjs';
 import {bearer} from './auth-routes.mjs';
@@ -25,10 +22,8 @@ export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') 
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
 }
 
-export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, buildStoreCart = buildVkusvillCart, buildLavkaStoreCart = buildLavkaCart, storeHealth = createVkusvillHealth(), hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
-  const storeCartRouter=createStoreCartRouter({catalog,apiKey,hourlyLimit,
-    parse:(body,ingredients,req)=>new URL(req.url,'http://localhost').pathname==='/api/stores/lavka/cart'?{...lavkaInput(body,ingredients),store:'lavka'}:{items:cartIngredients(body,ingredients)},
-    build:args=>args.store==='lavka'?buildLavkaStoreCart(args):buildStoreCart(args)});
+export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins = configuredOrigins(), revision = deploymentRevision(), catalog = createCatalogRepository(), inventory = createInventoryRepository(), analyze = analyzeFridge, generate = generateMeals, hourlyLimit = 30, supabase = createSupabaseIntegration(), auth = createSupabaseAuth(), userState = createUserStateRepository(), telegram = createTelegramAuth({auth}), authRouter = createAuthRouter({auth,telegram}) } = {}) {
+  // Store basket integrations are disabled for V1; retained in store-cart.mjs, lavka.mjs and vkusvill-mcp.mjs.
   const userStateRouter=createUserStateRouter(userState);
   const inventoryRouter = createInventoryRouter({inventory,catalog});
   const fridgeRouter = createFridgeRouter({ apiKey, analyze, catalog, hourlyLimit });
@@ -40,7 +35,7 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
     };
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (path === '/health/vkusvill' || path === '/api/stores/vkusvill/cart' || path === '/api/stores/lavka/cart' || path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
+    if (path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
       const origin = req.headers.origin;
       if (origin && !allowedOrigins.includes(origin) && origin !== `http://${req.headers.host}` && origin !== `https://${req.headers.host}`) return send(403, { error: 'Этот сайт не подключён к API.' });
       if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
@@ -48,11 +43,10 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Expose-Headers', 'Retry-After');
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-      if(['/api/stores/vkusvill/cart','/api/stores/lavka/cart','/api/user-state','/api/preferences','/api/menu','/api/inventory','/api/inventory/item','/api/ingredients','/api/fridge/scan','/api/meals'].includes(path)) {
+      if(['/api/user-state','/api/preferences','/api/menu','/api/inventory','/api/inventory/item','/api/ingredients','/api/fridge/scan','/api/meals'].includes(path)) {
         try {req.accessToken=bearer(req);req.user=await auth.getUser(req.accessToken);}
         catch(error) {return send(error instanceof AuthError?error.status:503,{error:error instanceof AuthError?error.message:'Сервис входа временно недоступен.'});}
       }
-      if(path==='/api/stores/vkusvill/cart' || path==='/api/stores/lavka/cart')return storeCartRouter(req,res,send);
       if(['/api/user-state','/api/preferences','/api/menu'].includes(path)) return userStateRouter(req,path,send,res);
       if (path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients') return inventoryRouter(req,path,send,res);
       if (path === '/api/catalog') {
@@ -61,11 +55,6 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
         catch {return send(503,{error:'Каталог временно недоступен. Попробуйте ещё раз.'});}
       }
       if (path === '/api/fridge/scan') return fridgeRouter(req, res, send);
-      if (path === '/health/vkusvill') {
-        if(req.method!=='GET'){res.setHeader('Allow','GET, OPTIONS');return send(405,{error:'Метод не поддерживается.'});}
-        let available=false;try{available=await storeHealth();}catch{}
-        return send(available?200:503,{status:available?'ok':'error',publicMcp:available?'available':'unavailable'});
-      }
       if (path.startsWith('/api/auth/') || path === '/health/auth') return authRouter(req, path, send, res);
       if (path === '/health/supabase' && req.method === 'GET') {
         try {
