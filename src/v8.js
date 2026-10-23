@@ -534,7 +534,6 @@ function auth8(){
 }
 
 /* ---------- app shell: burger (left), title, cooked-dishes counter (right), three tabs ---------- */
-const TG8='<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M21.4 4.6 2.9 11.7c-1 .4-1 1.6 0 1.9l4.6 1.5 1.8 5.5c.2.7 1.1.9 1.6.4l2.6-2.5 4.6 3.4c.6.4 1.4.1 1.6-.6l3.1-14.6c.2-.9-.6-1.5-1.4-1.1zM9.8 14.6l-.4 3.6-1.3-4 9.6-6.2-7.9 6.6z"/></svg>';
 const cookedTotal8=()=>V().ev.filter(e=>e.n==='dish_cooked').length;
 const DIARY8='<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 3c.6 3.2 5 5.3 5 10.2A5 5 0 0 1 7 13.2c0-2.4 1.2-4 2.6-5.1.1 1.9.9 3 2 3.4-.6-2.8-.4-5.8.4-8.5z"/><path d="M10.2 16.5a1.9 1.9 0 0 0 3.6 0"/></svg>';
 const HAT8='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 14.5a4 4 0 0 1-.6-7.9A5 5 0 0 1 12 3a5 5 0 0 1 5.6 3.6 4 4 0 0 1-.6 7.9V20H7z"/><path d="M7 17h10"/></svg>';
@@ -770,12 +769,14 @@ function scrShop8(){
     <div class="for8">${i.packs?`${i.packs} уп. × ${fmtQty(i.k,i.pack)}${i.left>=1?` · останется ${fmtQty(i.k,i.left)} — добавим в «Дома»`:''} · `:''}${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
     <button class="iconbtn" data-act="have" data-v="${i.k}" aria-label="Уже есть дома: ${esc(i.name)}" style="font-size:12px">есть</button></div>`;
   return `<div class="screen">
-   <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — список обновится</p><button class="iconbtn tgbtn" data-act="share8" aria-label="Поделиться списком в Telegram" title="Поделиться в Telegram">${TG8}</button></div>
+   <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — список обновится</p><button class="iconbtn" data-act="share8" aria-label="Поделиться списком покупок" title="Поделиться списком">${IC.share}</button></div>
    ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
-   <div class="card pricecard"><span class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty" style="font-size:18px">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></span>
+   <button class="card pricecard" data-act="navPrices" aria-label="Сравнить цены в магазинах"><span class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty" style="font-size:18px">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></span>
     <div class="progress"><i style="width:${need_.length?Math.round((need_.length-left.length)/need_.length*100):100}%"></i></div>
     <span class="small ${left.reduce((a,i)=>a+i.cost,0)>budgetLimit8()+1?'over8':'muted'}">Бюджет на ${S.profile.days} ${plural(S.profile.days,'день','дня','дней')} меню: ${rub(budgetLimit8())} (${rub(S.profile.budget)} в неделю)</span>
-    <span class="small muted">Одинаковые продукты из разных блюд объединены. Цены на ${PRICE_DATE} — примерные.</span></div>
+    <span class="row between small"><span>ВкусВилл ≈ ${rub(basketBy('vv'))}</span><span>Лавка ≈ ${rub(basketBy('lavka'))}</span></span>
+    <span style="color:var(--accent);font-weight:600">Сравнить цены в магазинах ›</span>
+    <span class="small muted">Одинаковые продукты из разных блюд объединены. Цены на ${PRICE_DATE} — примерные.</span></button>
    ${cats.map(c=>`<section class="cat"><h3>${c}</h3>${need_.filter(i=>i.cat===c).map(row).join('')}</section>`).join('')}
    ${sh.spices.length?`<section class="cat"><h3>Специи — проверьте, есть ли дома</h3><div class="card small">${esc(sh.spices.join(', '))}<p class="muted">Количество «по вкусу», в список не суммируем.</p></div></section>`:''}
   </div>`;
@@ -963,7 +964,7 @@ function v8Act(a,v,el){
    case 'extrasSeen8': V().seen.extras8=1; return true;
    case 'extrasGo8': V().seen.extras8=1; S.tab='pDays'; UI.fromDrawer8=false; window.scrollTo(0,0); return true;
    case 'board8': UI.board=true; track('leaderboard_opened'); return true;
-   case 'share8': {const t=shopping().items.filter(i=>!i.covered&&!i.bought).map(i=>`• ${i.name} — ${fmtQty(i.k,i.toBuy,true)}`).join('\n'); window.open('https://t.me/share/url?url='+encodeURIComponent(location.origin+location.pathname)+'&text='+encodeURIComponent('Список покупок:\n'+t),'_blank','noopener'); track('list_shared_telegram'); return 'done'}
+   case 'share8': {const t=shopping().items.filter(i=>!i.covered&&!i.bought).map(i=>`• ${i.name} — ${fmtQty(i.k,i.toBuy,true)}`).join('\n'); FamilyMenuShare.share({text:'Список покупок:\n'+t,url:location.origin+location.pathname}); return 'done'}
    case 'close': if(UI.board){UI.board=false; return true} return false;
    case 'photoAdd': {const inp=document.createElement('input'); inp.type='file'; inp.accept='image/jpeg,image/png,image/webp'; inp.multiple=true; inp.style.display='none'; inp.onchange=()=>{photoFiles8(inp.files); inp.remove()}; document.body.append(inp); inp.click(); return 'done'}
    case 'photoDel': UI.photos.splice(+v,1); return true;
