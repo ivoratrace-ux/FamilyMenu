@@ -28,10 +28,20 @@ on:
       - 'scripts/check-scan-backend.mjs'
       - '.github/workflows/backend.yml'
   workflow_dispatch:
+    inputs:
+      probe_vkusvill:
+        description: Run only the public VkusVill network/contract diagnostic
+        type: boolean
+        default: false
+      probe_cart:
+        description: Also create an anonymous test basket with one milk product (no order)
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   api:
+    if: ${{ !inputs.probe_vkusvill }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -62,6 +72,19 @@ jobs:
       - name: Stop test container
         if: always()
         run: docker rm -f family-menu-api || true
+  vkusvill-probe:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_vkusvill }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Probe public MCP from the runner network
+        env:
+          VKUSVILL_PROBE_CART: ${{ inputs.probe_cart }}
+        run: node scripts/check-vkusvill.mjs
   deploy:
     # Triggers the Render deploy hook after green checks on main. Needs repository secret RENDER_DEPLOY_HOOK.
     needs: api

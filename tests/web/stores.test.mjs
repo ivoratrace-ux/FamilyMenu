@@ -21,9 +21,9 @@ test('click reserves tab immediately, sends only remaining amounts, opens store 
   assert.match(f.card(),/Формируем корзину/);f.click();assert.equal(f.calls.length,1,'Repeated click cannot create a second basket');
   f.resolve(response);await tick();assert.deepEqual(f.navigated,[response.carts[0].url]);assert.equal(f.prior.length,0);assert.equal(f.shopping[0].bought,undefined);assert.match(f.card(),/data-store-cart-link/);
 });
-test('popup-blocked clients and lists over 20 retain explicit links without a product review',async()=>{
-  const f=setup({blocked:true});f.click();f.resolve({...response,carts:[...response.carts,{url:'https://vkusvill.ru/?share_basket=2'}]});await tick();
-  assert.equal(f.navigated.length,0);assert.match(f.card(),/Список разделён на 2 корзины/);assert.equal((f.card().match(/data-store-cart-link/g)||[]).length,2);
+test('popup-blocked clients retain the full ready-basket link without a product review',async()=>{
+  const f=setup({blocked:true});f.click();f.resolve({...response,carts:[{...response.carts[0],productCount:43}]});await tick();
+  assert.equal(f.navigated.length,0);assert.match(f.card(),/Корзина готова/);assert.equal((f.card().match(/data-store-cart-link/g)||[]).length,1);assert.doesNotMatch(f.card(),/20 товаров|разделён/);
 });
 test('failures close the reserved tab and permit retry; arbitrary URLs are never opened',async()=>{
   const f=setup();f.click();f.resolve({...response,carts:[{url:'https://evil.example/cart'}]});await tick();assert.equal(f.navigated.length,0);assert.ok(f.popup.closed);assert.match(f.card(),/Не удалось получить ссылку/);

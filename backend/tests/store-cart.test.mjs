@@ -7,9 +7,9 @@ import {buildVkusvillCart,cartIngredients,searchProducts,selectedProducts,select
 
 const ingredients=[{id:'milk',name:'Молоко',unit:'ml'},{id:'potato',name:'Картофель',unit:'g'}];
 const items=ingredients.map(i=>({ingredientId:i.id,name:i.name,unit:i.unit,quantity:1500}));
-const product=(id='10',name='Молоко 1 л')=>({xml_id:id,name,weight:'1 л',unit:'шт',price:{current:100}});
+const product=(id=10,name='Молоко 1 л')=>({id,name,weight:'1 л',unit:'шт',price:{current:100}});
 const candidates=new Map(items.map(i=>[i.ingredientId,searchProducts({products:[product()]})]));
-const selected={selections:items.map(i=>({ingredientId:i.ingredientId,xmlId:'10',quantity:2}))};
+const selected={selections:items.map(i=>({ingredientId:i.ingredientId,productId:10,quantity:2}))};
 
 test('public MCP negotiates a session, supports SSE, and never sends OAuth or app user tokens',async()=>{
   const calls=[];
@@ -30,10 +30,10 @@ test('edge 403 is a store connection failure; provider HTML is never exposed to 
   const mcp=createVkusvillMcp({fetchImpl:async()=>new Response('<html>Access Blocked private details</html>',{status:403})});
   await assert.rejects(mcp.connect(),e=>e instanceof StoreError && e.status===502 && !e.message.includes('private'));
 });
-test('real XML identifiers only; malformed search and fake/model URLs cannot enter the cart',()=>{
-  assert.deepEqual(searchProducts({products:[{id:'internal-id',name:'Молоко'}]}),[]);
+test('real current product IDs only; malformed search and fake/model URLs cannot enter the cart',()=>{
+  assert.deepEqual(searchProducts({products:[{xml_id:10,name:'Молоко'}]}),[]);
   assert.throws(()=>searchProducts({other:[]}),StoreError);
-  assert.throws(()=>selectedProducts({selections:[{...selected.selections[0],xmlId:'invented'},selected.selections[1]]},items,candidates),StoreError);
+  assert.throws(()=>selectedProducts({selections:[{...selected.selections[0],productId:'invented'},selected.selections[1]]},items,candidates),StoreError);
   assert.throws(()=>selectedProducts({selections:[selected.selections[0],selected.selections[0]]},items,candidates),StoreError);
   assert.throws(()=>selectedProducts({selections:[{...selected.selections[0],quantity:Infinity},selected.selections[1]]},items,candidates),StoreError);
   for(const url of ['https://evil.example/?share_basket=1','https://vkusvill.ru.evil.example/','https://evil@vkusvill.ru/','javascript:alert(1)'])assert.throws(()=>cartUrl({url}),StoreError);
@@ -48,34 +48,33 @@ test('selection uses the backend OpenAI key, keeps quantities/packaging, and req
   const data=await selectStoreProducts({items,candidates,apiKey:'server-only',signal:AbortSignal.timeout(1000),fetchImpl:async(url,options)=>{
     assert.equal(url,'https://api.openai.com/v1/chat/completions');assert.equal(options.headers.Authorization,'Bearer server-only');
     const body=JSON.parse(options.body);assert.equal(body.response_format.json_schema.strict,true);
-    const input=JSON.parse(body.messages[1].content);assert.equal(input.items[0].quantity,1500);assert.equal(input.items[0].unit,'ml');assert.equal(input.items[0].candidates[0].xmlId,'10');
+    const input=JSON.parse(body.messages[1].content);assert.equal(input.items[0].quantity,1500);assert.equal(input.items[0].unit,'ml');assert.equal(input.items[0].candidates[0].productId,10);
     return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(selected)}}]});
   }});
-  assert.deepEqual(selectedProducts(data,items,candidates),[{xml_id:'10',q:4}],'Same product chosen for two ingredients is merged');
+  assert.deepEqual(selectedProducts(data,items,candidates),[{id:10,q:4}],'Same product chosen for two ingredients is merged');
 });
-test('full lists are split at the documented 20-product limit; URLs come exclusively from the MCP cart tool',async()=>{
+test('lists over 20 products stay in one basket at the current 100-product limit; URLs come exclusively from the MCP cart tool',async()=>{
   const many=Array.from({length:43},(_,n)=>({ingredientId:'i'+n,name:'Продукт '+n,unit:'g',quantity:500})),cartCalls=[];
   let closed=false;
   const result=await buildVkusvillCart({items:many,apiKey:'key',mcpFactory:()=>({connect:async()=>{},close:async()=>{closed=true;},call:async(name,args)=>{
-    if(name==='vkusvill_products_search')return {products:[product(args.q.split(' ').at(-1))]};
-    assert.ok(args.products.every(p=>Number.isSafeInteger(p.xml_id)),'Numeric XML IDs reach the MCP as numbers');
+    if(name==='vkusvill_products_search')return {products:[product(Number(args.q.split(' ').at(-1))+1)]};
+    assert.ok(args.products.every(p=>Number.isSafeInteger(p.id)),'Numeric current IDs reach the MCP as numbers');
     cartCalls.push(args.products);return {url:'https://vkusvill.ru/?share_basket='+cartCalls.length};
-  }}),select:async({items,candidates})=>({selections:items.map(i=>({ingredientId:i.ingredientId,xmlId:candidates.get(i.ingredientId)[0].xmlId,quantity:1}))})});
-  assert.deepEqual(cartCalls.map(c=>c.length),[20,20,3]);assert.equal(result.ingredientCount,43);assert.equal(result.productCount,43);assert.equal(result.carts.length,3);assert.ok(closed);
+  }}),select:async({items,candidates})=>({selections:items.map(i=>({ingredientId:i.ingredientId,productId:candidates.get(i.ingredientId)[0].productId,quantity:1}))})});
+  assert.deepEqual(cartCalls.map(c=>c.length),[43]);assert.equal(result.ingredientCount,43);assert.equal(result.productCount,43);assert.equal(result.carts.length,1);assert.ok(closed);
 });
 test('missing products or uncertain packaging abort the whole basket; never silently drop an ingredient',async()=>{
   let created=0,closed=0;
   const factory=()=>({connect:async()=>{},close:async()=>{closed++;},call:async name=>{if(name==='vkusvill_products_search')return {products:[]};created++;}});
   await assert.rejects(buildVkusvillCart({items,apiKey:'key',mcpFactory:factory,select:()=>assert.fail('No paid selection for empty search')}),e=>e.status===422);
   assert.equal(created,0);assert.equal(closed,1);
-  assert.throws(()=>selectedProducts({selections:[selected.selections[0],{ingredientId:'potato',xmlId:null,quantity:0}]},items,candidates),e=>e.status===422);
+  assert.throws(()=>selectedProducts({selections:[selected.selections[0],{ingredientId:'potato',productId:null,quantity:0}]},items,candidates),e=>e.status===422);
 });
-test('the declared string XML-ID schema preserves exact IDs instead of coercing them',async()=>{
-  const result=await buildVkusvillCart({items:[items[0]],apiKey:'key',mcpFactory:()=>({
-    connect:async()=>[{name:'vkusvill_cart_link_create',inputSchema:{properties:{products:{items:{properties:{xml_id:{type:'string'}}}}}}}],close:async()=>{},
-    call:async(name,args)=>{if(name==='vkusvill_products_search')return {ok:true,data:{products:[product('0010')]}};assert.deepEqual(args.products,[{xml_id:'0010',q:2}]);return 'https://vkusvill.ru/?share_basket=1';}
-  }),select:async()=>({selections:[{ingredientId:'milk',xmlId:'0010',quantity:2}]})});
-  assert.equal(result.carts.length,1);
+test('current IDs and quantity limits prevent old-schema fallbacks and silently truncated baskets',()=>{
+  assert.deepEqual(searchProducts({ok:true,data:{products:[product(),{id:0,name:'bad'},{id:'unsafe',name:'bad'},product()]}}).map(p=>p.productId),[10]);
+  assert.deepEqual(selectedProducts({selections:[{ingredientId:'milk',productId:10,quantity:0.001}]},[items[0]],candidates),[{id:10,q:0.01}]);
+  assert.throws(()=>selectedProducts({selections:items.map(i=>({ingredientId:i.ingredientId,productId:10,quantity:30}))},items,candidates),e=>e.status===422);
+  assert.throws(()=>selectedProducts({selections:[{ingredientId:'milk',productId:10,quantity:41}]},[items[0]],candidates),StoreError);
 });
 test('cart HTTP endpoint enforces authentication, CORS, validation, method, quotas, and never writes personal data',async t=>{
   let built=0;

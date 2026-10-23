@@ -18,8 +18,8 @@
       <button class="btn block" data-act="vkusvillCart" ${state?.busy || !count?'disabled':''}>${state?.busy?'Формируем корзину…':'Сформировать корзину во ВкусВилле'}</button>
       ${state?.busy?'<p class="small muted" role="status">Ищем товары. Это может занять до трёх минут.</p>':''}
       ${state?.error?`<p class="small" role="alert">${esc(state.error)}</p>`:''}
-      ${state?.carts?`<p class="small" role="status">${state.carts.length>1?'Список разделён на '+state.carts.length+' корзины — до 20 товаров в каждой. Оформите каждую отдельно.':'Корзина готова. Если она не открылась, нажмите ссылку.'}</p>${state.carts.map((cart,i)=>`<a class="btn ghost block" data-store-cart-link href="${esc(cart.url)}" target="_blank" rel="noopener noreferrer">Открыть ${state.carts.length>1?'корзину '+(i+1):'корзину'} во ВкусВилле ↗</a>`).join('')}`:''}
-      <p class="small muted">Цены, наличие и состав уточняйте во ВкусВилле. Для списков больше 20 товаров создадим несколько корзин. Специи «по вкусу» не добавляем.</p>
+      ${state?.carts?`<p class="small" role="status">Корзина готова. Если она не открылась, нажмите ссылку.</p><a class="btn ghost block" data-store-cart-link href="${esc(state.carts[0].url)}" target="_blank" rel="noopener noreferrer">Открыть корзину во ВкусВилле ↗</a>`:''}
+      <p class="small muted">Цены, наличие и состав уточняйте во ВкусВилле. Специи «по вкусу» не добавляем.</p>
     </div>`;
   }
   async function start() {
@@ -34,9 +34,9 @@
       const result=await api.request('/api/stores/vkusvill/cart',{method:'POST',body:{items:list},timeoutMs:165000});
       if(version!==attempt)return;
       if(owner!==api.session?.user.id || snapshot!==fingerprint()){reset();render();toast('Список изменился. Сформируйте корзину заново.');return;}
-      if(result.store!=='vkusvill' || !Array.isArray(result.carts) || !result.carts.length || result.carts.length>5 || result.carts.some(c=>!safeUrl(c.url)))throw Error('Не удалось получить ссылку на корзину. Попробуйте ещё раз.');
+      if(result.store!=='vkusvill' || !Array.isArray(result.carts) || result.carts.length!==1 || result.carts.some(c=>!safeUrl(c.url)))throw Error('Не удалось получить ссылку на корзину. Попробуйте ещё раз.');
       state={...state,busy:false,carts:result.carts.map(c=>({...c,url:safeUrl(c.url)}))};
-      // The first link opens automatically. Further baskets and the popup-blocked fallback remain visible.
+      // Open the complete basket automatically; keep a fallback link if the popup was blocked.
       if(popup && !popup.closed)popup.location.replace(state.carts[0].url);
       popup=null;render();
     }catch(error){
