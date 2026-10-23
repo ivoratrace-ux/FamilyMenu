@@ -30,7 +30,7 @@ const bundle=(id=user)=>({user:{id,application:'telegram',providerUserId:id,logi
 const bodyText=`(document.body?.innerText || '')`;
 try {
  let pages;
- for(let n=0;n<100;n++){if(chromeError)throw chromeError;try{pages=(await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter(target=>target.type==='page' && target.url==='about:blank' && target.webSocketDebuggerUrl);if(pages.length)break;}catch{}await delay(100);}
+ for(let n=0;n<300;n++){if(chromeError)throw chromeError;try{pages=(await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter(target=>target.type==='page' && target.webSocketDebuggerUrl && !/^chrome-extension:/.test(target.url));if(pages.length)break;}catch{}await delay(100);}
  assert.ok(pages?.length,'Chrome did not start');ws=new WebSocket(pages[0].webSocketDebuggerUrl);await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j;});
  let id=0;const pending=new Map();send=(method,params={})=>new Promise((resolve,reject)=>{const requestId=++id;const timer=setTimeout(()=>{pending.delete(requestId);reject(Error('CDP timeout: '+method));},30000);pending.set(requestId,r=>{clearTimeout(timer);r.error?reject(Error(JSON.stringify(r.error))):resolve(r.result)});ws.send(JSON.stringify({id:requestId,method,params}));});
  ws.onmessage=async event=>{
@@ -91,37 +91,56 @@ try {
  const has=text=>`${bodyText}.includes(${JSON.stringify(text)})`;
  const shot=async name=>writeFile(resolve(report,name+'.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
  await send('Page.navigate',{url:base+'/FamilyMenu/'});
- await wait('!!document.querySelector(".splash8")','Splash missing');
+ await wait('document.querySelectorAll(".splash8 .hat8").length===3','Splash with three hats missing');
  await wait(has('Не удалось загрузить приложение'),'Catalog failure must be visible');
- await click('#app button');await wait(has('Готовим из того, что есть'),'Feature slides missing');await shot('01-slide');
- await click('[data-act="introNext8"]');await wait(has('Большая база рецептов'),'Second slide missing');
- await click('[data-act="introSkip8"]');await wait(has('Какая у вас цель?'),'Goal step missing');
+ await click('#app button');await wait('!document.querySelector(".splash8")','Splash must go away');await wait(has('Меню на неделю для всей семьи'),'Feature slides missing');await shot('01-slide');
+ assert.equal(await evaluate('!!document.querySelector(\'[data-act="introSkip8"]\')'),false,'No skip on slides');
+ await wait(has('Меню на неделю для всей семьи'),'v4 slide 1');for(const [label,next] of [['А что ещё?','Список покупок соберётся сам'],['Ух ты, понял','Первая неделя — бесплатно']]){await wait(has(label),'Button '+label);await click('[data-act="introNext8"]');await wait(has(next),'Slide '+next);}
+ await click('[data-act="introBack8"]');await wait(has('Список покупок соберётся сам'),'Back arrow on slides');await click('[data-act="introNext8"]');
+ await wait(has('Начать'),'Last slide says Начать');await click('[data-act="introNext8"]');await wait(has('Какая у вас цель?'),'Goal step missing');
  assert.equal(await evaluate('document.querySelector(\'[data-act="qNext8"]\').disabled'),true,'Every step needs an answer');
- await click('[data-act="goal8"][data-v="lose"]');await click('[data-act="qNext8"]');
+ await click('[data-act="goal8"][data-v="lose"]');await click('[data-act="goal8"][data-v="pp"]');assert.deepEqual(await evaluate('S.profile.goals'),['lose','pp'],'Several goals');await click('[data-act="qNext8"]');
  await wait(has('Какой у вас тип питания?'),'Diet step missing');await click('[data-act="diet8"][data-v="all"]');await click('[data-act="qNext8"]');
  await wait(has('Чего не должно быть в меню?'),'Restrictions step missing');await shot('02-restrictions');
  assert.equal(await evaluate('[...document.querySelectorAll(".morechip")].filter(e=>!e.hidden).length'),2,'Both chip blocks collapse behind «Ещё»');
- assert.equal(await evaluate('(()=>{const box=document.querySelector(\'[data-clamp="dislike"]\');const tops=new Set([...box.querySelectorAll(".chip")].filter(c=>!c.hidden).map(c=>c.offsetTop));return tops.size})()'),4,'Collapsed chips take four rows');
+ assert.equal(await evaluate('(()=>{const box=document.querySelector(\'[data-clamp="dislike"]\');const tops=new Set([...box.querySelectorAll(".chip")].filter(c=>!c.hidden).map(c=>c.offsetTop));return tops.size})()'),3,'Collapsed chips take three rows');
+ assert.equal(await evaluate('[...document.querySelectorAll(\'[data-clamp] .chip\')].some(c=>/[(,\\d]/.test(c.textContent))'),false,'One-word chips');
+ await fill('#rs8_dislike','лук');await click('[data-act="dislike8"][data-v="Лук"]');assert.ok(await evaluate('S.profile.dislikes.includes("onion")'),'Dislike search');
  await click('[data-act="allergy"][data-v="nuts"]');await click('[data-act="qNext8"]');
- await wait(has('Что уже есть в холодильнике?'),'Fridge step missing');
+ await wait(has('Что уже есть дома?'),'Home step missing');
+ await fill('#pq8','рис');await click('[data-act="pt8s"][data-v="rice"]');assert.equal(await evaluate('UI.q8'),'','Search clears after a pick');
  const potato=catalog.ingredients.find(i=>i.id==='potato');
  await click(`[data-act="cat8"][data-v="${potato.category}"]`);await click('[data-act="pt8"][data-v="potato"]');await shot('03-fridge');await click('[data-act="qNext8"]');
  await wait(has('Ещё немного деталей'),'Details step missing');
- await evaluate(`(()=>{const e=document.querySelector('#kind_l');e.value='pair';e.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+ assert.equal(await evaluate('!!document.querySelector("#kind_l")'),false,'Meal kinds live in settings');await click('[data-act="persons8"][data-v="1"]');assert.equal(await evaluate('S.profile.members.length'),4);
  await click('[data-act="days8"][data-v="1"]');await wait('S.profile.days===4','Days counter');await click('[data-act="days8"][data-v="-1"]');
+ await click('[data-act="qNext8"]');await wait(has('Неделя и бюджет'),'Budget step missing');await fill('#budget','12000');assert.equal(await evaluate('S.profile.budget'),12000);
  await click('[data-act="build8"]');await wait('!!document.querySelector(".logo8")','Loader with logo missing');
  await wait(`S.stage==='ready'`,'First menu did not open before sign-in');await wait(has('Ваше меню готово'),'Ready text missing');await shot('04-ready');
  assert.equal(privateCalls,0,'Nothing private before sign-in');
  assert.equal(await evaluate('S.plan.days.filter(d=>Object.keys(d.slots).length).length'),3,'Menu for 3 days');
- assert.ok(await evaluate('S.plan.days[0].slots.d.rid.startsWith("c_") && S.plan.days[0].slots.l.rid.startsWith("c_")'),'Main and side are combined');
+ assert.ok(await evaluate('S.plan.days[0].slots.d_pair.rid.startsWith("c_")'),'Dinner combines main and side');
  await click('[data-act="toAuth8"]');await wait(has('Войти через Telegram'),'Telegram login missing');
  await click('[data-act="telegramStart"]');await wait(has('4826'),'Challenge missing');approved=true;
  await wait(`window.FamilyMenuBridge?.ready && S.stage==='app'`,'Sign-in did not open the app');
  for(let n=0;n<100 && !documents.get('a')?.menu;n++)await delay(100);assert.equal(documents.get('a').menu.days.length,7,'API keeps seven days');
  assert.ok(documents.get('a').preferences.onboarded,'Answers saved to the new account');
  for(let n=0;n<100 && !stocks.get('a').items.some(i=>i.ingredientId==='potato');n++)await delay(100);assert.ok(stocks.get('a').items.some(i=>i.ingredientId==='potato'),'Products marked before sign-in were saved');
- await wait(has('Меню'),'Menu tab');await shot('05-menu');
- await click('.hero [data-act="cook"]');await wait('!!document.querySelector(\'[data-act="cclose"]\')','Cooking missing');await click('[data-act="cclose"]');await wait('!UI.cook','Cooking did not close');
+ await wait(`S.tab==='today'`,'App opens on «Сегодня»');await click('[data-act="tab"][data-v="menu"]');await wait('!!document.querySelector(".slot [data-drag]") && !document.querySelector(".hero")','v4 menu with drag handles');
+ assert.equal(await evaluate(has('Калории сегодня')),false,'Calories moved to «Сегодня»');assert.equal(await evaluate('!!document.querySelector(".appbar > b") || /≈\\s?[0-9][0-9 \u00a0]*₽/.test(document.querySelector(".screen").innerText)'),false,'No duplicated title and no prices in the menu');await shot('05-menu');
+ assert.ok(await evaluate('!!document.querySelector(".mealhead8")'),'Meals are grouped');
+ {const before=await evaluate('Object.keys(S.plan.days[1].slots).length');await evaluate('document.querySelectorAll(".day")[1].scrollIntoView()');const box=await evaluate('(()=>{const r=document.querySelectorAll(".day")[1].querySelector(".slot[data-slot] .open").getBoundingClientRect();return {x:r.x+20,y:r.y+r.height/2}})()');
+  await send('Input.dispatchMouseEvent',{type:'mousePressed',x:box.x,y:box.y,button:'left',clickCount:1});for(let i=1;i<=8;i++)await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:box.x+i*25,y:box.y,button:'left',buttons:1});await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:box.x+200,y:box.y,button:'left',clickCount:1});
+  await wait(`Object.keys(S.plan.days[1].slots).length===${before}-1`,'Swipe right removes a dish');assert.equal(await evaluate('!!UI.sheet'),false,'Swipe does not open the recipe');}
+ await click('[data-act="tab"][data-v="today"]');await wait(has('Калории сегодня'),'Today tab');await wait('!!document.querySelector(".day.today .mealhead8") && !!document.querySelector(".next8m")','Today has the same structure as the menu, upcoming meal marked');
+ assert.equal(await evaluate('[...document.querySelectorAll(".day.today .slot")].some(c=>/Готовить/.test(c.innerText)&&/Съели/.test(c.innerText))'),false,'Never «Готовить» and «Съели» on one card');
+ assert.equal(await evaluate('/Отмечайте|Можно написать/.test(document.querySelector(".kcal").innerText)'),false,'No long hints under the bar');await shot('05a-today');
+ await click('.day.today .slot [data-act="recipe"]');await click('#layer [data-act="fav8"]');assert.equal(await evaluate('S.fav8.length'),1,'Favourite from the recipe card');await click('#layer [data-act="cooked"]');await wait('cookedTotal8()===1','Cooked counter');
+ assert.equal(await evaluate('/₽/.test(document.querySelector("#layer").innerText)'),false,'No price on the dish card');
+ await click('#layer [data-act="close"]');await click('.cooked8');await wait(`S.tab==='diary' && !!document.querySelector('#hscroll8 .wday8.sel8 .cookdot8') && !document.querySelector('.mchart8')`,'Diary: scrollable days with today cooked');assert.ok(await evaluate(has('Норма калорийности по дням')));
+ await click('[data-act="gran8"][data-v="month"]');await wait('document.querySelectorAll("#hscroll8 .wday8").length===12','Month granularity');await click('[data-act="gran8"][data-v="day"]');
+ await click('.histrow8');await wait(`S.tab==='rec8' && ${has('Как готовить')}`,'Recipe from the cooking history');await click('[data-act="back8"]');await wait(`S.tab==='diary'`,'Back to the diary');await shot('05c-diary');
+ await click('[data-act="board8"]');await wait(has('Вы на 10-м месте'),'Leaderboard missing');await shot('05b-board');await click('.sheet [data-act="close"]');await wait('!UI.board','Leaderboard did not close');await click('[data-act="back8"]');await click('[data-act="tab"][data-v="menu"]');
  await click('[data-act="tab"][data-v="shop"]');await wait(has('Список покупок'),'Shopping missing');await shot('06-shop');
  assert.equal(await evaluate('document.querySelectorAll(".screen a[href*=\\"vkusvill\\"], .screen a[href*=\\"lavka\\"]").length'),0,'No store links in the list');
  // Public cart opens directly, preserves the shopping state, and offers a link when popup blocked.
@@ -131,10 +150,22 @@ try {
  assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").href'),'https://vkusvill.ru/?share_basket=smoke');
  assert.equal(await evaluate('JSON.stringify(S.bought)===window.boughtBeforeCart'),true,'Cart creation must not mark groceries as bought');
  assert.equal(await evaluate('!!UI.cart'),false,'No per-product wizard for VkusVill');
- await click('.pricecard');await wait(has('Что входит в Premium'),'Premium offer missing');await click('[data-act="subscribe8"]');
+ await click('.pricecard');await wait(has('Автосборка корзины'),'Auto cart opens during the 7 free days');
  await wait(has('Утвердить меню'),'Auto cart needs an approved menu');await click('[data-act="approve8"]');
  await click('[data-act="store"][data-v="lavka"]');await click('[data-act="cartStart"]');await wait('!!document.querySelector(\'[data-act="cartAdd"]\')','Cart missing');await click('[data-act="cartAdd"]');await click('[data-act="cartClose"]');
- await click('[data-act="back8"]');await wait(`S.tab==='profile'`,'Back from a page');
+ await click('[data-act="back8"]');await wait(`S.tab==='shop'`,'Back returns to the tab it came from');
+ assert.ok(await evaluate('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(\'[data-act="copy"]\')'),'Telegram share instead of copy');
+ await click('[data-act="drawer"]');assert.equal(await evaluate('!!document.querySelector(".dseg") || !!document.querySelector("#theme8")'),false,'No switcher and no theme');await click('[data-act="nav8"][data-v="sub"]');await click('[data-act="subscribe8"]');
+ await click('[data-act="tab"][data-v="today"]');
+ await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="pFamily"]');await click('[data-act="back8"]');await wait('UI.drawer','Drawer stays open after a page');
+ await click('[data-act="nav8"][data-v="pDays"]');await click('[data-act="kind8"][data-v="l:drink"]');await click('[data-act="kind8"][data-v="l:dessert"]');assert.deepEqual(await evaluate('S.profile.mealSetup.l'),['soup','drink','dessert'],'Several dishes for lunch');
+ await click('[data-act="regen"]');await wait(`S.stage==='app' && !!S.plan.days[0].slots.l_drink && !!S.plan.days[0].slots.l_dessert`,'Lunch with soup, drink and dessert');
+ assert.ok(await evaluate('S.plan.days.filter(d=>Object.keys(d.slots).length).every(d=>dayKcal8(d)<=KCAL_TARGET8)'),'Day calories never exceed the norm');
+ console.log('Budget stress:',await evaluate(`(()=>{const keep=S.plan,b0=S.profile.budget,d0=S.profile.days,out=[];for(const b of [5000,8000,12000,20000])for(const d of [3,7]){S.profile.budget=b;S.profile.days=d;generate();const vis=S.plan.days.filter(x=>Object.keys(x.slots).length);out.push(b+'/'+d+':'+Math.round(shopping().cost)+'<='+Math.round(budgetLimit8())+(shopping().cost<=budgetLimit8()+1?'':'!')+(vis.every(x=>dayKcal8(x)<=KCAL_TARGET8)?'':'kcal!'))}S.plan=keep;S.profile.budget=b0;S.profile.days=d0;return out.join(' ')})()`));
+ assert.ok(!(await evaluate(`(()=>{const keep=S.plan,b0=S.profile.budget,d0=S.profile.days;let bad=0;for(const b of [5000,8000,12000,20000])for(const d of [3,7]){S.profile.budget=b;S.profile.days=d;generate();if(shopping().cost>budgetLimit8()+1||!S.plan.days.filter(x=>Object.keys(x.slots).length).every(x=>dayKcal8(x)<=KCAL_TARGET8))bad++}S.plan=keep;S.profile.budget=b0;S.profile.days=d0;return bad})()`)),'Every budget and length fits money and calories');
+ assert.ok(await evaluate('shopping().cost<=budgetLimit8()+1'),'Plan fits the budget: '+await evaluate('Math.round(shopping().cost)+" / "+Math.round(budgetLimit8())'));
+ assert.ok(await evaluate(`(()=>{const keep=S.plan,b0=S.profile.budget,avg=b=>{S.profile.budget=b;let t=0,n=0;for(let i=0;i<8;i++){generateOnce8();S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{if(s.rid){t+=rc(RBY[s.rid]);n++}}))}return t/n};const a=avg(10000),b=avg(30000);S.plan=keep;S.profile.budget=b0;return b>a*1.1})()`),'Budget 30 000 gives pricier dishes than 10 000');
+
  await click('[data-act="tab"][data-v="home"]');await wait(has('Что есть дома'),'Home missing');
  await evaluate(`fetch('src/frigo-logo.jpg').then(r=>r.blob()).then(b=>photoFiles8([new File([b],'f.jpg',{type:'image/jpeg'})]))`);
  await wait(has('Распознать продукты (1)'),'Photo not queued');assert.equal(scanCalls,0);
@@ -142,7 +173,7 @@ try {
  await click('[data-act="scanAlt"][data-v="1:cucumber"]');await click('[data-act="scanSave"]');
  for(let n=0;n<100 && !stocks.get('a').items.some(i=>i.ingredientId==='cucumber');n++)await delay(100);
  assert.ok(['eggs','cucumber','potato'].every(k=>stocks.get('a').items.some(i=>i.ingredientId===k)),'Recognized products saved');await shot('07-home');
- await click('[data-act="tab"][data-v="profile"]');await shot('08-profile');await click('[data-act="tab"][data-v="pRecipes"]');await click('[data-act="recNew"]');
+ await click('[data-act="drawer"]');await shot('08-drawer');await click('[data-act="nav8"][data-v="pRecipes"]');await wait(has('Любимые · 1'),'Favourites tab');await click('[data-act="rtab8"][data-v="own"]');await click('[data-act="recNew"]');
  await fill('#rn8','Бабушкин борщ');await fill('#rq8','карто');await click('[data-act="riAdd8"][data-v="potato"]');
  await fill('[data-act="rstep8"]','Сварить всё вместе');await click('[data-act="recSave"]');await wait(has('Бабушкин борщ'),'Own recipe not listed');
  await wait('!window.FamilyMenuBridge.pending','Pending saves did not finish');
@@ -152,13 +183,13 @@ try {
  await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Account did not restore');assert.ok(refreshCalls>0);
  assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),true,'Own recipe did not load');
  assert.ok(await evaluate(`pool8('dish').some(r=>r.id===${JSON.stringify(own)})`),'Own recipe joins menu selection');
- await click('[data-act="tab"][data-v="profile"]');await click('[data-act="tab"][data-v="autocart"]');
+ await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="autocart"]');await evaluate('document.querySelector(\'[data-act="approve8"]\')?.click()');await wait('!!document.querySelector("#budget")','Auto cart budget');
  failSave=true;await fill('#budget','10000');await wait(has('Данные изменились на другом устройстве'),'Conflict was not shown');await click('#sync-error button');await wait('S.profile.budget===9000','Conflict reload ignored canonical server fields');
- await click('[data-act="tab"][data-v="profile"]');await click('[data-act="logout"]');await wait(has('Войти через Telegram'),'Logout failed');
+ await evaluate('S.tab="menu",render()');await click('[data-act="drawer"]');await click('.drawer [data-act="logout"]');await wait(has('Войти через Telegram'),'Logout failed');
  assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
  approved=false;user='b';await click('[data-act="telegramStart"]');await wait(has('4826'),'Second challenge missing');approved=true;
  await wait(has('Какая у вас цель?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
- assert.equal(errors.length,0);console.log('PASS v8: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
+ assert.equal(errors.length,0);console.log('PASS v8.6: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; auto cart; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
 }catch(error){
  console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const info=await send('Runtime.evaluate',{expression:'JSON.stringify({url:location.href,ready:document.readyState,scripts:[...document.scripts].map(s=>s.src)})',returnByValue:true});console.error('Page:',info.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
  console.log('::error title=web-smoke::'+String(error.message).replace(/\n/g,'%0A'));process.exitCode=1;

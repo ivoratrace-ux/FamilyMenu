@@ -432,7 +432,7 @@ function sheetRecipe({day,slot,done=[]}){
    <div class="row between"><p class="eyebrow">${SLOT_NAMES[slot]} · ${dateLabel(S.plan.days[day].date)}</p><button class="iconbtn" data-act="close" aria-label="Закрыть">✕</button></div>
    <div class="cover">${dishArt(r)}</div>
    <h1 class="dish" style="font-size:26px">${esc(r.n)}</h1>
-   <div class="meta" style="font-size:14px"><span>${r.t} мин</span><span>≈${rub(rc(r)*s.serv)} за блюдо</span>${slot==='l'&&S.profile.soupBatch&&s.serv>portions()?'<span class="pill grey">на два дня</span>':''}</div>
+   <div class="meta" style="font-size:14px"><span>${r.t} мин</span>${slot==='l'&&S.profile.soupBatch&&s.serv>portions()?'<span class="pill grey">на два дня</span>':''}</div>
    ${KC()?`<div class="stack"><h3>На одну порцию</h3><div class="macros"><div class="macro"><b>${r.kcal}</b><span>ккал</span></div><div class="macro"><b>${r.P} г</b><span>белки</span></div><div class="macro"><b>${r.F} г</b><span>жиры</span></div><div class="macro"><b>${r.C} г</b><span>углеводы</span></div></div></div>`:''}
    <div class="card"><div class="row between"><h3>Порции</h3><div class="stepper"><button data-act="serv" data-v="-1" aria-label="Меньше порций">−</button><span>${s.serv}</span><button data-act="serv" data-v="1" aria-label="Больше порций">+</button></div></div>
     <div>${r.i.map(([k,q])=>`<div class="ingr"><span>${esc(ING[k][0])}</span><span class="qty">${fmtQty(k,q*f)}</span></div>`).join('')}

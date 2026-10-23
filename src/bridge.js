@@ -36,9 +36,10 @@
     if(generation!==version || api.session?.user?.id!==user)return;
     clearPrivateRecipes();addSavedRecipes(document);previousPreferences=document.preferences || {};documentRevision=document.revision;
     // A new account takes over the menu, answers, own recipes and products made before signing in.
-    const adopt=!document.preferences && !document.menu && !!local?.plan;
+    // The menu built just before signing in always wins: the person returns to it, without onboarding again.
+    const adopt=!!local?.plan && (['ready','auth'].includes(local.stage) || (!document.preferences && !document.menu));
     clearLayers();S=adopt?{...local}:convert.fromDocument(document,blank());S.user={...api.session.user,phone:api.session.user.login};
-    S.stage=S.plan?'app':'quiz';if(adopt)S.tab='menu';S.tab=S.tab || 'menu';stockFrom(inventory);
+    S.stage=S.plan?'app':'quiz';if(adopt || !['today','menu','shop','home'].includes(S.tab))S.tab='today';stockFrom(inventory);
     if(adopt)for(const item of local.pantry || [])if(ING[item.key] && !S.pantry.some(p=>p.key===item.key))S.pantry.push({key:item.key,qty:item.qty});
     savedState=adopt?'':payloadText();
     ready=true;conflict=false;localStorage.removeItem(KEY);render();if(adopt)flush();
