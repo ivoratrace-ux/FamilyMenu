@@ -90,7 +90,7 @@ function paintTimers(){
   document.querySelectorAll('[data-tbtn]').forEach(el=>{const t=TIMERS[el.dataset.tbtn]; el.textContent=t&&t.running?'Пауза':(t&&t.left<t.total&&t.left>0?'Продолжить':'Старт таймера'); el.setAttribute('aria-pressed',!!(t&&t.running))});
   const strip=document.getElementById('tstrip'); if(strip){const run=Object.entries(TIMERS).filter(([,t])=>t.running||(t.left<=0&&t.done)); strip.innerHTML=run.map(([k,t])=>`<span class="tchip ${t.done?'done':''}">${esc(t.label)} · ${t.done?'готово!':fmtTime(timerLeft(t))}</span>`).join(''); strip.hidden=!run.length}
 }
-setInterval(()=>{let fired=false; Object.values(TIMERS).forEach(t=>{if(t.running&&Date.now()>=t.endAt){t.running=false;t.left=0;t.done=true;fired=true;toast('⏰ Готово: '+t.label)}}); if(fired) beep(); if(Object.values(TIMERS).some(t=>t.running)||fired) paintTimers()},500);
+setInterval(()=>{let fired=false; Object.values(TIMERS).forEach(t=>{if(t.running&&Date.now()>=t.endAt){t.running=false;t.left=0;t.done=true;fired=true;toast('⏰ Готово: '+t.label);if(window.timerDone8)window.timerDone8(t)}}); if(fired) beep(); if(Object.values(TIMERS).some(t=>t.running)||fired) paintTimers()},500);
 
 /* ============ VKUSVILL LINKS ============ */
 const VVQ={chicken_fillet:'филе грудки цыпленка',chicken_thigh:'бедро цыпленка',chicken_liver:'печень цыплят',beef:'говядина мякоть',pork:'шейка свиная',minced_mix:'фарш домашний',minced_turkey:'фарш из индейки',turkey:'филе грудки индейки',

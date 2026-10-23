@@ -90,6 +90,27 @@ function budgetLevel8(){const p=S.profile,per=p.budget/Math.max(1,p.members.leng
 const AVG8={};
 function costZ8(r){const m=r.m==='c'?'p':r.m; if(AVG8[m]==null){const list=R.filter(x=>x.m===m);AVG8[m]=list.length?list.reduce((a,x)=>a+rc(x),0)/list.length:1} return Math.max(-1,Math.min(2,(rc(r)-AVG8[m])/Math.max(1,AVG8[m])))}
 score=(function(orig){return function(r,ctx){return orig(r,ctx)+budgetLevel8()*costZ8(r)*2}})(score);
+/* v8.7: what is already at home comes first. Every product at home in a recipe adds a lot; every product to buy subtracts.
+   Oil, sugar and salt do not count as purchases. */
+const STAPLE8=new Set(['oil','sugar','salt','water']);
+const inPantry8=k=>S.pantry.some(x=>x.key===k&&(+x.qty||0)>0);
+function missing8(r){return r?r.i.filter(([k])=>!STAPLE8.has(k)&&!inPantry8(k)).length:0}
+function hits8(r){return r?r.i.filter(([k])=>!STAPLE8.has(k)&&inPantry8(k)).length:0}
+const buyTag8=r=>{if(!r) return ''; const m=missing8(r); return `<span class="buy8 ${m?'':'ok'}">${m?`докупить +${m}`:'всё есть дома'}</span>`};
+score=(function(orig){return function(r,ctx){const s=orig(r,ctx); if(!S.pantry.length) return s; const h=hits8(r),m=missing8(r); return s+h*4-m*1.5+(h&&!m?5:0)}})(score);
+pick=(function(orig){return function(slot,used,weekend,ctx){
+  if(!S.pantry.length) return orig(slot,used,weekend,ctx);
+  const p=S.profile; ctx=Object.assign({slot},ctx||{}); let c=poolFor(slot); if(!c.length) return null;
+  const maxT=p.maxTime?(weekend?p.maxTime+30:p.maxTime):999,ct=c.filter(r=>r.t<=maxT); if(ct.length) c=ct;
+  const cnt=id=>(used.cnt&&used.cnt[id])||0,minU=Math.min(...c.map(r=>cnt(r.id))),pool=c.filter(r=>cnt(r.id)===minU);
+  const ch=pool.map(r=>({r,s:score(r,ctx)+Math.random()*.5})).sort((a,b)=>b.s-a.s)[0].r;
+  used.cnt=used.cnt||{}; used.cnt[ch.id]=cnt(ch.id)+1; return ch;
+}})(pick);
+altList=(function(orig){return function(day,slot,reason){return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r)}})(altList);
+slotRow=(function(orig){return function(di,sk,compact){const h=orig(di,sk,compact),r=slotRecipe(di,sk); return r?h.replace('<span class="meta">','<span class="meta">'+buyTag8(r)):h}})(slotRow);
+sheetReplace=(function(orig){return function(o){let h=orig(o); for(const r of altList(o.day,o.slot,o.reason||'none')) h=h.replace(new RegExp(`(data-act="altOpen" data-v="${r.id}"[\\s\\S]*?<span class="meta">)`),'$1'+buyTag8(r)); return h}})(sheetReplace);
+const buyLine8=r=>{const miss=r.i.filter(([k])=>!STAPLE8.has(k)&&!inPantry8(k)).map(([k])=>ING[k][0]);
+  return `<p class="small buyline8">${miss.length?`<b>Докупить +${miss.length}</b> · ${esc(miss.join(', '))}`:'<b>Всё есть дома</b> — докупать ничего не нужно'}</p>`};
 function sideFor(main){const sides=pool8('side'); if(!sides.length) return null; const pref=sides.filter(x=>(main.tags||[]).includes('pair:'+x.id)); const list=pref.length?pref:sides; return list[Math.floor(Math.random()*list.length)]}
 
 /* ---------- menu generation: chosen kinds, 1–7 days (the stored menu keeps 7 days) ---------- */
@@ -119,6 +140,7 @@ function swapFor8(day,key,better){
   let pool=kind==='pair'?poolFor('l_pair'):pool8(kind); pool=pool.filter(r=>!taken.has(r.id)&&better(r,cur));
   if(!pool.length) return false; pool.sort((a,b)=>score(b,{})-score(a,{})); day.slots[key].rid=pool[0].id; return true;
 }
+const rcp8=r=>r.i.reduce((s,[k,q])=>s+(inPantry8(k)?0:q*price(k)),0)/4;
 function fit8(){
   const days=S.plan.days.filter(d=>Object.keys(d.slots).length),cap=KCAL_TARGET8;
   const live=d=>Object.keys(d.slots).filter(k=>d.slots[k].rid&&RBY[d.slots[k].rid]);
@@ -135,8 +157,8 @@ function fit8(){
     let best=null;
     for(const d of days) for(const k of live(d)){
       const cur=RBY[d.slots[k].rid],kind=kindOfKey8(k),taken=new Set(Object.values(d.slots).map(x=>x.rid));
-      const pool=(kind==='pair'?poolFor('l_pair'):pool8(kind)).filter(r=>!taken.has(r.id)&&rc(r)<rc(cur)&&dayKcal8(d)-cur.kcal+r.kcal<=cap);
-      for(const r of pool){const save=(rc(cur)-rc(r))*d.slots[k].serv/4; if(!best||save>best.save) best={d,k,r,save}}
+      const pool=(kind==='pair'?poolFor('l_pair'):pool8(kind)).filter(r=>!taken.has(r.id)&&rcp8(r)<rcp8(cur)&&dayKcal8(d)-cur.kcal+r.kcal<=cap);
+      for(const r of pool){const save=(rcp8(cur)-rcp8(r))*d.slots[k].serv/4; if(!best||save>best.save) best={d,k,r,save}}
     }
     if(best&&best.save>1){best.d.slots[best.k].rid=best.r.id; continue}
     const all=days.flatMap(d=>live(d).map(k=>[k,d])).filter(([,d])=>live(d).length>1).sort((a,b)=>(OPTIONAL8.includes(kindOfKey8(b[0]))-OPTIONAL8.includes(kindOfKey8(a[0])))||costOf(b[0],b[1])-costOf(a[0],a[1]));
@@ -236,6 +258,12 @@ const EMOJI8={carrot:'🥕',beet:'🫜',potato:'🥔',onion:'🧅',garlic:'🧄'
  eggs:'🥚',milk:'🥛',kefir:'🥛',yogurt:'🥛',cream:'🥛',sour_cream:'🥛',cheese:'🧀',feta:'🧀',processed_cheese:'🧀',cottage:'🥣',butter:'🧈',tofu:'🍢',
  rice:'🍚',buckwheat:'🌾',bulgur:'🌾',millet:'🌾',quinoa:'🌾',oats:'🌾',semolina:'🌾',barley:'🌾',pasta:'🍝',noodles:'🍜',flour:'🌾',lentils:'🫘',chickpeas:'🫘',beans:'🫘',peas_dry:'🫘',
  bread:'🍞',lavash:'🫓',honey:'🍯',sugar:'🧂',oil:'🫒',walnuts:'🌰',peanut_butter:'🥜',sesame:'🌰',cocoa:'🍫',tea:'🍵',coconut_milk:'🥥',canned_tomatoes:'🥫',tomato_paste:'🥫',pickles:'🥒',soy_sauce:'🍶',mustard:'🍯'};
+Object.assign(EMOJI8,{orzo:'🍝',pasteroni:'🍝',spaghetti:'🍝',penne:'🍝',farfalle:'🍝',lasagna:'🍝',egg_noodles:'🍜',rice_noodles:'🍜',soba:'🍜',couscous:'🌾',basmati:'🍚',rice_round:'🍚',rice_brown:'🍚',
+ peas_canned:'🥫',beans_white:'🥫',mushrooms_canned:'🥫',sardines:'🥫',corn_frozen:'🌽',red_onion:'🧅',leek:'🧅',green_onion:'🌿',dill:'🌿',parsley:'🌿',cilantro:'🌿',basil:'🌿',cherry:'🍅',sweet_potato:'🍠',ginger:'🫚',chili:'🌶️',
+ pear:'🍐',kiwi:'🥝',mandarin:'🍊',grapefruit:'🍊',lime:'🍋',grapes:'🍇',strawberry:'🍓',cherry_frozen:'🍒',peach:'🍑',mango:'🥭',pineapple_canned:'🍍',
+ chicken_drum:'🍗',chicken_wings:'🍗',chicken_whole:'🍗',bacon:'🥓',ham:'🥓',sausages:'🌭',boiled_sausage:'🌭',pink_salmon:'🐟',trout:'🐟',hake:'🐟',mackerel:'🐟',herring:'🐟',mussels:'🦪',crab_sticks:'🦀',
+ mozzarella:'🧀',parmesan:'🧀',suluguni:'🧀',adyghe:'🧀',cream_cheese:'🧀',ricotta:'🧀',quail_eggs:'🥚',condensed_milk:'🥫',almonds:'🌰',hazelnuts:'🌰',cashew:'🥜',chocolate:'🍫',cookies:'🍪',olives:'🫒',olive_oil:'🫒',
+ rye_bread:'🍞',baguette:'🥖',toast_bread:'🍞',tortilla:'🫓',pita:'🫓',buns:'🍔'});
 const CATEMOJI8={'Овощи и зелень':'🥬','Фрукты и ягоды':'🍎','Мясо и рыба':'🥩','Молочное и яйца':'🥛','Бакалея':'🌾','Хлеб':'🍞'};
 function ingPic8(k){return `<span class="ingpic8" aria-hidden="true">${EMOJI8[k]||CATEMOJI8[ING[k][1]]||'🛒'}</span>`}
 function pantry8(full){
@@ -244,6 +272,7 @@ function pantry8(full){
   const short={'Овощи и зелень':'Овощи','Фрукты и ягоды':'Фрукты','Мясо и рыба':'Мясо и рыба','Молочное и яйца':'Молочное','Бакалея':'Бакалея','Хлеб':'Хлеб'};
   const ks=open?Object.keys(ING).filter(k=>ING[k][1]===open&&!['salt','water'].includes(k)).sort((a,b)=>ING[a][0].localeCompare(ING[b][0],'ru')):[];
   return `<input type="search" class="bigsearch" id="pq8" placeholder="Найти продукт: курица, рис, сыр…" value="${esc(UI.q8||'')}" data-act="search8" autocomplete="off" aria-label="Поиск продукта">
+   ${full?'<p class="hint8">Отметьте всё, что есть дома</p>':''}
    ${q?(found.length?`<div class="chips">${found.map(k=>`<button class="chip" data-act="pt8s" data-v="${k}" aria-pressed="${hasP8(k)}">${hasP8(k)?'✓ ':'+ '}${esc(ING[k][0])}</button>`).join('')}</div>`:'<p class="small muted">Ничего не нашли — попробуйте по-другому.</p>'):''}
    <div class="phototiles">${[0,1].map(i=>{const ph=photos[i];return ph?`<div class="phototile"><img src="${ph.url}" alt="Фото ${i+1}"><button class="iconbtn photodel" data-act="photoDel" data-v="${i}" aria-label="Удалить фото ${i+1}">✕</button></div>`
      :`<button class="phototile" data-act="photoAdd"><span class="plusbig">+</span><span class="small muted">${i?'Фото полок':'Фото холодильника'}</span></button>`}).join('')}</div>
@@ -305,21 +334,25 @@ function intro8(){
    <button class="btn block" data-act="introNext8">${s.btn}</button>
    <button class="linkbtn" style="align-self:center" data-act="toAuth8">Уже есть аккаунт? Войти</button></div>`;
 }
-const QUIZ8=['Какая у вас цель?','Какой у вас тип питания?','Чего не должно быть в меню?','Что уже есть дома?','Ещё немного деталей','Неделя и бюджет'];
-const QHINT8=['Можно выбрать несколько','Строгое правило для всего меню','Аллергии и продукты, которые не любите','Подберём блюда, где докупать меньше всего','Сколько дней и на сколько человек','Меню сразу уложим в бюджет'];
+const QUIZ8=['Зачем вам Frigo?','Какая у вас цель?','Какой у вас тип питания?','Чего не должно быть в меню?','Что уже есть дома?','Ещё немного деталей','Неделя и бюджет'];
+const QHINT8=['Можно выбрать несколько — так мы лучше поймём, что вам нужно','Можно выбрать несколько','Строгое правило для всего меню','Аллергии и продукты, которые не любите','Подберём блюда, где докупать меньше всего','Сколько дней и на сколько человек','Меню сразу уложим в бюджет'];
+/* v8.7: why people come — to know the audience (tracked with the answer). */
+const WHY8={tired:['Устал(а) придумывать, что готовить','каждый день один и тот же вопрос'],variety:['Хочется разнообразия','надоели одни и те же блюда'],diet:['Соблюдать диету, вести дневник','калории, белки, жиры, углеводы'],
+  save:['Экономить на продуктах','меню под бюджет, меньше лишних покупок'],fridge:['Готовить из того, что есть дома','чтобы продукты не пропадали'],time:['Тратить меньше времени','быстрые рецепты и список покупок'],family:['Кормить семью и детей полезно','блюда, которые съедят все']};
 const DIET8={all:['Едим всё','без ограничений'],halal:['Без свинины','халяль и не только'],pesc:['Пескетарианство','без мяса, рыба есть'],veg:['Вегетарианство','без мяса и рыбы'],vegan:['Веганство','только растительное'],lent:['Постное','без мяса, молочного и яиц']};
 function quiz8(){
-  const i=Math.min(S.qStep||0,5),p=P8(),last=i===5,goals=S.ans.goals||[];
+  const N=QUIZ8.length,i=Math.min(S.qStep||0,N-1),p=P8(),last=i===N-1,goals=S.ans.goals||[],why=S.why8||[];
   let body='',btn='Дальше',ok=true;
-  if(i===0){body=`<div class="stack" style="gap:8px">${Object.entries(GOAL8).map(([k,l])=>`<button class="optcard opt8" data-act="goal8" data-v="${k}" aria-pressed="${goals.includes(k)}"><b>${l}</b><span class="check8" aria-hidden="true"></span></button>`).join('')}</div>`; ok=goals.length>0}
-  else if(i===1){body=`<div class="stack" style="gap:8px">${Object.entries(DIET8).map(([k,[l,d]])=>`<button class="optcard opt8" data-act="diet8" data-v="${k}" aria-pressed="${!!S.ans.diet&&p.diet===k}"><span class="grow"><b>${l}</b><br><span class="small muted oneline">${d}</span></span></button>`).join('')}</div>`; ok=!!S.ans.diet}
-  else if(i===2){body=restr8(); if(!p.allergies.length&&!p.dislikes.length) btn='Ограничений нет — дальше'}
-  else if(i===3){body=pantry8(false); if(!S.pantry.length&&!(UI.photos||[]).length) btn='Ничего нет — дальше'}
-  else if(i===4){body=details8()}
+  if(i===0){body=`<div class="stack" style="gap:8px">${Object.entries(WHY8).map(([k,[l,d]])=>`<button class="optcard opt8" data-act="why8" data-v="${k}" aria-pressed="${why.includes(k)}"><span class="grow"><b>${l}</b><br><span class="small muted oneline">${d}</span></span><span class="check8" aria-hidden="true"></span></button>`).join('')}</div>`; ok=why.length>0}
+  else if(i===1){body=`<div class="stack" style="gap:8px">${Object.entries(GOAL8).map(([k,l])=>`<button class="optcard opt8" data-act="goal8" data-v="${k}" aria-pressed="${goals.includes(k)}"><b>${l}</b><span class="check8" aria-hidden="true"></span></button>`).join('')}</div>`; ok=goals.length>0}
+  else if(i===2){body=`<div class="stack" style="gap:8px">${Object.entries(DIET8).map(([k,[l,d]])=>`<button class="optcard opt8" data-act="diet8" data-v="${k}" aria-pressed="${!!S.ans.diet&&p.diet===k}"><span class="grow"><b>${l}</b><br><span class="small muted oneline">${d}</span></span></button>`).join('')}</div>`; ok=!!S.ans.diet}
+  else if(i===3){body=restr8(); if(!p.allergies.length&&!p.dislikes.length) btn='Ограничений нет — дальше'}
+  else if(i===4){body=pantry8(false); if(!S.pantry.length&&!(UI.photos||[]).length) btn='Ничего нет — дальше'}
+  else if(i===5){body=details8()}
   else {body=budget8(); btn='Составить меню'; ok=anyMeal8()}
   return `<div class="screen onbscreen">
-   <div class="row between"><button class="iconbtn" data-act="qBack8" aria-label="Назад">←</button><div class="progress grow" style="margin:0 12px"><i style="width:${Math.round((i+1)/6*100)}%"></i></div><span style="width:36px"></span></div>
-   <div class="stack qhead"><p class="eyebrow">Вопрос ${i+1} из 6</p><h1 class="oneline">${QUIZ8[i]}</h1><p class="muted oneline">${QHINT8[i]}</p></div>
+   <div class="row between"><button class="iconbtn" data-act="qBack8" aria-label="Назад">←</button><div class="progress grow" style="margin:0 12px"><i style="width:${Math.round((i+1)/N*100)}%"></i></div><span style="width:36px"></span></div>
+   <div class="stack qhead"><p class="eyebrow">Вопрос ${i+1} из ${N}</p><h1 class="oneline">${QUIZ8[i]}</h1><p class="muted oneline">${QHINT8[i]}</p></div>
    ${body}
    <div style="flex:1"></div>
    <button class="btn block" data-act="${last?'build8':'qNext8'}" ${ok?'':'disabled'}>${btn}</button></div>`;
@@ -387,20 +420,28 @@ function scrToday8(){
   const ti=todayIdx();
   if(!S.plan||ti<0||!Object.keys(S.plan.days[ti].slots).length) return `<div class="screen"><h1 class="range8">Сегодня</h1><div class="empty"><p>${S.plan?'На сегодня в меню блюд нет.':'Меню ещё нет.'}</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   const d=S.plan.days[ti],date=new Date(d.date),mk=nextSlotKey(ti),nextB=baseOf8(mk);
-  const action=k=>{const s=d.slots[k],eaten=!!S.eaten[eatKey(ti,k)];
-    return s.cooked?`<button class="eat" data-act="eat" data-v="${ti}:${k}" aria-pressed="${eaten}">${eaten?'Съели ✓':'Съели'}</button>`:`<button class="btn small" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
+  const action=(k,hero)=>{const s=d.slots[k],eaten=!!S.eaten[eatKey(ti,k)];
+    return s.cooked?`<button class="eat" ${hero?'style="background:transparent;color:inherit;border-color:currentColor"':''} data-act="eat" data-v="${ti}:${k}" aria-pressed="${eaten}">${eaten?'Съели ✓':'Съели'}</button>`
+      :`<button class="btn ${hero?'grow':'small'}" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
   const row=k=>{nameSlot8(k); const r=slotRecipe(ti,k),s=d.slots[k]; if(!r) return '';
     return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${ti}:${k}"><div class="thumb">${dishArt(r)}</div>
-     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}"><span class="small muted">${SLOT_NAMES[k]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span>${r.t} мин</span><span>${r.kcal} ккал</span><span>${s.serv} ${plural(s.serv,'порция','порции','порций')}</span></span></button>${action(k)}</div>`};
+     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}"><span class="small muted">${SLOT_NAMES[k]}</span><span class="dish">${esc(r.n)}</span><span class="meta">${buyTag8(r)}<span>${r.t} мин</span><span>${r.kcal} ккал</span></span></button>${action(k)}</div>`};
+  nameSlot8(mk); const hr=slotRecipe(ti,mk),hs=d.slots[mk];
+  const hero=hr?`<div class="hero hero8"><button class="heroimg" data-act="recipe" data-v="${srcRef(ti,mk)}" aria-label="Рецепт: ${esc(hr.n)}">${dishArt(hr)}</button><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}${hs.cooked?' · приготовлено':''}</p><p class="dish">${esc(hr.n)}</p>
+     <div class="meta">${buyTag8(hr)}<span>${hr.t} мин</span><span>${hr.kcal} ккал на порцию</span><span>${hs.serv} ${plural(hs.serv,'порция','порции','порций')}</span></div>
+     <div class="row">${action(mk,true)}</div></div>`:'';
+  const groups=groups8(d).map(g=>({...g,keys:g.keys.filter(k=>k!==mk)})).filter(g=>g.keys.length);
   return `<div class="screen"><h1 class="range8" style="text-transform:capitalize">${DOWL[date.getDay()]}, ${date.getDate()} ${MON[date.getMonth()]}</h1>
-   ${kcalAll8(ti)}
-   <div class="day today"><header><b>Меню на сегодня</b><span class="small muted">≈${num(dayKcal(ti))} ккал</span></header>
-   ${groups8(d).map(g=>`<div class="meal8 ${g.b===nextB?'next8m':''}"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}${g.b===nextB?'<span class="pill">скоро</span>':''}</div>${g.keys.map(row).join('')}</div>`).join('')}</div></div>`;
+   ${hero}
+   ${groups.length?`<div class="day today"><header><b>Ещё сегодня</b><span class="small muted">≈${num(dayKcal(ti))} ккал за день</span></header>
+   ${groups.map(g=>`<div class="meal8 ${g.b===nextB?'next8m':''}"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(row).join('')}</div>`).join('')}</div>`:''}
+   ${kcalAll8(ti)}</div>`;
 }
 /* Favourites: heart on the recipe sheet and on the recipe page; liked recipes are offered more often. */
 const isFav8=id=>(S.fav8||[]).includes(id);
 const favBtn8=id=>`<button class="iconbtn fav8 ${isFav8(id)?'on':''}" data-act="fav8" data-v="${id}" aria-pressed="${isFav8(id)}" aria-label="${isFav8(id)?'Убрать из любимых':'В любимые'}">${isFav8(id)?'♥':'♡'}</button>`;
 sheetRecipe=(function(orig){return function(o){const s0=S.plan.days[o.day].slots[o.slot],id=s0&&s0.rid;let h=orig(o);
+  const rr=slotRecipe(o.day,o.slot); if(rr) h=h.replace('<div class="card"><div class="row between"><h3>Порции</h3>',buyLine8(rr)+'<div class="card"><div class="row between"><h3>Порции</h3>');
   return id?h.replace('<h1 class="dish" style="font-size:26px">',`<div class="row between" style="align-items:flex-start"><h1 class="dish grow" style="font-size:26px">`).replace(/(<h1 class="dish grow"[^>]*>[^<]*<\/h1>)/,`$1${favBtn8(id)}</div>`):h}})(sheetRecipe);
 score=(function(orig){return function(r,ctx){return orig(r,ctx)+(isFav8(r.id)?2:0)}})(score);
 function recipeById8(id){
@@ -411,10 +452,27 @@ function rec8(){
   return `<div class="screen"><div class="cover">${dishArt(r)}</div>
    <div class="row between" style="align-items:flex-start"><h1 class="dish grow" style="font-size:26px">${esc(r.n)}</h1>${favBtn8(r.id)}</div>
    <div class="meta" style="font-size:14px"><span>${r.t} мин</span><span>${r.kcal} ккал на порцию</span></div>
+   ${buyLine8(r)}
    <div class="macros"><div class="macro"><b>${r.P} г</b><span>белки</span></div><div class="macro"><b>${r.F} г</b><span>жиры</span></div><div class="macro"><b>${r.C} г</b><span>углеводы</span></div></div>
    <div class="card"><h3>Продукты на 4 порции</h3>${r.i.map(([k,q])=>`<div class="ingr"><span>${esc(ING[k][0])}</span><span class="qty">${fmtQty(k,q)}</span></div>`).join('')}${(r.sp||[]).length?`<p class="small muted">По вкусу: ${esc(r.sp.join(', '))}</p>`:''}</div>
    <div class="card"><h3>Как готовить</h3><ol class="steps8">${r.s.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div></div>`;
 }
+/* v8.7: proteins, fats and carbohydrates per person as donuts. */
+function macroShare8(m){
+  if(m.kind==='child') return [.14,.30,.56];
+  const g=S.profile.goals||[]; let p=.15,f=.30;
+  if(m.goal==='lose'||g.includes('lose')) p=.25; else if(m.goal==='gain'||g.includes('mass')){p=.20;f=.25}
+  if(g.includes('protein')) p=Math.max(p,.25);
+  if(g.includes('lowcarb')){p=Math.max(p,.25); f=.40}
+  return [p,f,1-p-f];
+}
+function macroNeed8(m){const k=need(m).kcal,[p,f,c]=macroShare8(m);return [Math.round(k*p/4),Math.round(k*f/9),Math.round(k*c/4)]}
+function eatenMacro8(di,m){const d=S.plan.days[di],pf=pfactor(m),out=[0,0,0]; Object.keys(d.slots).forEach(k=>{const r=slotRecipe(di,k); if(r&&S.eaten[eatKey(di,k)]){out[0]+=r.P*pf;out[1]+=r.F*pf;out[2]+=r.C*pf}}); return out.map(Math.round)}
+const MAC8=[['Белки','var(--accent)'],['Жиры','var(--saffron)'],['Углеводы','#5f86b8']];
+function donuts8(m,eaten){const nd=macroNeed8(m),R_=26,C_=2*Math.PI*R_;
+  return `<div class="donuts8">${MAC8.map(([l,c],i)=>{const v=eaten[i]||0,n=nd[i]||1,p=Math.min(1,v/n);
+    return `<div class="donut8"><svg viewBox="0 0 64 64" width="72" height="72" role="img" aria-label="${l}: ${v} из ${n} г"><circle cx="32" cy="32" r="${R_}" fill="none" stroke="var(--line)" stroke-width="8"/>${p>0?`<circle cx="32" cy="32" r="${R_}" fill="none" stroke="${c}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(p*C_).toFixed(1)} ${C_.toFixed(1)}" transform="rotate(-90 32 32)"/>`:''}<text x="32" y="37" text-anchor="middle" font-size="14" font-weight="700" fill="currentColor">${Math.round(v/n*100)}%</text></svg><b class="small">${l}</b><span class="small muted">${v} / ${n} г</span></div>`}).join('')}</div>`}
+const macNote8=()=>`<details class="macnote8"><summary class="small muted">Как посчитано: формула Миффлина — Сан Жеора и МР 2.3.1.0253-21</summary><p class="small muted">Норма калорий — по формуле Миффлина — Сан Жеора с учётом пола, возраста, веса, роста, активности и цели; для детей — возрастные нормы. Доли белков, жиров и углеводов — по методическим рекомендациям Роспотребнадзора МР 2.3.1.0253-21 «Нормы физиологических потребностей в энергии и пищевых веществах»: белки 12–15%, жиры около 30%, углеводы 55–58% калорий. При похудении и цели «Больше белка» белков 25%, при «Меньше углеводов» — меньше углеводов и больше жиров. Съеденное считаем по блюдам, отмеченным «Съели», с учётом порции человека. Это ориентир, а не медицинская рекомендация.</p></details>`;
 /* Calories for every family member, children included; the extra-food field adds to the chosen person. */
 function kcalAll8(ti){
   const ms=S.profile.members; if(!UI.member||!ms.find(m=>m.id===UI.member)) UI.member=ms[0].id;
@@ -426,6 +484,9 @@ function kcalAll8(ti){
   return `<div class="card kcal"><div class="row between"><h3>Калории сегодня</h3><span class="small muted">ккал</span></div>${rows}
    <form class="row" data-form="kadd"><input type="text" id="kadd" placeholder="Что ещё съел(а) ${esc(sel.name)}?" autocomplete="off" aria-label="Что ещё съели" style="flex:1;min-width:0"><button class="btn secondary small" type="submit">Добавить</button></form>
    <p class="small muted" id="kmsg"></p>
+   <div class="row between"><b class="small">Белки, жиры, углеводы · ${esc(sel.name)}</b><span class="small muted">съедено / норма</span></div>
+   ${donuts8(sel,eatenMacro8(ti,sel))}
+   ${macNote8()}
    ${ex.length?`<div class="chips">${ex.map((v,i)=>{const o=typeof v==='number'?{label:'Вручную',kcal:v}:v;return `<button class="chip" data-act="kdel" data-v="${i}" aria-label="Удалить ${esc(o.label)}">${esc(o.label)} · ${num(o.kcal)} ккал ✕</button>`}).join('')}</div>`:''}</div>`;
 }
 /* Calories card without the long hints; short placeholder. */
@@ -463,6 +524,7 @@ function snapDiary8(){
     if(cooked.length) S.cook8[key]=cooked; else delete S.cook8[key];
     if(ti<0||di>ti) return; const row={};
     S.profile.members.forEach(m=>{const ex=((S.extra[ek]||{})[m.id])||[],exs=ex.reduce((a,b)=>a+(typeof b==='number'?b:b.kcal),0);row[m.id]=Math.round(eatenKcal(di)*pfactor(m)+exs)});
+    S.dmac8=S.dmac8||{}; const mac={}; S.profile.members.forEach(m=>{mac[m.id]=eatenMacro8(di,m)}); if(Object.values(mac).some(v=>v.some(Boolean))) S.dmac8[key]=mac; else delete S.dmac8[key];
     if(Object.values(row).some(v=>v>0)) S.diary8[key]=row; else delete S.diary8[key]});
 }
 const cookName8=x=>typeof x==='string'?x:x.n;
@@ -470,7 +532,7 @@ function diary8(){
   snapDiary8(); const ms=S.profile.members; if(!UI.dmem8||!ms.find(m=>m.id===UI.dmem8)) UI.dmem8=ms[0].id;
   const me=ms.find(m=>m.id===UI.dmem8),norm=need(me).kcal,now=day0(NOW()),iso=localKey8,gran=UI.gran8||'day';
   const pct=k=>{const v=(S.diary8[k]||{})[me.id]||0;return v?Math.round(v/norm*100):0};
-  const sel=UI.cal8||iso(now),sd=new Date(sel+'T12:00:00'),kc=S.diary8[sel],ck=(S.cook8||{})[sel]||[];
+  const sel=UI.cal8||iso(now),sd=new Date(sel+'T12:00:00');
   // days: from the first record (or 3 weeks back) to a week ahead, scrolled to the selected day
   const known=[...Object.keys(S.diary8||{}),...Object.keys(S.cook8||{})].sort(),start=new Date(Math.min(addDays(now,-21).getTime(),known.length?new Date(known[0]+'T12:00:00').getTime():Infinity));
   const days=[];for(let d=day0(start);d<=addDays(now,7);d=addDays(d,1)) days.push(d);
@@ -484,9 +546,9 @@ function diary8(){
     <div class="hscroll8" id="hscroll8">${gran==='day'?days.map(d=>{const k=iso(d);return col(DOW[d.getDay()],d.getDate(),pct(k),'cal8',k,k===sel,(S.cook8||{})[k],k===iso(now))}).join('')
      :months.map(m=>col(['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][m.getMonth()],'',mpct(m),'',null,m.getMonth()===now.getMonth(),false,false)).join('')}</div>
     <p class="small muted">${esc(me.name)}: % от суточной нормы ${num(norm)} ккал${gran==='month'?' — в среднем за месяц':''}</p></div>
-   <div class="card"><h3 style="text-transform:capitalize">${DOWL[sd.getDay()]}, ${sd.getDate()} ${MON[sd.getMonth()]}</h3>
-    ${ck.length?`<div class="stack" style="gap:6px"><b class="small">Приготовили</b>${ck.map(x=>typeof x==='string'?`<span class="small">${esc(x)}</span>`:`<button class="linkbtn" style="text-align:left" data-act="openRec8" data-v="${x.id}">${esc(x.n)} ›</button>`).join('')}</div>`:'<p class="small muted">В этот день ничего не отмечено приготовленным.</p>'}
-    ${kc?ms.map(x=>{const v=kc[x.id]||0,nn=need(x).kcal;return `<div class="stack" style="gap:4px"><div class="row between"><span>${esc(x.name)}</span><span class="small"><b>${num(v)}</b> <span class="muted">/ ${num(nn)} ккал · ${Math.round(v/nn*100)}%</span></span></div><div class="progress ${v>nn*1.1?'over':''}"><i style="width:${Math.min(100,Math.round(v/nn*100))}%"></i></div></div>`}).join(''):'<p class="small muted">Калорий за этот день нет — отмечайте «Съели» у блюд.</p>'}</div>
+   <div class="card"><div class="row between"><h3>Белки, жиры, углеводы</h3><span class="small muted" style="text-transform:capitalize">${sel===iso(now)?'сегодня':`${DOWL[sd.getDay()]}, ${sd.getDate()} ${MON[sd.getMonth()]}`}</span></div>
+    ${donuts8(me,((S.dmac8||{})[sel]||{})[me.id]||[0,0,0])}
+    <p class="small muted">${esc(me.name)}: съедено / суточная норма. Выберите день на графике выше.</p>${macNote8()}</div>
    <div class="card"><h3>Что готовили</h3>${history.length?history.map(([k,list])=>{const d=new Date(k+'T12:00:00');return `<div class="stack" style="gap:4px"><span class="small muted" style="text-transform:capitalize">${DOWL[d.getDay()]}, ${d.getDate()} ${MON[d.getMonth()]}</span>${list.map(x=>typeof x==='string'?`<span>${esc(x)}</span>`:`<button class="histrow8" data-act="openRec8" data-v="${x.id}"><span class="thumb">${RBY[x.id]?dishArt(RBY[x.id]):''}</span><span class="grow">${esc(x.n)}</span><span class="muted">›</span></button>`).join('')}</div>`}).join(''):'<p class="small muted">Отмечайте блюда приготовленными — здесь появится история, и любое блюдо можно будет открыть снова.</p>'}</div>
   </div>`;
 }
@@ -500,7 +562,7 @@ function scrShop8(){
     <div class="for8">${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
     <button class="iconbtn" data-act="have" data-v="${i.k}" aria-label="Уже есть дома: ${esc(i.name)}" style="font-size:12px">есть</button></div>`;
   return `<div class="screen">
-   ${head8('','Список покупок',`<button class="iconbtn tgbtn" data-act="share8" aria-label="Поделиться списком в Telegram" title="Поделиться в Telegram">${TG8}</button>`)}
+   <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — список обновится</p><button class="iconbtn tgbtn" data-act="share8" aria-label="Поделиться списком в Telegram" title="Поделиться в Telegram">${TG8}</button></div>
    ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
    <button class="card pricecard" data-act="tab" data-v="autocart"><span class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty" style="font-size:18px">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></span>
     <div class="progress"><i style="width:${need_.length?Math.round((need_.length-left.length)/need_.length*100):100}%"></i></div>
@@ -513,7 +575,7 @@ function scrShop8(){
    ${home.length?`<section class="cat"><h3>Уже есть дома</h3>${home.map(i=>`<div class="item done"><span class="grow nm">${esc(i.name)}</span><span class="small muted">${fromList(i.k)?'отмечено «есть»':'хватает запаса'}</span>${fromList(i.k)?`<button class="iconbtn" data-act="have" data-v="${i.k}">вернуть</button>`:''}</div>`).join('')}</section>`:''}
   </div>`;
 }
-function scrHome8(){return `<div class="screen">${head8('','Что есть дома')}${pantry8(true)}<p class="small muted">Продукты отсюда вычитаются из покупок и учитываются при подборе меню.</p></div>`}
+function scrHome8(){return `<div class="screen">${pantry8(true)}<p class="small muted">Продукты отсюда вычитаются из покупок и учитываются при подборе меню.</p></div>`}
 
 function pFamily8(){const k=S.profile.kcalOn; S.profile.kcalOn=true; const h=famFields(); S.profile.kcalOn=k; return `<div class="screen">${head8('Настройки','Семья')}${h}</div>`}
 function pFood8(){const p=S.profile;return `<div class="screen">${head8('Настройки','Питание и ограничения')}
@@ -585,6 +647,23 @@ const SCR8={rec8:rec8,today:scrToday8,menu:()=>scrMenu8(false),shop:scrShop8,hom
   kcal:()=>`<div class="screen">${head8('Настройки','Подсчёт калорий')}${kcalToggle()}</div>`,sub:scrSub8,metrics:scrMetrics,diary:diary8,pBudget:pBudget8};
 kcalToggle=(function(orig){return function(){const was=V().ul.kcal; V().ul.kcal=V().ul.kcal||'v8'; const h=orig(); if(!was) delete V().ul.kcal; return h}})(kcalToggle);
 
+/* v8.7: cooking timers keep running on every screen — a pill at the top centre; a notification when one ends. */
+let SWREG8=null; try{if('serviceWorker' in navigator&&location.protocol!=='file:') navigator.serviceWorker.register('src/sw8.js',{scope:'src/'}).then(r=>{SWREG8=r}).catch(()=>{})}catch(e){}
+function askNotify8(){try{if('Notification' in window&&Notification.permission==='default') Notification.requestPermission()}catch(e){}}
+window.timerDone8=function(t){try{if(!('Notification' in window)||Notification.permission!=='granted') return; const o={body:'Готово: '+t.label,icon:'src/frigo-logo.jpg',tag:'frigo-timer',renotify:true};
+  if(SWREG8&&SWREG8.active) SWREG8.showNotification('Frigo · таймер',o); else new Notification('Frigo · таймер',o)}catch(e){}};
+function pill8(){
+  let el=document.getElementById('tpill8'); if(!el){el=document.createElement('div'); el.id='tpill8'; el.className='tpill8'; document.body.append(el)}
+  const list=Object.entries(TIMERS).filter(([,t])=>t.running||t.done);
+  if(UI.cook||!list.length||S.stage!=='app'){el.hidden=true; el.innerHTML=''; return}
+  el.hidden=false; el.innerHTML=list.slice(0,2).map(([k,t])=>`<button class="tp8 ${t.done?'done':''}" data-act="tpill8" data-v="${esc(k)}" aria-live="polite">⏱ <span class="tl8">${esc(t.label)}</span> <b>${t.done?'готово!':fmtTime(timerLeft(t))}</b></button>`).join('');
+}
+paintTimers=(function(orig){return function(){orig(); pill8()}})(paintTimers);
+function openTimer8(key){
+  const j=key.lastIndexOf(':'),rid=key.slice(0,j),step=+key.slice(j+1),t=TIMERS[key]; if(t&&t.done) delete TIMERS[key];
+  let at=null; if(S.plan) S.plan.days.forEach((d,di)=>Object.keys(d.slots).forEach(k=>{const sl=d.slots[k]; if(!at&&sl&&!sl.left&&sl.rid===rid) at={di,k}}));
+  if(at){UI.sheet=null; UI.cook={rid,day:at.di,slot:at.k,step}; requestWake()} else if(t&&t.done) toast('Таймер выключен');
+}
 /* ---------- render ---------- */
 render=function(){
   const app=$('#app'); P8(); ensureRecipes(); if(!SCR8[S.tab]) S.tab='today';
@@ -608,11 +687,12 @@ function v8Act(a,v,el){
    case 'toAuth8': S.stage='auth'; window.scrollTo(0,0); return true;
    case 'backReady8': S.stage='ready'; return true;
    case 'backIntro8': S.stage='intro'; S.introIdx=0; return true;
-   case 'qNext8': S.qStep=Math.min(5,(S.qStep||0)+1); window.scrollTo(0,0); return true;
+   case 'qNext8': if((S.qStep||0)===0) track('why_answered',{why:(S.why8||[]).join(',')}); S.qStep=Math.min(QUIZ8.length-1,(S.qStep||0)+1); window.scrollTo(0,0); return true;
    case 'qBack8': if((S.qStep||0)>0) S.qStep--; else S.stage=S.plan?(FamilyMenuApi.session?'app':'ready'):'intro'; window.scrollTo(0,0); return true;
    case 'build8': track('onboarding_done',{members:p.members.length,days:p.days}); build(); return 'done';
    case 'goal8': {let g=S.ans.goals||(p.goals.length?[...p.goals]:[]); if(v==='none') g=g.includes('none')?[]:['none']; else {g=g.filter(x=>x!=='none'); g=g.includes(v)?g.filter(x=>x!==v):[...g,v]; if(v==='lose') g=g.filter(x=>x!=='mass'); if(v==='mass') g=g.filter(x=>x!=='lose')}
      S.ans.goals=g; p.goals=g.filter(x=>x!=='none'); p.members.forEach(m=>{if(m.kind==='adult') m.goal=p.goals.includes('lose')?'lose':p.goals.includes('mass')?'gain':'keep'}); return true}
+   case 'why8': {const w=S.why8||[]; S.why8=w.includes(v)?w.filter(x=>x!==v):[...w,v]; return true}
    case 'diet8': S.ans.diet=true; p.diet=v; return true;
    case 'more8': UI.open8=UI.open8||{}; UI.open8[v]=!UI.open8[v]; return true;
    case 'days8': p.days=Math.max(1,Math.min(7,p.days+ +v)); return true;
@@ -630,6 +710,7 @@ function v8Act(a,v,el){
    case 'fav8': {S.fav8=S.fav8||[]; if(isFav8(v)) S.fav8=S.fav8.filter(x=>x!==v); else {S.fav8.push(v); toast('Добавили в «Любимые» — будем чаще предлагать')} track('favourite',{on:isFav8(v)}); return true}
    case 'rtab8': UI.rtab8=v; return true;
    case 'openRec8': UI.recFrom8=S.tab; UI.rec8=v; UI.sheet=null; S.tab='rec8'; window.scrollTo(0,0); return true;
+   case 'tpill8': openTimer8(v); return true;
    case 'swipeDel8': {const [d,k]=v.split(':'),day=S.plan.days[+d]; if(day&&day.slots[k]){const r=slotRecipe(+d,k); UI.undo8={d:+d,k,slot:day.slots[k]}; delete day.slots[k]; toast(`Убрали «${r?r.n:'блюдо'}» из меню`)} return true}
    case 'resetAll8': if(!UI.resetAsk8){UI.resetAsk8=true; setTimeout(()=>{UI.resetAsk8=false},4000); return true}
      UI.resetAsk8=false; {const b=blank(); S.profile={...b.profile,members:S.profile.members.map(m=>({...m,custom:''}))}; S.profile.mealSetup={b:['breakfast'],l:['soup'],s:[],d:['pair']}; S.profile.days=3; S.profile.kcalOn=true; S.store='vv'; S.theme='system'; S.history.blocked=[]; S.ans={}}
@@ -671,6 +752,7 @@ function v8Act(a,v,el){
 }
 act=(function(orig){return function(a,v,el){
   if(!PAGES8[S.tab]) UI.prevTab8=S.tab;
+  if(a==='tgo') askNotify8();
   const r=v8Act(a,v,el);
   if(r){if(r===true){save(); render()} else save(); return}
   if(a==='tab'&&!PAGES8[v]&&!['today','menu','shop','home'].includes(v)) v='today';

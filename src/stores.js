@@ -3,7 +3,7 @@
   const api=FamilyMenuApi;
   const stores={vkusvill:{title:'ВкусВилл',where:'во ВкусВилле',action:'vkusvillCart'},lavka:{title:'Яндекс Лавка',where:'в Яндекс Лавке',action:'lavkaCart'}};
   const states={},attempts={vkusvill:0,lavka:0};
-  const items=()=>shopping().items.filter(i=>!i.covered && !i.bought && i.toBuy>0).map(i=>({ingredientId:i.k,quantity:i.toBuy})).sort((a,b)=>a.ingredientId.localeCompare(b.ingredientId));
+  const items=()=>shopping().items.filter(i=>!i.covered && !i.bought && i.toBuy>0 && !window.CLIENT_ING8?.has(i.k)).map(i=>({ingredientId:i.k,quantity:i.toBuy})).sort((a,b)=>a.ingredientId.localeCompare(b.ingredientId));
   const fingerprint=()=>JSON.stringify(items());
   function safeUrl(value,store) {
     try {

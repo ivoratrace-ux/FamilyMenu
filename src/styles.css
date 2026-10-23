@@ -409,3 +409,26 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .gran8 .chip{padding:4px 10px;font-size:13px}
 .histrow8{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 10px;text-align:left;color:inherit;font:inherit}
 .histrow8 .thumb{width:48px;height:34px}
+
+/* ===== v8.7 ===== */
+.buy8{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--saffron-soft);color:inherit;white-space:nowrap}
+.buy8.ok{background:var(--accent-soft);color:var(--accent)}
+.hero .buy8{background:rgba(255,255,255,.22);color:inherit}
+.buyline8{margin:0;padding:8px 12px;border-radius:12px;background:var(--accent-soft)}
+.hero8 .heroimg{border:0;padding:0;background:none;cursor:pointer;display:block}
+.hint8{margin:0;font-weight:600}
+.donuts8{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
+.donut8{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.donut8 svg{display:block}
+.macnote8 summary{cursor:pointer;list-style:none}
+.macnote8 summary::-webkit-details-marker{display:none}
+.macnote8 summary::before{content:'ⓘ ';}
+.macnote8 p{margin:6px 0 0}
+.tpill8{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:70;display:flex;flex-direction:column;gap:4px;max-width:min(62vw,320px)}
+.tpill8[hidden]{display:none}
+.tp8{border:0;border-radius:999px;padding:6px 12px;background:var(--accent);color:var(--accent-fg,#fff);font:inherit;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.18);display:flex;gap:6px;align-items:center;white-space:nowrap;cursor:pointer}
+.tp8 .tl8{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tp8 b{font-variant-numeric:tabular-nums}
+.tp8.done{background:var(--saffron);color:#2a1f00;animation:tp8 1s ease-in-out infinite alternate}
+@keyframes tp8{from{transform:scale(1)}to{transform:scale(1.05)}}
+@media (prefers-reduced-motion:reduce){.tp8.done{animation:none}}

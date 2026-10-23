@@ -11,12 +11,12 @@
     if(!window.FamilyMenuArtwork[recipe.id] && /^https:\/\/vibe-coding-sc04\.onrender\.com\/assets\/art\/[a-z0-9]+(?:-step-\d+)?\.png$/.test(recipe.imageUrl || ''))return `<svg viewBox="0 0 400 260" role="img" aria-label="${esc(recipe.n)}"><image href="${esc(recipe.imageUrl)}" width="400" height="260"/></svg>`;
     return originalArt(recipe);
   };
-  const stockItems=()=>{const amounts=new Map();for(const p of S.pantry)if(p.qty>0)amounts.set(p.key,(amounts.get(p.key) || 0)+p.qty);return [...amounts].map(([ingredientId,quantity])=>({ingredientId,quantity:Math.round(quantity*1000)/1000})).sort((a,b)=>a.ingredientId.localeCompare(b.ingredientId));};
+  const stockItems=()=>{const amounts=new Map();for(const p of S.pantry)if(p.qty>0 && !window.CLIENT_ING8?.has(p.key))amounts.set(p.key,(amounts.get(p.key) || 0)+p.qty);return [...amounts].map(([ingredientId,quantity])=>({ingredientId,quantity:Math.round(quantity*1000)/1000})).sort((a,b)=>a.ingredientId.localeCompare(b.ingredientId));};
   const stockText=()=>JSON.stringify(stockItems());
-  const payload=()=>({preferences:convert.toPreferences(S,previousPreferences),menu:convert.toMenu(S.plan)});
+  const payload=()=>{S.pantryExtra8=S.pantry.filter(p=>window.CLIENT_ING8?.has(p.key)).map(p=>({key:p.key,qty:p.qty}));return {preferences:convert.toPreferences(S,previousPreferences),menu:convert.toMenu(S.plan)};};
   const payloadText=()=>JSON.stringify(payload());
   function clearLayers(){UI={sheet:null,open:{},q:'',dq:'',member:null};document.querySelectorAll('.push,.toast').forEach(e=>e.remove());Object.keys(TIMERS).forEach(k=>delete TIMERS[k]);releaseWake();}
-  function stockFrom(snapshot) {stockRevision=snapshot.revision;S.pantry=snapshot.items.filter(i=>ING[i.ingredientId]).map(i=>({key:i.ingredientId,qty:i.quantity}));savedStock=stockText();}
+  function stockFrom(snapshot) {stockRevision=snapshot.revision;S.pantry=[...snapshot.items.filter(i=>ING[i.ingredientId]).map(i=>({key:i.ingredientId,qty:i.quantity})),...(S.pantryExtra8 || []).filter(i=>ING[i.key])];savedStock=stockText();}
   function addSavedRecipes(document) {
     const needed=new Set(document.menu?.days.flatMap(d=>d.slots.map(s=>s.recipeId)) || []);
     for(const source of document.preferences?.myRecipes || []) if(needed.has(source.id) && !RBY[source.id]) {
