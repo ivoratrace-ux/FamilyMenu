@@ -452,15 +452,20 @@ function pantry8(full){
      <span class="pqtywrap8"><input class="pqtyinput8" type="number" inputmode="${['g','ml'].includes(ING[p.key][2])?'decimal':'numeric'}" id="pqty_${i}" value="${p.qty}" min="0" max="1000000000" step="${FamilyMenuPantryQty.step(ING[p.key][2])}" data-act="pqty" data-v="${i}" aria-label="Количество: ${esc(ING[p.key][0])}"><span class="pqtyarrows8"><button type="button" data-act="pantryStep8" data-v="${i}:1" aria-label="Увеличить количество: ${esc(ING[p.key][0])}" ${p.qty>=1e9?'disabled':''}>▴</button><button type="button" data-act="pantryStep8" data-v="${i}:-1" aria-label="Уменьшить количество: ${esc(ING[p.key][0])}" ${p.qty<=0?'disabled':''}>▾</button></span></span><span class="small muted" style="width:34px">${unitLabel(p.key)}</span>
      <button class="iconbtn" data-act="delP" data-v="${i}" aria-label="Удалить ${esc(ING[p.key][0])}">✕</button></div>`).join('')}</div>`:''}`;
 }
+function scanChoice8(sc,i){const p=sc.products[i];return p.ingredientId?(sc.on[i]?p.ingredientId:null):sc.pick[i]}
+function scanQuantity8(sc,i,id){return FamilyMenuScanInventory.quantity(ING[id][2],sc.qty[i])}
 function scanResult8(){
-  const sc=UI.scan;
-  return `<div class="card"><h3>Что нашли на фото</h3>${sc.products.map((p,i)=>{
+  const sc=UI.scan,selected=sc.products.map((p,i)=>[i,scanChoice8(sc,i)]).filter(([,id])=>id&&ING[id]);
+  const invalid=selected.some(([i,id])=>scanQuantity8(sc,i,id)===null);
+  const amountInput=(i,id)=>id&&ING[id]?`<label class="row small">Добавить к запасам<input type="number" class="scanqty8" inputmode="${['g','ml'].includes(ING[id][2])?'decimal':'numeric'}" min="${['g','ml'].includes(ING[id][2])?.001:1}" max="1000000000" step="${['g','ml'].includes(ING[id][2])?'any':1}" value="${esc(sc.qty[i]??'')}" data-act="scanQty8" data-v="${i}" aria-label="Добавить: ${esc(ING[id][0])}" placeholder="Количество" style="width:110px"><span>${unitLabel(id)}</span></label>`:'';
+  return `<div class="card"><h3>Что нашли на фото</h3><p class="small muted">Проверьте количество: оно прибавится к текущим запасам. Для новой фотографии тех же продуктов не добавляйте их повторно.</p>${sc.products.map((p,i)=>{
     const id=sc.pick[i];
-    if(p.ingredientId) return `<label class="toggle"><span>${esc(ING[p.ingredientId]?ING[p.ingredientId][0]:p.name)}<br><span class="small muted">${esc(p.amount)}</span></span><input type="checkbox" class="chk2" data-act="scanSel" data-v="${i}" ${sc.on[i]?'checked':''}></label>`;
-    if(p.alternatives.length) return `<div class="stack" style="gap:6px"><span>${esc(p.name)} <span class="small muted">· ${esc(p.amount)} · выберите вариант</span></span><div class="chips">${p.alternatives.map(a=>`<button class="chip" data-act="scanAlt" data-v="${i}:${a.ingredientId}" aria-pressed="${id===a.ingredientId}">${esc(a.name)}</button>`).join('')}</div></div>`;
+    if(p.ingredientId) return `<div class="stack"><label class="toggle"><span>${esc(ING[p.ingredientId]?ING[p.ingredientId][0]:p.name)}<br><span class="small muted">${esc(p.amount)}</span></span><input type="checkbox" class="chk2" data-act="scanSel" data-v="${i}" ${sc.on[i]?'checked':''}></label>${sc.on[i]?amountInput(i,p.ingredientId):''}</div>`;
+    if(p.alternatives.length) return `<div class="stack" style="gap:6px"><span>${esc(p.name)} <span class="small muted">· ${esc(p.amount)} · выберите вариант</span></span><div class="chips">${p.alternatives.filter(a=>ING[a.ingredientId]).map(a=>`<button class="chip" data-act="scanAlt" data-v="${i}:${a.ingredientId}" aria-pressed="${id===a.ingredientId}">${esc(a.name)}</button>`).join('')}</div>${amountInput(i,id)}</div>`;
     return `<p class="small muted">${esc(p.name)} · ${esc(p.amount)} — нет в справочнике, пропустим</p>`;
   }).join('')}
-   <div class="row"><button class="btn grow" data-act="scanSave">Добавить в «Дома»</button><button class="btn ghost" data-act="scanCancel">Отмена</button></div></div>`;
+   <p class="small muted" id="scan-qty-note" ${invalid?'':'hidden'}>Укажите количество в выбранных единицах для каждого отмеченного продукта.</p>
+   <div class="row"><button class="btn grow" data-act="scanSave" ${!selected.length||invalid?'disabled':''}>Добавить в «Дома»</button><button class="btn ghost" data-act="scanCancel">Отмена</button></div></div>`;
 }
 async function photoFiles8(files){
   for(const f of [...files].slice(0,5-(UI.photos||[]).length)){
@@ -478,7 +483,7 @@ async function scan8(){
   try{
     const res=await FamilyMenuApi.request('/api/fridge/scan',{method:'POST',body:{images:UI.photos.map(p=>({mimeType:p.mimeType,image:p.image}))}});
     const products=(res.products||[]).filter(p=>!p.ingredientId||ING[p.ingredientId]);
-    UI.scan={products,on:products.map(p=>!!p.ingredientId),pick:products.map(()=>null)}; track('fridge_scanned',{n:products.length});
+    UI.scan={products,on:products.map(p=>!!p.ingredientId),pick:products.map(()=>null),qty:products.map(p=>p.ingredientId?FamilyMenuScanInventory.parseAmount(p.amount,ING[p.ingredientId][2]):null)}; track('fridge_scanned',{n:products.length});
   }catch(e){UI.scanErr=e.message||'Не удалось распознать фото.'}
   UI.scanBusy=false; render();
 }
@@ -971,10 +976,13 @@ function v8Act(a,v,el){
    case 'photoDel': UI.photos.splice(+v,1); return true;
    case 'scan8': scan8(); return 'done';
    case 'scanSel': UI.scan.on[+v]=!UI.scan.on[+v]; return true;
-   case 'scanAlt': {const [i,id]=v.split(':'); UI.scan.pick[+i]=UI.scan.pick[+i]===id?null:id; return true}
+   case 'scanAlt': {const [i,id]=v.split(':');if(!ING[id])return true;UI.scan.pick[+i]=UI.scan.pick[+i]===id?null:id;UI.scan.qty[+i]=FamilyMenuScanInventory.parseAmount(UI.scan.products[+i].amount,ING[id][2]);return true}
    case 'scanCancel': UI.scan=null; return true;
-   case 'scanSave': {const sc=UI.scan; let n=0; sc.products.forEach((pr,i)=>{const id=pr.ingredientId?(sc.on[i]?pr.ingredientId:null):sc.pick[i]; if(id&&ING[id]&&!hasP8(id)){S.pantry.push({key:id,qty:defQty8(id)}); n++}});
-     UI.scan=null; UI.photos=[]; toast(n?`Добавили в «Дома»: ${n}`:'Новых продуктов не нашли'); return true}
+   case 'scanSave': {const sc=UI.scan;if(!sc)return true;const additions=[];
+     for(let i=0;i<sc.products.length;i++){const id=scanChoice8(sc,i);if(!id||!ING[id])continue;const qty=scanQuantity8(sc,i,id);if(qty===null){toast('Укажите количество для каждого выбранного продукта');return true}additions.push({key:id,qty})}
+     if(!additions.length){toast('Выберите продукты для добавления');return true}
+     try{S.pantry=FamilyMenuScanInventory.add(S.pantry,additions)}catch(error){toast(error.message);return true}
+     const n=new Set(additions.map(p=>p.key)).size;UI.scan=null;UI.photos=[];toast(`Обновили запасы: ${n} ${plural(n,'продукт','продукта','продуктов')}`);return true}
    case 'mday8': UI.mday=+v; return true;
    case 'back8': if(S.tab==='pRecipe'){S.tab='pRecipes'; return true} if(S.tab==='rec8'){S.tab=UI.recFrom8||'diary'; return true} S.tab=UI.prevTab8||'today'; UI.sheet=null; if(UI.fromDrawer8){UI.drawer=true; UI.fromDrawer8=false} window.scrollTo(0,0); return true;
    case 'approve8': S.plan.status='approved'; track('menu_approved'); return true;
@@ -1009,6 +1017,7 @@ act=(function(orig){return function(a,v,el){
 /* ---------- inputs that should not re-render on every key ---------- */
 document.addEventListener('keydown',e=>{if(e.target.dataset?.act==='pqty' && ['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const item=S.pantry[+e.target.dataset.v];if(!item)return;item.qty=FamilyMenuPantryQty.normalise(ING[item.key][2],e.target.value);act('pantryStep8',e.target.dataset.v+':'+(e.key==='ArrowUp'?1:-1));}});
 document.addEventListener('input',e=>{const t=e.target,a=t.dataset&&t.dataset.act; if(!a) return;
+  if(a==='scanQty8'&&UI.scan){const index=+t.dataset.v;UI.scan.qty[index]=t.value;const selected=UI.scan.products.map((p,i)=>[i,scanChoice8(UI.scan,i)]).filter(([,id])=>id&&ING[id]),invalid=selected.some(([i,id])=>scanQuantity8(UI.scan,i,id)===null);const button=document.querySelector('[data-act="scanSave"]');if(button)button.disabled=!selected.length||invalid;const note=document.getElementById('scan-qty-note');if(note)note.hidden=!invalid;return}
   if(a==='search8'){UI.q8=t.value; render(); refocus('pq8')}
   else if(a==='rsearch8'){UI.rs8=UI.rs8||{}; UI.rs8[t.dataset.v]=t.value; render(); refocus('rs8_'+t.dataset.v)}
   else if(a==='rq8'){UI.rq=t.value; render(); refocus('rq8')}

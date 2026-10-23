@@ -250,10 +250,23 @@ try {
  await evaluate(`(()=>{const k=keysOf8(S.plan.days[todayIdx()])[0];timerToggle(S.plan.days[todayIdx()].slots[k].rid+':0',90,'Тест');render()})()`);
  await wait('!document.getElementById("tpill8").hidden','Timer pill on other screens');await click('#tpill8 [data-act="tpill8"]');await wait('!!UI.cook','Timer pill opens cooking');
  await evaluate(`act('cclose');Object.keys(TIMERS).forEach(k=>delete TIMERS[k]);render()`);
+ await evaluate(`S.pantry.push({key:'eggs',qty:4},{key:'cucumber',qty:200});save();render()`);
  await evaluate(`fetch('src/frigo-logo.jpg').then(r=>r.blob()).then(b=>photoFiles8([new File([b],'f.jpg',{type:'image/jpeg'})]))`);
  await wait(has('Распознать продукты (1)'),'Photo not queued');assert.equal(scanCalls,0);
  await click('[data-act="scan8"]');await wait(has('Что нашли на фото'),'Scan result missing');
- await click('[data-act="scanAlt"][data-v="1:cucumber"]');await click('[data-act="scanSave"]');
+ await evaluate(`window.eggsBeforeScan8=S.pantry.filter(p=>p.key==='eggs').reduce((n,p)=>n+p.qty,0);window.cucumberBeforeScan8=S.pantry.filter(p=>p.key==='cucumber').reduce((n,p)=>n+p.qty,0)`);
+ assert.equal(await evaluate('UI.scan.qty[0]'),6,'Recognized egg count replaces the old one-item default');
+ await click('[data-act="scanAlt"][data-v="1:cucumber"]');assert.equal(await evaluate('UI.scan.qty[1]'),300,'Selected alternative uses recognized grams');
+ // Unknown quantities require confirmation rather than guessed default amounts.
+ await fill('[data-act="scanQty8"][data-v="1"]','');assert.ok(await evaluate(`document.querySelector('[data-act="scanSave"]').disabled`),'Empty quantities cannot be added');
+ await fill('[data-act="scanQty8"][data-v="1"]','350');await click('[data-act="scanSave"]');
+ assert.ok(await evaluate(`S.pantry.filter(p=>p.key==='eggs').reduce((n,p)=>n+p.qty,0)===window.eggsBeforeScan8+6 && S.pantry.filter(p=>p.key==='cucumber').reduce((n,p)=>n+p.qty,0)===window.cucumberBeforeScan8+350`),'Scan adds to existing quantities, including alternatives');
+ await wait('!window.FamilyMenuBridge.pending','Scanned stock did not finish saving');
+ assert.equal(stocks.get('a').items.find(p=>p.ingredientId==='eggs').quantity,await evaluate('window.eggsBeforeScan8+6'));
+ assert.equal(stocks.get('a').items.find(p=>p.ingredientId==='cucumber').quantity,await evaluate('window.cucumberBeforeScan8+350'));
+ const scannedStock=await evaluate(`JSON.stringify(S.pantry.filter(p=>['eggs','cucumber'].includes(p.key)).map(p=>({key:p.key,qty:p.qty})).sort((a,b)=>a.key.localeCompare(b.key)))`);
+ await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Scanned stock reload failed');assert.equal(await evaluate(`JSON.stringify(S.pantry.filter(p=>['eggs','cucumber'].includes(p.key)).map(p=>({key:p.key,qty:p.qty})).sort((a,b)=>a.key.localeCompare(b.key)))`),scannedStock,'Saved sums survive a real reload');
+
  for(let n=0;n<100 && !stocks.get('a').items.some(i=>i.ingredientId==='cucumber');n++)await delay(100);
  assert.ok(['eggs','cucumber','potato'].every(k=>stocks.get('a').items.some(i=>i.ingredientId===k)),'Recognized products saved');await shot('07-home');
  await click('[data-act="drawer"]');await shot('08-drawer');await click('[data-act="nav8"][data-v="pRecipes"]');await wait(has('Любимые · 1'),'Favourites tab');await click('[data-act="rtab8"][data-v="own"]');await click('[data-act="recNew"]');
