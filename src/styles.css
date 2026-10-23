@@ -234,7 +234,8 @@ html.cooking body{overflow:hidden}
 .pricebox b{font-size:18px;font-variant-numeric:tabular-nums}
 .pricebox s{font-size:13px;color:var(--muted)}
 .compare{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.compare>div{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.compare>div,.compare>button{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.compare>button{font:inherit;color:inherit;text-align:left;cursor:pointer}
 .compare b{font-size:20px;font-variant-numeric:tabular-nums}
 .compare .win{border-color:var(--accent);background:var(--accent-soft)}
 .sheet>*{flex-shrink:0}

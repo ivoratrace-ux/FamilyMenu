@@ -1,50 +1,77 @@
-/* Prepare a store basket first; the user opens its link with a separate click. */
+/* Prepare store baskets first; links open only with a separate user click. */
 (() => {
   const api=FamilyMenuApi;
-  let state=null,attempt=0;
+  const stores={vkusvill:{title:'ВкусВилл',where:'во ВкусВилле',action:'vkusvillCart'},lavka:{title:'Яндекс Лавка',where:'в Яндекс Лавке',action:'lavkaCart'}};
+  const states={},attempts={vkusvill:0,lavka:0};
   const items=()=>shopping().items.filter(i=>!i.covered && !i.bought && i.toBuy>0).map(i=>({ingredientId:i.k,quantity:i.toBuy})).sort((a,b)=>a.ingredientId.localeCompare(b.ingredientId));
   const fingerprint=()=>JSON.stringify(items());
-  function safeUrl(value) {
-    try {const url=new URL(value);return url.protocol==='https:' && !url.username && !url.password && !url.port && (url.hostname==='vkusvill.ru' || url.hostname.endsWith('.vkusvill.ru') || url.hostname==='vkusvill.onelink.me')?url.href:null;}catch{return null;}
+  function safeUrl(value,store) {
+    try {
+      const url=new URL(value);
+      if(url.protocol!=='https:' || url.username || url.password || url.port)return null;
+      if(store==='lavka')return url.hostname==='lavka.yandex.ru' && url.pathname==='/cart' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(url.searchParams.get('sharedCartId') || '') && url.searchParams.get('countryCode')==='RU'?url.href:null;
+      return url.hostname==='vkusvill.ru' || url.hostname.endsWith('.vkusvill.ru') || url.hostname==='vkusvill.onelink.me'?url.href:null;
+    }catch{return null;}
   }
-  function reset(){attempt++;state=null;}
-  function current(){return state && state.owner===api.session?.user.id && state.list===fingerprint();}
-  function card() {
-    if(state && !current())reset();
-    const count=items().length;
-    return `<div class="card" id="vkusvill-cart" aria-busy="${!!state?.busy}">
-      <h3>Корзина во ВкусВилле</h3>
-      <p class="small muted">Подберём товары и фасовки из списка покупок. Проверить и оформить заказ можно во ВкусВилле.</p>
-      ${!state?.carts?`<button class="btn block" data-act="vkusvillCart" ${state?.busy || !count?'disabled':''}>${state?.busy?'Формируем корзину…':'Сформировать корзину во ВкусВилле'}</button>`:''}
-      ${state?.busy?'<p class="small muted" role="status">Ищем товары. Это может занять до трёх минут.</p>':''}
+  function reset(store){for(const key of store?[store]:Object.keys(stores)){attempts[key]++;delete states[key];}}
+  function current(store){const state=states[store];return state && state.owner===api.session?.user.id && state.list===fingerprint();}
+  function card(store) {
+    if(!store)return Object.keys(stores).map(card).join('');
+    if(!stores[store])return '';
+    if(states[store] && !current(store))reset(store);
+    const state=states[store],info=stores[store],count=items().length;
+    return `<div class="card" id="${store}-cart" aria-busy="${!!state?.busy}">
+      <h3>Корзина ${info.where} ${store==='lavka'?'<span class="pill">Beta</span>':''}</h3>
+      <p class="small muted">Подберём товары и фасовки из списка покупок. Проверить и оформить заказ можно ${info.where}.</p>
+      ${store==='lavka'?'<p class="small muted">Используем текущее местоположение для подбора доступных товаров. Разрешите доступ к нему в браузере; адрес доставки уточните в Лавке.</p>':''}
+      ${!state?.carts?`<button class="btn block" data-act="${info.action}" ${state?.busy || !count?'disabled':''}>${state?.busy?'Формируем корзину…':`Сформировать корзину ${info.where}`}</button>`:''}
+      ${state?.busy?`<p class="small muted" role="status">${state.locating?'Определяем местоположение. Разрешите доступ в браузере.':'Ищем товары. Это может занять до трёх минут.'}</p>`:''}
       ${state?.error?`<p class="small" role="alert">${esc(state.error)}</p>`:''}
-      ${state?.carts?`<p class="small" role="status">Корзина готова. Добавьте продукты во ВкусВилл.</p><a class="btn block" data-store-cart-link href="${esc(state.carts[0].url)}" target="_blank" rel="noopener noreferrer">Добавить в корзину</a>`:''}
-      <p class="small muted">Цены, наличие и состав уточняйте во ВкусВилле. Специи «по вкусу» не добавляем.</p>
+      ${state?.carts?`<p class="small" role="status">Корзина готова. Добавьте продукты ${info.where}.</p><a class="btn block" data-store-cart-link data-store="${store}" href="${esc(state.carts[0].url)}" target="_blank" rel="noopener noreferrer">Добавить в корзину</a>`:''}
+      <p class="small muted">Цены, наличие и состав уточняйте ${info.where}. Специи «по вкусу» не добавляем.</p>
     </div>`;
   }
-  async function start() {
-    if(state?.busy && current())return;
+  function locate() {
+    return new Promise((resolve,reject)=>{
+      if(!globalThis.navigator?.geolocation){reject(Error('Браузер не поддерживает определение местоположения. Откройте сайт в другом браузере.'));return;}
+      navigator.geolocation.getCurrentPosition(result=>{
+        const {longitude,latitude}=result.coords;
+        if(!Number.isFinite(longitude) || !Number.isFinite(latitude) || Math.abs(longitude)>180 || Math.abs(latitude)>90){reject(Error('Не удалось определить местоположение. Попробуйте ещё раз.'));return;}
+        resolve([longitude,latitude]);
+      },error=>reject(Error(error.code===1?'Разрешите доступ к местоположению в настройках браузера и попробуйте ещё раз.':'Не удалось определить местоположение. Проверьте геолокацию на устройстве и попробуйте ещё раз.')),{enableHighAccuracy:true,timeout:20000,maximumAge:300000});
+    });
+  }
+  async function start(store) {
+    if(states[store]?.busy && current(store))return;
     const list=items();if(!list.length)return;
     if(!api.session){toast('Войдите через Telegram');return;}
-    reset();const version=attempt,owner=api.session.user.id,snapshot=JSON.stringify(list);
-    state={busy:true,owner,list:snapshot};render();
+    reset(store);const version=attempts[store],owner=api.session.user.id,snapshot=JSON.stringify(list);
+    states[store]={busy:true,owner,list:snapshot,locating:store==='lavka'};render();
     try {
-      const result=await api.request('/api/stores/vkusvill/cart',{method:'POST',body:{items:list},timeoutMs:165000});
-      if(version!==attempt)return;
-      if(owner!==api.session?.user.id || snapshot!==fingerprint()){reset();render();toast('Список изменился. Сформируйте корзину заново.');return;}
-      if(result.store!=='vkusvill' || !Array.isArray(result.carts) || result.carts.length!==1 || result.carts.some(c=>!safeUrl(c.url)))throw Error('Не удалось получить ссылку на корзину. Попробуйте ещё раз.');
-      state={...state,busy:false,carts:result.carts.map(c=>({...c,url:safeUrl(c.url)}))};
-      render();
+      const body={items:list};
+      if(store==='lavka'){
+        body.location=await locate();
+        if(version!==attempts[store])return;
+        if(!current(store)){reset(store);render();return;}
+        states[store].locating=false;render();
+      }
+      const result=await api.request(`/api/stores/${store}/cart`,{method:'POST',body,timeoutMs:165000});
+      if(version!==attempts[store])return;
+      if(owner!==api.session?.user.id || snapshot!==fingerprint()){reset(store);render();toast('Список изменился. Сформируйте корзину заново.');return;}
+      if(result.store!==store || !Array.isArray(result.carts) || result.carts.length!==1 || result.carts.some(c=>!safeUrl(c.url,store)))throw Error('Не удалось получить ссылку на корзину. Попробуйте ещё раз.');
+      states[store]={...states[store],busy:false,carts:result.carts.map(c=>({...c,url:safeUrl(c.url,store)}))};render();
     }catch(error){
-      if(version!==attempt)return;
+      if(version!==attempts[store])return;
       if(error.status===401){reset();await FamilyMenuBridge.logout();return;}
-      if(owner!==api.session?.user.id){reset();render();return;}
-      state={...state,busy:false,error:error.message || 'Не удалось собрать корзину. Попробуйте ещё раз.'};render();
+      if(owner!==api.session?.user.id || snapshot!==fingerprint()){reset(store);render();return;}
+      states[store]={...states[store],busy:false,error:error.message || 'Не удалось собрать корзину. Попробуйте ещё раз.'};render();
     }
   }
   const previousAct=act;
   act=function(action,value,element){
-    if(action==='vkusvillCart' || action==='cartStart' && (S.store || 'vv')==='vv'){start();return;}
+    if(action==='vkusvillCart' || action==='lavkaCart' || action==='cartStart'){
+      const store=action==='lavkaCart' || action==='cartStart' && S.store==='lavka'?'lavka':'vkusvill';start(store);return;
+    }
     if(action==='logout' || action==='reset')reset();
     previousAct(action,value,element);
   };
