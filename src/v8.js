@@ -712,7 +712,11 @@ function scrMenu8(preview){
   if(!vis.length) return `<div class="screen"><div class="empty"><h2>Меню ещё нет</h2><p>Составим по вашим ответам: цель, тип питания, ограничения и продукты дома.</p><button class="btn" data-act="regen">Составить меню</button></div></div>`;
   const ti=todayIdx(),d0=new Date(vis[0][0].date),dn=new Date(vis[vis.length-1][0].date);
   const eatBtn=(di,k)=>`<button class="eat" data-act="eat" data-v="${di}:${k}" aria-pressed="${!!S.eaten[eatKey(di,k)]}">${S.eaten[eatKey(di,k)]?'Съели ✓':'Съели'}</button>`;
-  const row=(di,k)=>{nameSlot8(k); let h=slotRow(di,k,!!preview); if(preview) h=h.replace(/<button class="eat"[^>]*>[^<]*<\/button>/,`<button class="btn ghost small" data-act="replace" data-v="${di}:${k}">Заменить</button>`); if(!preview&&di===ti&&d0) {const s=S.plan.days[di].slots[k]; if(s&&s.cooked) h=h.replace('<button class="iconbtn" data-act="replace"',eatBtn(di,k)+'<button class="iconbtn" data-act="replace"')} return h};
+  const row=(di,k)=>{nameSlot8(k);let h=slotRow(di,k,!!preview).replace(partTag8(),'').replace(' ккал в среднем',' ккал');
+    if(preview)h=h.replace(/<button class="eat"[^>]*>[^<]*<\/button>/,`<button class="btn ghost small" data-act="replace" data-v="${di}:${k}">Заменить</button>`);
+    const slot=S.plan.days[di].slots[k],status=!preview&&di===ti&&slot?.cooked?`<div class="menustatus8">${eatBtn(di,k)}</div>`:'';
+    return h.replace('class="slot','class="menu-slot8 slot').replace(/(<button class="open"[\s\S]*?<\/button>)/,`<div class="menucontent8">${status}$1</div>`);
+  };
   return `<div class="screen${preview?' preview8':''}">
    ${preview?'<div class="note"><b>✓</b><span>Ваше меню готово! Сохраните его — и список покупок соберётся сам.</span></div>':''}
    ${shopping().cost>budgetLimit8()+1?`<div class="note"><b>!</b><span class="grow">Для выбранной калорийности меню дороже бюджета на ≈${rub(shopping().cost-budgetLimit8())}. Увеличьте бюджет или измените блюда</span><button class="btn ghost small" data-act="cheaper8">Подобрать подешевле</button></div>`:''}

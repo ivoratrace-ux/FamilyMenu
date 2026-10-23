@@ -173,6 +173,8 @@ try {
  await click('[data-act="gran8"][data-v="month"]');await wait('document.querySelectorAll("#hscroll8 .wday8").length===12','Month granularity');await click('[data-act="gran8"][data-v="day"]');
  await click('.histrow8');await wait(`S.tab==='rec8' && ${has('Как готовить')}`,'Recipe from the cooking history');await click('[data-act="back8"]');await wait(`S.tab==='diary'`,'Back to the diary');await shot('05c-diary');
  await click('[data-act="back8"]');await click('[data-act="tab"][data-v="menu"]');
+ assert.ok(await evaluate(`(()=>{const row=document.querySelector('.menu-slot8.cooked'),button=row?.querySelector('.menustatus8 .eat'),meta=row?.querySelector('.meta8');return !!button&&button.getBoundingClientRect().bottom<=meta.getBoundingClientRect().top&&![...document.querySelectorAll('.menu-slot8')].some(r=>/порци|в среднем/.test(r.innerText))&&meta.scrollWidth<=meta.clientWidth+1})()`),'Menu has no servings or average label, and eaten action sits above metadata without squeezing it');await shot('05e-menu-eaten');
+
  assert.equal(await evaluate('/автосбор|сборк[аиу] корзин|собрать корзин|корзину.*касание/i.test(SLIDES8.map(x=>x.t+" "+x.d).join(" "))'),false,'No onboarding promises for store baskets');
  assert.equal(await evaluate(`!!document.querySelector('[data-v="autocart"]')`),false,'No drawer entry for the deleted screen');
  await click('[data-act="tab"][data-v="shop"]');await wait('!!document.querySelector(\'[data-act="share8"]\') && !document.querySelector(".screen h1")','Shopping without a heading');await shot('06-shop');assert.equal(await evaluate('!!window.FamilyMenuStores || [...document.scripts].some(s=>s.src.endsWith("/stores.js"))'),false,'Store client is not shipped or loaded');

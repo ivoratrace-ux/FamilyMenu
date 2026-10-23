@@ -495,3 +495,9 @@ input.pqtyinput8{width:100%;appearance:textfield;-moz-appearance:textfield}
 .pqtyarrows8 button:hover{background:var(--accent-soft);color:var(--accent)}
 .pqtyarrows8 button:disabled{opacity:.35;cursor:default}
 @media(hover:none){.pqtyarrows8{opacity:1;pointer-events:auto}}
+
+/* Keep the eaten action above recipe details instead of narrowing the text column. */
+.menu-slot8 .menucontent8{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.menu-slot8 .menustatus8{display:flex;justify-content:flex-end}
+.menu-slot8 .open{width:100%}
+.menu-slot8 .meta8{flex-wrap:wrap !important;white-space:normal;overflow:visible;row-gap:4px !important}
