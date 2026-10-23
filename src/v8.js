@@ -449,7 +449,7 @@ function pantry8(full){
      return `<button class="cat8" data-act="cat8" data-v="${esc(c)}" aria-expanded="${open===c}"><span class="oneline">${short[c]||esc(c)}</span>${n?`<span class="pill">${n}</span>`:''}<span class="plus">${open===c?'−':'+'}</span></button>`}).join('')}</div>
    ${open?`<div class="card"><h3>${esc(open)}</h3><div class="chips">${ks.map(k=>`<button class="chip" data-act="pt8" data-v="${k}" aria-pressed="${hasP8(k)}">${esc(ING[k][0])}</button>`).join('')}</div></div>`:''}
    ${full&&S.pantry.length?`<h3>Детали</h3><div class="card list8">${S.pantry.map((p,i)=>`<div class="prow8">${ingPic8(p.key)}<span class="grow prname8">${esc(ING[p.key][0])}${p.src==='list'?'<br><span class="small muted">из списка покупок</span>':p.src==='left8'?'<br><span class="small muted">остаток упаковки</span>':''}</span>
-     <input type="number" inputmode="decimal" id="pqty_${i}" value="${p.qty}" min="0" max="1000000000" step="0.001" style="width:84px" data-act="pqty" data-v="${i}" aria-label="Количество: ${esc(ING[p.key][0])}"><span class="small muted" style="width:34px">${unitLabel(p.key)}</span>
+     <span class="pqtywrap8"><input class="pqtyinput8" type="number" inputmode="${['g','ml'].includes(ING[p.key][2])?'decimal':'numeric'}" id="pqty_${i}" value="${p.qty}" min="0" max="1000000000" step="${FamilyMenuPantryQty.step(ING[p.key][2])}" data-act="pqty" data-v="${i}" aria-label="Количество: ${esc(ING[p.key][0])}"><span class="pqtyarrows8"><button type="button" data-act="pantryStep8" data-v="${i}:1" aria-label="Увеличить количество: ${esc(ING[p.key][0])}" ${p.qty>=1e9?'disabled':''}>▴</button><button type="button" data-act="pantryStep8" data-v="${i}:-1" aria-label="Уменьшить количество: ${esc(ING[p.key][0])}" ${p.qty<=0?'disabled':''}>▾</button></span></span><span class="small muted" style="width:34px">${unitLabel(p.key)}</span>
      <button class="iconbtn" data-act="delP" data-v="${i}" aria-label="Удалить ${esc(ING[p.key][0])}">✕</button></div>`).join('')}</div>`:''}`;
 }
 function scanResult8(){
@@ -915,6 +915,7 @@ function v8Act(a,v,el){
    case 'days8': p.days=Math.max(1,Math.min(7,p.days+ +v)); return true;
    case 'kind8': {const [k,o]=v.split(':'),l=p.mealSetup[k]; p.mealSetup[k]=l.includes(o)?l.filter(x=>x!==o):[...l,o]; P8(); return true}
    case 'cat8': UI.cat8=UI.cat8===v?null:v; return true;
+   case 'pantryStep8': {const [index,direction]=v.split(':').map(Number),item=S.pantry[index];if(!item||![-1,1].includes(direction))return true;item.qty=FamilyMenuPantryQty.change(ING[item.key][2],item.qty,direction);setTimeout(()=>document.getElementById('pqty_'+index)?.focus({preventScroll:true}),0);return true}
    case 'pt8': togglePantry8(v); return true;
    case 'pt8s': togglePantry8(v); UI.q8=''; return true;
    case 'dislike8': {const ids=Object.fromEntries(dislikeGroups8())[v]||[],all=ids.every(k=>p.dislikes.includes(k)); p.dislikes=all?p.dislikes.filter(k=>!ids.includes(k)):[...new Set([...p.dislikes,...ids])]; return true}
@@ -1006,6 +1007,7 @@ act=(function(orig){return function(a,v,el){
 }})(act);
 
 /* ---------- inputs that should not re-render on every key ---------- */
+document.addEventListener('keydown',e=>{if(e.target.dataset?.act==='pqty' && ['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const item=S.pantry[+e.target.dataset.v];if(!item)return;item.qty=FamilyMenuPantryQty.normalise(ING[item.key][2],e.target.value);act('pantryStep8',e.target.dataset.v+':'+(e.key==='ArrowUp'?1:-1));}});
 document.addEventListener('input',e=>{const t=e.target,a=t.dataset&&t.dataset.act; if(!a) return;
   if(a==='search8'){UI.q8=t.value; render(); refocus('pq8')}
   else if(a==='rsearch8'){UI.rs8=UI.rs8||{}; UI.rs8[t.dataset.v]=t.value; render(); refocus('rs8_'+t.dataset.v)}

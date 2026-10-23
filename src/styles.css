@@ -487,3 +487,13 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .nrow8:first-child{border-top:0}
 .ingr .iq8{width:72px;flex:none;text-align:right;padding:4px 8px;min-height:32px}
 .ingr .iu8{width:34px;flex:none}
+/* Home quantities: overlay arrows never reserve space inside the number field. */
+.pqtywrap8{position:relative;display:inline-block;width:84px;flex:none}
+input.pqtyinput8{width:100%;appearance:textfield;-moz-appearance:textfield}
+.pqtyinput8::-webkit-inner-spin-button,.pqtyinput8::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.pqtyarrows8{position:absolute;right:1px;top:1px;bottom:1px;width:20px;display:grid;grid-template-rows:1fr 1fr;opacity:0;pointer-events:none;background:var(--card);border-radius:0 9px 9px 0;overflow:hidden}
+.pqtywrap8:hover .pqtyarrows8,.pqtywrap8:focus-within .pqtyarrows8{opacity:1;pointer-events:auto}
+.pqtyarrows8 button{display:grid;place-items:center;border:0;padding:0;min-height:0;background:transparent;color:var(--muted);font:inherit;line-height:1;cursor:pointer}
+.pqtyarrows8 button:hover{background:var(--accent-soft);color:var(--accent)}
+.pqtyarrows8 button:disabled{opacity:.35;cursor:default}
+@media(hover:none){.pqtyarrows8{opacity:1;pointer-events:auto}}

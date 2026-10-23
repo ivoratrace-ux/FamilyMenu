@@ -658,7 +658,7 @@ document.addEventListener('click',e=>{
   act(t.dataset.act,t.dataset.v,t);
 });
 document.addEventListener('change',e=>{const t=e.target; if(!t.dataset||!t.dataset.act) return; const a=t.dataset.act;
-  if(a==='pqty'){S.pantry[+t.dataset.v].qty=Math.min(1e9,Math.max(0,Math.round((+t.value||0)*1000)/1000)); save(); render(); return}
+  if(a==='pqty'){const item=S.pantry[+t.dataset.v];item.qty=FamilyMenuPantryQty.normalise(ING[item.key][2],t.value); save(); render(); return}
   if(a==='mname'){S.profile.members[+t.dataset.v].name=t.value.trim()||'Без имени'; save(); render(); return}
   if(a==='mnum'){const [i,f]=t.dataset.v.split(':'); S.profile.members[+i][f]=t.value; save(); render(); return}
   if(a==='msel'){const [i,f]=t.dataset.v.split(':'); S.profile.members[+i][f]=t.value; save(); render(); return}

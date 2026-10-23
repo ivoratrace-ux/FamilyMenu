@@ -234,6 +234,17 @@ try {
  assert.ok(await evaluate(`(()=>{const keep=S.plan,keepParts={...S.parts8},keepRecent=S.menuRecent8,b0=S.profile.budget,avg=b=>{S.profile.budget=b;let t=0,n=0;for(let i=0;i<8;i++){generateOnce8();S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{if(s.rid){t+=rc(RBY[s.rid]);n++}}))}return t/n};const a=avg(10000),b=avg(30000);S.plan=keep;S.parts8=keepParts;S.menuRecent8=keepRecent;S.profile.budget=b0;return b>a*1.1})()`),'Budget 30 000 gives pricier dishes than 10 000');
 
  await click('[data-act="tab"][data-v="home"]');await wait(has('Отметьте всё, что есть дома')+' && !document.querySelector(".screen h1")','Home without a heading');
+ await evaluate(`window.pantryBeforeQty8=structuredClone(S.pantry);S.pantry=['g','ml','шт','банка','пучок','зуб.','пак.'].map(unit=>({key:Object.keys(ING).find(k=>ING[k][2]===unit),qty:['g','ml'].includes(unit)?350:2}));render()`);
+ assert.ok(await evaluate(`(()=>{const input=document.querySelector('#pqty_0'),wrap=input.parentElement,arrows=wrap.querySelector('.pqtyarrows8');return getComputedStyle(arrows).position==='absolute'&&input.getBoundingClientRect().width===wrap.getBoundingClientRect().width&&getComputedStyle(input).appearance==='textfield'})()`),'Overlay arrows reserve no input width');
+ for(let i=0;i<7;i++){
+  const step=i<2?100:1,start=i<2?350:2;assert.equal(await evaluate(`Number(document.querySelector('#pqty_${i}').step)`),step);
+  await click(`[data-act="pantryStep8"][data-v="${i}:1"]`);assert.equal(await evaluate(`S.pantry[${i}].qty`),start+step);
+  await click(`[data-act="pantryStep8"][data-v="${i}:-1"]`);assert.equal(await evaluate(`S.pantry[${i}].qty`),start);
+ }
+ await evaluate(`(()=>{const input=document.querySelector('#pqty_0');input.value='450';input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true,cancelable:true}))})()`);assert.equal(await evaluate('S.pantry[0].qty'),550,'Keyboard increments the currently typed value');
+ await fill('#pqty_2','2.2','change');assert.equal(await evaluate('S.pantry[2].qty'),2,'Piece counts have no decimal fraction');
+ await fill('#pqty_2','0','change');assert.ok(await evaluate(`document.querySelector('[data-act="pantryStep8"][data-v="2:-1"]').disabled`),'Count cannot go below zero');
+ await shot('07a-quantity-controls');await evaluate('S.pantry=window.pantryBeforeQty8;delete window.pantryBeforeQty8;render()');
  await fill('#pq8','орзо');await wait('!!document.querySelector(\'[data-act="pt8s"][data-v="orzo"]\')','New grocery products');await fill('#pq8','');
  assert.ok(await evaluate(`(()=>{const kp=S.pantry;S.pantry=[{key:'cottage',qty:600},{key:'apple',qty:3}];const picked=Array.from({length:12},()=>pick('k:breakfast',{},true));S.pantry=kp;return picked.some(r=>r.i.some(([k])=>k==='cottage'||k==='apple'))})()`),'Breakfast selection retains a preference for products from the fridge');
  await evaluate(`(()=>{const k=keysOf8(S.plan.days[todayIdx()])[0];timerToggle(S.plan.days[todayIdx()].slots[k].rid+':0',90,'Тест');render()})()`);
