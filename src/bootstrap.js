@@ -1,6 +1,6 @@
 (() => {
   async function load(file) {await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='src/'+file;script.onload=resolve;script.onerror=()=>reject(new Error('Не удалось загрузить приложение.'));document.head.append(script);});}
-  const loaded=new Set(),FILES=['art-specs.js','extra8.js','data.js','art.js','cook.js','app.js','shell.js','v4.js','share.js','pantry-quantity.js','scan-inventory.js','v8.js','bridge.js'];
+  const loaded=new Set(),FILES=['art-specs.js','extra8.js','data.js','art.js','cook.js','app.js','shell.js','v4.js','share.js','pantry-quantity.js','scan-inventory.js','v8.js','bridge.js','analytics.js'];
   // v8.13: download the app scripts while the catalog is loading; they run in order once it is there
   for(const f of FILES){const l=document.createElement('link');l.rel='preload';l.as='script';l.href='src/'+f;document.head.append(l);}
   async function loadAll(){const todo=FILES.filter(f=>!loaded.has(f));await Promise.all(todo.map(f=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='src/'+f;s.async=false;s.onload=()=>{loaded.add(f);resolve();};s.onerror=()=>reject(new Error('Не удалось загрузить приложение.'));document.head.append(s);})));}

@@ -114,7 +114,7 @@
         }catch(error){if(error.status===401)throw error;UI.authError=error.message;render();}
       }
       if(attempt===authNumber)throw new Error('Вход истёк. Начните заново.');
-    }catch(error){if(attempt===authNumber){UI.telegram=null;UI.authBusy=false;UI.authError=error.message;render();}}
+    }catch(error){if(attempt===authNumber){UI.telegram=null;UI.authBusy=false;UI.authError=error.message;window.FamilyMenuAnalytics?.signInFailed();render();}}
   }
   const originalAct=act;
   act=function(action,value,element) {

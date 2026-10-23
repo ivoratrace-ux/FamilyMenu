@@ -86,6 +86,7 @@ try {
  const fill=async(selector,value,event='input')=>{await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing input');e.value=${JSON.stringify(value)};e.dispatchEvent(new Event(${JSON.stringify(event)},{bubbles:true}));})()`);await delay(80);};
  const has=text=>`${bodyText}.includes(${JSON.stringify(text)})`;
  const shot=async name=>writeFile(resolve(report,name+'.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+ await send('Page.addScriptToEvaluateOnNewDocument',{source:`window.frigoTelemetry=[];window.frigoIdentities=[];window.__FRIGO_POSTHOG_TEST_CLIENT__={capture:(event,properties)=>window.frigoTelemetry.push({event,properties}),identify:id=>window.frigoIdentities.push(id),reset:()=>window.frigoIdentities.push('reset')};`});
  await send('Page.navigate',{url:base+'/FamilyMenu/'});
  await wait('document.querySelectorAll(".splash8 .hat8").length===3','Splash with three hats missing');
  await wait(has('Не удалось загрузить приложение'),'Catalog failure must be visible');
@@ -131,7 +132,7 @@ try {
   if(altList(0,'l','none').some(r=>!isSoup(r)))return false;
   act('doReplace',drink.id);return S.plan.days[0].slots.l.rid===soup.id&&UI.sheet?.type==='replace';
  }finally{S=JSON.parse(saved);UI.sheet=sheet;render()}})()`),'Replacements stay in all eight categories even when every candidate is already in the menu; legacy slots and invalid confirmation are protected');
- assert.equal(privateCalls,0,'Nothing private before sign-in');
+ assert.equal(privateCalls,0,'Nothing private before sign-in');assert.equal(await evaluate(`window.frigoTelemetry.filter(e=>e.event==='menu_generation_finished'&&e.properties.source==='onboarding'&&e.properties.success).length`),1,'Generation analytics counts the initial menu once');
  assert.equal(await evaluate('S.plan.days.filter(d=>Object.keys(d.slots).length).length'),3,'Menu for 3 days');
  assert.ok(await evaluate('S.plan.days.some(d=>d.slots.d_pair&&d.slots.d_pair.rid)'),'Dinner has a second course');
  await click('[data-act="toAuth8"]');await wait(has('Войти через Telegram'),'Telegram login missing');
@@ -140,7 +141,7 @@ try {
  for(let n=0;n<100 && !documents.get('a')?.menu;n++)await delay(100);assert.equal(documents.get('a').menu.days.length,7,'API keeps seven days');
  assert.ok(documents.get('a').preferences.onboarded,'Answers saved to the new account');
  for(let n=0;n<100 && !stocks.get('a').items.some(i=>i.ingredientId==='potato');n++)await delay(100);assert.ok(stocks.get('a').items.some(i=>i.ingredientId==='potato'),'Products marked before sign-in were saved');
- await wait(`S.tab==='today'`,'App opens on «Сегодня»');assert.ok(await evaluate(`document.querySelector('.screen').innerText.includes('Утвердите меню')&&!document.querySelector('.screen [data-act="cook"], .screen .slot, .hero8')`),'Draft menu is hidden on Today');
+ await wait(`S.tab==='today'`,'App opens on «Сегодня»');assert.equal(await evaluate(`window.frigoTelemetry.filter(e=>e.event==='sign_in_finished'&&e.properties.success).length`),1,'Successful login is tracked once');assert.ok(await evaluate(`window.frigoIdentities.includes('user:a')`),'Anonymous activity is identified with an internal user ID');assert.ok(await evaluate(`document.querySelector('.screen').innerText.includes('Утвердите меню')&&!document.querySelector('.screen [data-act="cook"], .screen .slot, .hero8')`),'Draft menu is hidden on Today');
  await evaluate(`act('cook',todayIdx()+':'+keysOf8(S.plan.days[todayIdx()])[0])`);assert.ok(await evaluate(`!UI.cook && S.plan.status==='draft'`),'Draft dishes cannot start cooking');await click('[data-act="tab"][data-v="today"]');await click('.screen [data-act="tab"][data-v="menu"]');await click('[data-act="approve"]');await click('[data-act="tab"][data-v="menu"]');await wait('!!document.querySelector(".slot [data-drag]") && !document.querySelector(".hero")','v4 menu with drag handles');
  assert.equal(await evaluate(has('Калории сегодня')),false,'Calories moved to «Сегодня»');assert.equal(await evaluate('!!document.querySelector(".appbar > b") || /≈\\s?[0-9][0-9 \u00a0]*₽/.test(document.querySelector(".screen").innerText)'),false,'No duplicated title and no prices in the menu');await shot('05-menu');
  assert.ok(await evaluate('!!document.querySelector(".mealhead8")'),'Meals are grouped');
@@ -184,7 +185,7 @@ try {
  await evaluate(`(()=>{const sl=S.plan.days[UI.cook.day].slots[UI.cook.slot],r=RBY[sl.rid];window.pantryBeforeCooking8=structuredClone(S.pantry);window.cookedSlot8={day:UI.cook.day,slot:UI.cook.slot};const needed=new Map();for(const [key,q] of r.i)needed.set(key,(needed.get(key)||0)+q*sl.serv/4);S.pantry=S.pantry.filter(p=>!needed.has(p.key));for(const [key,qty] of needed)S.pantry.push({key,qty:Math.round(qty*1000)/1000+123});S.hfSig8=pantrySig8();window.cookingExpected8=[...needed.keys()].map(key=>({key,qty:123}));})()`);
  await evaluate(`(()=>{const n=RBY[UI.cook.rid].s.length;while(UI.cook.step<n)act('cnext')})()`);
  assert.ok(await evaluate(`window.cookingExpected8.every(p=>S.pantry.filter(x=>x.key===p.key).reduce((n,x)=>n+x.qty,0)===p.qty)`),'Cooking subtracts actual family recipe quantities from stock');
- const spentStock=await evaluate('JSON.stringify(S.pantry)');await evaluate(`act('cnext');act('cprev');act('cnext')`);assert.equal(await evaluate('JSON.stringify(S.pantry)'),spentStock,'Repeated completion does not consume ingredients twice');
+ const spentStock=await evaluate('JSON.stringify(S.pantry)');await evaluate(`act('cnext');act('cprev');act('cnext')`);assert.equal(await evaluate('JSON.stringify(S.pantry)'),spentStock,'Repeated completion does not consume ingredients twice');assert.equal(await evaluate(`window.frigoTelemetry.filter(e=>e.event==='cooking_completed').length`),1,'Repeated completion is counted once in analytics');assert.equal(await evaluate(`window.frigoTelemetry.filter(e=>e.event==='cooking_started').length`),1,'Cooking start is counted once');
  await wait('!window.FamilyMenuBridge.pending','Cooking stock did not finish saving');
  for(const item of await evaluate('window.cookingExpected8'))assert.equal(stocks.get('a').items.find(i=>i.ingredientId===item.key)?.quantity,item.qty,'Spent inventory is saved');
  const completed=await evaluate('window.cookedSlot8');assert.equal(documents.get('a').menu.days[completed.day].slots.find(x=>x.meal===completed.slot).cooked,true,'Completion is persisted');
@@ -327,6 +328,7 @@ try {
  assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
  approved=false;user='b';await click('[data-act="telegramStart"]');await wait(has('4826'),'Second challenge missing');approved=true;
  await wait(has('Зачем вам Frigo?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
+ assert.ok(await evaluate(`window.frigoTelemetry.every(e=>!('audience' in e.properties)&&!('email' in e.properties)&&!('login' in e.properties)&&!('providerUserId' in e.properties))`),'Telemetry excludes identity details and audience labels');
  assert.equal(errors.length,0);console.log('PASS v8.14: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; store baskets absent; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
 }catch(error){
  console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const info=await send('Runtime.evaluate',{expression:'JSON.stringify({url:location.href,ready:document.readyState,scripts:[...document.scripts].map(s=>s.src)})',returnByValue:true});console.error('Page:',info.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
