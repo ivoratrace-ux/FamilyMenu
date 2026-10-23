@@ -109,7 +109,7 @@ pick=(function(orig){return function(slot,used,weekend,ctx){
   const ch=pool.map(r=>({r,s:score(r,ctx)+Math.random()*.5})).sort((a,b)=>b.s-a.s)[0].r;
   used.cnt=used.cnt||{}; used.cnt[ch.id]=cnt(ch.id)+1; return ch;
 }})(pick);
-altList=(function(orig){return function(day,slot,reason){return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r)}})(altList);
+altList=(function(orig){return function(day,slot,reason){buildHome8(); return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r)}})(altList);
 slotRow=(function(orig){return function(di,sk,compact){const h=orig(di,sk,compact),r=slotRecipe(di,sk); return r?h.replace('<span class="meta">','<span class="meta meta8">'+buyTag8(r,true)).replace(/<span>\d+ (?:порция|порции|порций)<\/span>/,''):h}})(slotRow);
 sheetReplace=(function(orig){return function(o){let h=orig(o); for(const r of altList(o.day,o.slot,o.reason||'none')) h=h.replace(new RegExp(`(data-act="altOpen" data-v="${r.id}"[\\s\\S]*?<span class="meta">)`),'$1'+buyTag8(r)); return h}})(sheetReplace);
 /* v8.9: dishes composed from what is at home — protein + grain + sauce (+ one vegetable).
@@ -117,13 +117,14 @@ sheetReplace=(function(orig){return function(o){let h=orig(o); for(const r of al
 const HP8={fish_white:['Минтай','fish','fish',600],cod:['Треска','fish','fish',600],hake:['Хек','fish','fish',600],salmon:['Сёмга','salmon','fish',600],pink_salmon:['Горбуша','salmon','fish',600],
  trout:['Форель','salmon','fish',600],mackerel:['Скумбрия','fish','fish',600],chicken_fillet:['Курица','chicken','poultry',600],chicken_thigh:['Куриные бёдра','chicken','poultry',700],
  chicken_drum:['Куриные голени','chicken','poultry',900],turkey:['Индейка','turkey','poultry',600],beef:['Говядина','beef','meat',600],pork:['Свинина','chop','meat',600],pork_loin:['Свиная вырезка','chop','meat',600],
- shrimp:['Креветки','shrimp','sea',400],squid:['Кальмары','squid','sea',500],tofu:['Тофу','tofu','tofu',400]};
+ shrimp:['Креветки','shrimp','sea',400],squid:['Кальмары','squid','sea',500],tofu:['Тофу','tofu','tofu',400],tuna:['Тунец','tuna','canned',2],eggs:['Яйца','egg_bits','egg',8]};
 const HB8={rice:['с рисом','rice',300],basmati:['с рисом басмати','rice',300],rice_round:['с рисом','rice',300],buckwheat:['с гречкой','buckwheat',300],pasta:['с макаронами','pasta',350],
  spaghetti:['со спагетти','pasta',350],orzo:['с орзо','pasta',300],couscous:['с кус-кусом','bulgur',300],bulgur:['с булгуром','bulgur',300],quinoa:['с киноа','quinoa',300],potato:['с картофелем','potato',1000],
  noodles:['с лапшой','noodles',300],rice_noodles:['с рисовой лапшой','noodles',250],soba:['с гречневой лапшой','noodles',250],egg_noodles:['с яичной лапшой','noodles',300]};
 const HS8={soy_sauce:['в соевом соусе','sesame',50],sour_cream:['в сметанном соусе','sauce_cream',200],cream:['в сливочном соусе','sauce_cream',200],cream33:['в сливочном соусе','sauce_cream',150],
  canned_tomatoes:['в томатном соусе','sauce_red',1],tomato_paste:['в томатном соусе','sauce_red',60],coconut_milk:['в кокосовом соусе','curry',1]};
 const HV8={onion:150,carrot:200,bell_pepper:200,zucchini:300,broccoli:300,mushrooms:300,green_peas:200,spinach:150,mixed_veg:300,beans_green:300,cauliflower:300,spinach_frozen:200,corn_frozen:200};
+const NOMC8={rice:'Рис',basmati:'Рис басмати',rice_round:'Рис',buckwheat:'Гречка',pasta:'Макароны',spaghetti:'Спагетти',orzo:'Орзо',couscous:'Кус-кус',bulgur:'Булгур',quinoa:'Киноа',potato:'Картофель',noodles:'Лапша',rice_noodles:'Рисовая лапша',soba:'Гречневая лапша',egg_noodles:'Яичная лапша'};
 const NOM8={rice:'рис',basmati:'рис',rice_round:'рис',buckwheat:'гречку',pasta:'макароны',spaghetti:'спагетти',orzo:'орзо',couscous:'кус-кус',bulgur:'булгур',quinoa:'киноа',potato:'картофель',noodles:'лапшу',rice_noodles:'лапшу',soba:'лапшу',egg_noodles:'лапшу'};
 function homeRecipe8(pk,bk,sk,vk){
   const id=['h8',pk,bk,sk||'',vk||''].join('~'); if(RBY[id]) return RBY[id];
@@ -133,10 +134,10 @@ function homeRecipe8(pk,bk,sk,vk){
   const cookB=bk==='couscous'?'Залейте кус-кус кипятком с солью и накройте на 5 минут.':bk==='potato'?'Нарежьте картофель дольками и отварите в подсоленной воде 15–20 минут.':
     ['pasta','spaghetti','orzo','noodles','rice_noodles','soba','egg_noodles'].includes(bk)?`Отварите ${base} в подсоленной воде по времени на упаковке.`:`Промойте ${base} и отварите в подсоленной воде 15–18 минут.`;
   const cookP={fish:`Нарежьте рыбу порционно, посолите и обжарьте на масле по 3–4 минуты с каждой стороны.`,poultry:`Нарежьте ${P[0].toLowerCase()} кусочками и обжарьте на масле 8–10 минут, до готовности.`,
-    meat:`Нарежьте мясо тонкими полосками и обжарьте на сильном огне 7–8 минут.`,sea:`Обжарьте ${P[0].toLowerCase()} на масле 2–3 минуты — дольше не нужно, иначе станут жёсткими.`,tofu:'Нарежьте тофу кубиками и обжарьте до золотистой корочки, 5–6 минут.'}[P[2]];
+    meat:`Нарежьте мясо тонкими полосками и обжарьте на сильном огне 7–8 минут.`,sea:`Обжарьте ${P[0].toLowerCase()} на масле 2–3 минуты — дольше не нужно, иначе станут жёсткими.`,tofu:'Нарежьте тофу кубиками и обжарьте до золотистой корочки, 5–6 минут.',canned:'Слейте жидкость с тунца, разберите его вилкой и прогрейте на сковороде 1–2 минуты.',egg:'Взбейте яйца с щепоткой соли и обжарьте на масле, помешивая, 2–3 минуты.'}[P[2]];
   const cookS=!sk?'':sk==='soy_sauce'?'Влейте соевый соус с 3 ложками воды и прогрейте 1–2 минуты, чтобы всё пропиталось.':['canned_tomatoes','tomato_paste'].includes(sk)?'Добавьте томаты (пасту разведите стаканом воды) и тушите 7–10 минут.':sk==='coconut_milk'?'Влейте кокосовое молоко и потушите 5 минут.':'Добавьте сметану или сливки с половиной стакана воды и потушите 5 минут на слабом огне.';
   const steps=[cookB,...(vk?[`Нарежьте ${veg} и обжарьте на масле 5 минут.`]:[]),cookP,...(cookS?[cookS]:[]),`Разложите ${base} по тарелкам, сверху — ${P[0].toLowerCase()}${sk?' с соусом':''}.`];
-  const r={id,n:`${P[0]} ${B[0]}${vk?` и ${veg}`:''}${Sx?' '+Sx[0]:''}`,m:'m',t:bk==='potato'||P[2]==='meat'?35:25,tags:['home8','quick'],i,sp:['соль','чёрный перец'],s:steps,art:`plate:${[P[1],B[1],Sx?Sx[1]:'greens'].join(',')}`};
+  const r={id,n:(pk==='eggs'?`${NOMC8[bk]} с яйцом`:`${P[0]} ${B[0]}`)+`${vk?` и ${veg}`:''}${Sx?' '+Sx[0]:''}`,m:'m',t:bk==='potato'||P[2]==='meat'?35:25,tags:['home8','quick'],i,sp:['соль','чёрный перец'],s:steps,art:`plate:${[P[1],B[1],Sx?Sx[1]:'greens'].join(',')}`};
   deriveRecipe(r); RBY[id]=r; R.push(r); return r;
 }
 function homeFromPlan8(){if(S.plan) S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{if(s&&s.rid&&!RBY[s.rid]&&s.rid.startsWith('h8~')){const [,p,b,sa,v]=s.rid.split('~'); homeRecipe8(p,b,sa||null,v||null)}}))}
@@ -144,6 +145,23 @@ function homeFromPlan8(){if(S.plan) S.plan.days.forEach(d=>Object.values(d.slots
 function buildHome8(){
   const ps=Object.keys(HP8).filter(inPantry8),bs=Object.keys(HB8).filter(inPantry8),ss=Object.keys(HS8).filter(inPantry8),vs=Object.keys(HV8).filter(k=>inPantry8(k)&&k!=='onion');
   const out=[]; ps.forEach((p,pi)=>bs.forEach((b,bi)=>{const r=homeRecipe8(p,b,ss.length?ss[(pi+bi)%ss.length]:null,vs.length?vs[(pi+bi)%vs.length]:null); if(r) out.push(r)})); return out.slice(0,16);
+}
+const pantrySig8=()=>S.pantry.filter(x=>(+x.qty||0)>0).map(x=>x.key).sort().join(',');
+function homeFit8(){
+  if(!S.plan) return 0; buildHome8();
+  const ti=Math.max(0,todayIdx()),used={}; let n=0;
+  S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{if(s&&s.rid) used[s.rid]=(used[s.rid]||0)+1}));
+  S.plan.days.forEach((d,di)=>{if(di<ti) return;
+    for(const k of Object.keys(d.slots)){
+      const s=d.slots[k]; if(!s||s.left||s.cooked||S.eaten[eatKey(di,k)]) continue;
+      const cur=s.rid?RBY[s.rid]:null,kind=kindOfKey8(k); if(!KOPT8.b.concat(KOPT8.l,KOPT8.s,KOPT8.d).includes(kind)) continue;
+      const taken=new Set(Object.values(d.slots).map(x=>x.rid)),room=KCAL_TARGET8-dayKcal8(d)+(cur?cur.kcal:0);
+      const pool=(kind==='pair'?poolFor('l_pair'):pool8(kind)).filter(r=>!taken.has(r.id)&&hits8(r)>0&&r.kcal<=room);
+      if(!pool.length) continue;
+      const best=pool.map(r=>({r,v:score(r,{})-(used[r.id]||0)*4})).sort((a,b)=>b.v-a.v)[0].r;
+      if(missing8(best)<(cur?missing8(cur):99)){if(cur) used[cur.id]--; used[best.id]=(used[best.id]||0)+1; s.rid=best.id; n++}
+    }});
+  return n;
 }
 const buyLine8=r=>{const miss=r.i.filter(([k])=>!STAPLE8.has(k)&&!inPantry8(k)).map(([k])=>ING[k][0]);
   return `<p class="small buyline8">${miss.length?`<b>Докупить +${miss.length}</b> · ${esc(miss.join(', '))}`:'<b>Всё есть дома</b> — докупать ничего не нужно'}</p>`};
@@ -237,7 +255,7 @@ function topUp8(day,used,weekend){
 }
 const generateOnce8=generate;
 generate=function(){
-  buildHome8();
+  buildHome8(); S.hfSig8=pantrySig8();
   const p=P8(),limit=p.budget*p.days/7; let best=null;
   for(let i=0;i<4;i++){generateOnce8(); const cost=shopping().cost; if(!best||cost<best.cost) best={plan:S.plan,cost}; if(cost<=limit) break}
   S.plan=best.plan; if(!V().trialStart){V().trialStart=NOW().toISOString(); track('trial_started')}
@@ -746,7 +764,8 @@ render=function(){
   else if(st==='gen') app.innerHTML=loader8();
   else if(st==='ready'&&!signed) app.innerHTML=ready8();
   else if(!signed) app.innerHTML=auth8();
-  else {if(S.plan) snapDiary8(); app.innerHTML=appbar8()+SCR8[S.tab]()+tabs8()+drawer8()+(UI.board?board8():'')}
+  else {if(S.plan&&pantrySig8()!==S.hfSig8){S.hfSig8=pantrySig8(); const n=homeFit8(); if(n){save(); setTimeout(()=>toast(`Подобрали ${n} ${plural(n,'блюдо','блюда','блюд')} из продуктов «Дома»`),50)}}
+   if(S.plan) snapDiary8(); app.innerHTML=appbar8()+SCR8[S.tab]()+tabs8()+drawer8()+(UI.board?board8():'')}
   renderSheet(); renderCook(); renderCart(); paintTimers(); clampChips();
   const hs=document.getElementById('hscroll8'); if(hs){const on=hs.querySelector('.sel8'); if(on&&!hs.dataset.done){hs.scrollLeft=on.offsetLeft-hs.clientWidth/2+on.clientWidth/2; hs.dataset.done=1}}
 };
