@@ -362,3 +362,10 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .dot8.c{background:var(--saffron)}.dot8.e{background:var(--accent)}
 .dsel8{position:sticky;top:58px;z-index:5;box-shadow:var(--shadow)}
 .appbar{z-index:15}
+
+/* v8.4 */
+.ingpic8{width:36px;height:36px;border-radius:10px;flex:none;display:grid;place-items:center;font-size:22px;line-height:1;background:var(--bg);border:1px solid var(--line)}
+.mealrow8{display:flex;flex-direction:column;gap:6px;padding:6px 0;border-top:1px solid var(--line)}
+.mealrow8 .chips{gap:6px}
+.mealrow8 .chip{padding:5px 11px;font-size:13px}
+.todaymeal .btn.small{flex:none}
