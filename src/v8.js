@@ -564,7 +564,6 @@ function drawer8(){
    ${it('pBudget',IC.tag,'Бюджет и цены',`${rub(p.budget)} в неделю · ${CITIES[p.city][0]}`)}
    ${it('pNotify',IC.bell||IC.menu,'Уведомления',S.profile.tg8?'Напоминания в Telegram включены':'Напоминания в Telegram')}
    ${it('pRecipes',IC.pot,'Мои рецепты',S.myRecipes.length?`${S.myRecipes.length} — попадают в меню`:'Свои блюда попадут в меню')}
-   ${S.plan&&S.plan.status!=='draft'?`<button class="ditem" data-act="share">${IC.share}<span class="grow"><b>Отправить меню семье</b></span></button>`:''}
    <p class="eyebrow dhead">Премиум <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:400">· ${premiumNote8()}</span></p>
    ${it('promo',IC.tag,'Акции и сравнение цен',`${VV_PROMO.length} акций ВкусВилла, скидки Лавки, где дешевле`,!premium8())}
    ${it('sub',IC.card,'Подписка',subscribed()?'Подключена':'299 ₽ в месяц или 1 990 ₽ в год')}
@@ -721,7 +720,7 @@ function scrMenu8(preview){
      const low=dayKcal8(d)<KCAL_TARGET8*.9?'<div class="warn8"><span class="small">Калорийность ниже нормы: с выбранными блюдами и ограничениями не удалось подобрать достаточные порции. Добавьте приём пищи или измените ограничения.</span></div>':'',over=Math.round(dayKcal8(d)-KCAL_TARGET8),warn=!preview&&over>110?`<div class="warn8"><span class="grow small">Выше нормы на ≈${num(over)} ккал на порцию</span><button class="btn ghost small" data-act="lighter8" data-v="${di}">Подобрать полегче</button></div>`:'';
      return `<div class="day ${di===ti?'today':''}">${low}${warn}<header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}≈${num(dayKcal(di)*portions())} ккал${S.profile.members.length>1?' на семью':''}</span></header>${groups.map(g=>`<div class="meal8"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(k=>row(di,k)).join('')}</div>`).join('')}</div>`}).join('')}
    ${preview?'':`<p class="small muted">${KC()?(S.profile.members.length>1?'Калории дня — на всю семью. ':'Калории дня — по вашей норме. ')+'Калории блюд — на базовую порцию; размер порции каждого учитывает его норму. ':''}Потяните за ⠿, чтобы поменять блюда местами. Смахните блюдо вправо, чтобы убрать его.</p>
-   <div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать покупки</button>':`<button class="btn secondary block" data-act="share">${IC.share} Отправить меню семье</button>`}
+   <div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать покупки</button>':''}
     <button class="btn ghost block" data-act="regen">Пересобрать меню</button></div>`}
   </div>`;
 }
@@ -888,7 +887,6 @@ function openTimer8(key){
 /* ---------- render ---------- */
 render=function(){
   const app=$('#app'); P8(); ensureRecipes(); if(!SCR8[S.tab]) S.tab='today';
-  if(UI.fam){app.innerHTML=famView(); renderSheet(); return}
   const st=S.stage,signed=!!FamilyMenuApi.session;
   if(st==='intro'&&!signed) app.innerHTML=intro8();
   else if(st==='quiz') app.innerHTML=quiz8();

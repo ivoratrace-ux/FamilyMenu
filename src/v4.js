@@ -1,4 +1,4 @@
-/* ============ v4: step-by-step feature unlocks, trial & subscription, cart assembly, family share, pilot analytics ============ */
+/* ============ v4: step-by-step feature unlocks, trial & subscription, cart assembly, pilot analytics ============ */
 const PRICE_DATE='20–21 октября';
 const TRIAL_DAYS=7;
 Object.assign(IC,{
@@ -58,7 +58,7 @@ act=(function(orig){return function(a,v,el){
   const c0=countCooked(),b0=countBought(),t0=S.tab;
   const r=orig(a,v,el);
   try{
-    const E={approve:'menu_approved',recipe:'recipe_opened',cook:'cook_started',doReplace:'dish_replaced',copy:'list_copied',share:'share_opened',famOpen:'family_view_opened'};
+    const E={approve:'menu_approved',recipe:'recipe_opened',cook:'cook_started',doReplace:'dish_replaced',copy:'list_copied'};
     if(E[a]) track(E[a]);
     if(S.tab!==t0){track('screen',{s:S.tab}); if(S.tab==='shop') track('list_opened'); if(S.tab==='sub'&&!subscribed()) track('paywall_shown',{from:a})}
     if(countCooked()>c0) track('dish_cooked');
@@ -86,7 +86,6 @@ function drawer(){
   return `<div class="dscrim" data-act="drawerClose"><nav class="drawer" aria-label="Главное меню">
    <div class="duser"><span class="avatar big">${esc(initials())}</span><div><b>${esc((S.profile.members[0]&&S.profile.members[0].name)||'Профиль')}</b><br><span class="small muted">${S.user?esc(S.user.phone):'гость (демо)'}</span></div></div>
    ${it('nav','profile',IC.profile,'Семья и настройки',`${n} ${plural(n,'человек','человека','человек')} · вкусы и ограничения`)}
-   ${S.plan&&S.plan.status!=='draft'?it('share','',IC.share,'Отправить меню семье','Ссылкой или текстом в мессенджер'):''}
    ${UL('home')?it('nav','home',IC.home,'Продукты дома','',nb('home')):lockIt('home')}
    ${UL('promo')?it('nav','promo',IC.tag,'Акции и цены',`${VV_PROMO.length} акций ВкусВилла, скидки Лавки, сравнение корзины`,nb('promo')):lockIt('promo')}
    ${UL('kcal')||KC()?it('featGo','kcal',IC.chart,'Калории',KC()?'Включены':'Выключены — включить в настройках',nb('kcal')):lockIt('kcal')}
@@ -156,38 +155,8 @@ function scrSub(){
 }
 
 
-/* ---------- family: share sheet & read-only family view ---------- */
-function shareText(){
-  const p=S.plan,d0=new Date(p.days[0].date),d6=new Date(p.days[6].date),sh=shopping(),need=sh.items.filter(i=>!i.covered&&!i.bought);
-  const lines=[`Меню на неделю: ${d0.getDate()} ${MONS[d0.getMonth()]} — ${d6.getDate()} ${MONS[d6.getMonth()]}`,''];
-  p.days.forEach((d,di)=>{lines.push(dateLabel(d.date)+':'); SLOTS.filter(k=>d.slots[k]).forEach(k=>{const r=slotRecipe(di,k); if(r) lines.push(`  ${SLOT_NAMES[k]} — ${r.n}${d.slots[k].left?' (остатки)':''}`)})});
-  lines.push('',`Купить: ${need.length} ${plural(need.length,'продукт','продукта','продуктов')}, ≈${rub(need.reduce((a,i)=>a+i.cost,0))}`);
-  return lines.join('\n');
-}
-function sheetShare(){return `<div class="grab"></div>
-  <div class="row between"><p class="eyebrow">Меню для семьи</p><button class="iconbtn" data-act="close" aria-label="Закрыть">✕</button></div>
-  <h2>Пусть семья тоже видит меню</h2><p class="small muted">Партнёр посмотрит, что сегодня на ужин, и докупит продукты по списку — без установки приложения.</p>
-  <div class="card"><b>Ссылкой</b><p class="small muted">Откроется страница с меню недели и списком покупок. Отметки «куплено» общие: что купил один — исчезнет из списка у другого.</p>
-   <button class="btn block" data-act="famOpen">Посмотреть, как увидит семья</button><p class="small muted">В прототипе ссылка не создаётся — покажем экран, который откроется по ней.</p></div>
-  <div class="card"><b>Текстом в мессенджер</b><pre class="sharepre">${esc(shareText())}</pre>
-   <div class="row"><button class="btn secondary grow" data-act="shareCopy">Скопировать</button>${navigator.share?'<button class="btn ghost grow" data-act="shareNative">Поделиться…</button>':''}</div></div>`}
-function famView(){
-  const p=S.plan; if(!p){UI.fam=false; return ''}
-  const sh=shopping(),need=sh.items.filter(i=>!i.covered),cats=CAT_ORDER.filter(c=>need.some(i=>i.cat===c)),ti=todayIdx(),tab=UI.famTab||'menu',nm=(S.profile.members[0]||{}).name;
-  const who=nm&&nm!=='Я'?esc(nm):'Ваша семья';
-  const body=tab==='menu'?p.days.map((d,di)=>`<div class="day ${di===ti?'today':''}"><header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b>${di===ti?'<span class="pill">сегодня</span>':''}</header>${SLOTS.filter(k=>d.slots[k]).map(k=>{const r=slotRecipe(di,k); return r?`<div class="slot ${d.slots[k].cooked?'cooked':''}"><div class="thumb">${dishArt(r)}</div><div class="grow stack" style="gap:2px"><span class="small muted">${SLOT_NAMES[k]}</span><span class="dish">${esc(r.n)}</span>${d.slots[k].left?'<span class="meta"><span class="pill grey">остатки со вчера</span></span>':d.slots[k].cooked?'<span class="meta"><span class="pill">приготовлено</span></span>':''}</div></div>`:''}).join('')}</div>`).join('')
-   :`<p class="small muted">Отметьте, что купили, — у всех в семье список обновится.</p>`+cats.map(c=>`<section class="cat"><h3>${c}</h3>${need.filter(i=>i.cat===c).map(i=>`<div class="item ${i.bought?'done':''}"><input type="checkbox" class="chk" id="fb_${i.k}" data-act="bought" data-v="${i.k}" ${i.bought?'checked':''} aria-label="Куплено: ${esc(i.name)}"><label class="grow row between" for="fb_${i.k}" style="cursor:pointer"><span class="nm">${esc(i.name)}</span><span class="qty">${fmtQty(i.k,i.toBuy,true)}</span></label></div>`).join('')}</section>`).join('');
-  return `<div class="screen famview">
-   <div class="note"><b>i</b><span>Так меню увидит семья по ссылке. <button class="linkbtn" data-act="famClose">Вернуться в приложение</button></span></div>
-   <div><p class="eyebrow">${who} делится меню</p><h1>Меню на неделю</h1></div>
-   <div class="seg" role="tablist">${[['menu','Меню'],['shop','Покупки']].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-act="famTab" data-v="${k}">${l}</button>`).join('')}</div>
-   ${body}
-   <div class="card newcard"><b>Хотите такое меню для своей семьи?</b><p class="small muted">Первая неделя бесплатно, без карты.</p><button class="btn small" data-act="famClose">Попробовать</button></div>
-  </div>`;
-}
-
 /* ---------- pilot metrics ---------- */
-const FUNNEL=[['onboarding_done','Прошли онбординг'],['menu_built','Получили меню'],['menu_approved','Утвердили меню'],['list_opened','Открыли список покупок'],['dish_cooked','Приготовили блюдо из меню'],['share_opened','Делились меню с семьёй'],['paywall_shown','Увидели тарифы'],['subscribed','Оформили подписку']];
+const FUNNEL=[['onboarding_done','Прошли онбординг'],['menu_built','Получили меню'],['menu_approved','Утвердили меню'],['list_opened','Открыли список покупок'],['dish_cooked','Приготовили блюдо из меню'],['paywall_shown','Увидели тарифы'],['subscribed','Оформили подписку']];
 function scrMetrics(){
   const ev=V().ev,cnt=n=>ev.filter(e=>e.n===n).length,wk2=ev.some(e=>e.n==='menu_built'&&e.p&&e.p.week>=2),st=weekStats();
   return `<div class="screen"><div><p class="eyebrow">Для пилота</p><h1>Метрики</h1></div>
@@ -215,12 +184,6 @@ function v4Act(a,v,el){
    case 'subscribe': {const pl=UI.tariff||'year'; V4.sub={plan:pl,since:NOW().toISOString()}; track('subscribed',{plan:pl}); toast('Подписка оформлена. Прототип: деньги не списаны');
      if(!S.plan||todayIdx()<0){save(); build(); return false} S.tab='today'; return true}
    case 'unsub': V4.sub=null; track('unsubscribed'); toast('Подписка отменена'); return true;
-   case 'share': UI.drawer=false; UI.sheet={type:'share'}; return true;
-   case 'shareCopy': {const t=shareText(); if(navigator.clipboard) navigator.clipboard.writeText(t).then(()=>toast('Меню скопировано — вставьте в чат семьи'),()=>toast('Не удалось скопировать')); track('share_text_copied'); save(); return false}
-   case 'shareNative': {try{navigator.share({title:'Меню на неделю',text:shareText()})}catch(e){} track('share_native'); save(); return false}
-   case 'famOpen': UI.sheet=null; UI.fam=true; UI.famTab='menu'; window.scrollTo(0,0); return true;
-   case 'famClose': UI.fam=false; window.scrollTo(0,0); return true;
-   case 'famTab': UI.famTab=v; return true;
    case 'metricsCopy': {const t=JSON.stringify(V4.ev,null,1); if(navigator.clipboard) navigator.clipboard.writeText(t).then(()=>toast('События скопированы'),()=>toast('Не удалось скопировать')); return false}
   }
   return false;

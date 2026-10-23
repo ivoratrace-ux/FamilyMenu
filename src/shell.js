@@ -94,7 +94,6 @@ function scrPromo(){
 /* ---------- render override ---------- */
 function render(){
   const app=$('#app');
-  if(UI.fam){app.innerHTML=famView(); renderSheet(); return}
   if(S.stage==='intro') app.innerHTML=intro();
   else if(S.stage==='auth') app.innerHTML=auth();
   else if(S.stage==='quiz') app.innerHTML=quiz();

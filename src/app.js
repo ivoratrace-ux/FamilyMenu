@@ -367,7 +367,6 @@ function scrMenu(){
    ${S.profile.budgetSet?`<div class="card"><div class="row between"><h3>Оценка покупок</h3><span class="qty">≈${rub(sh.cost)} / ${rub(b)}</span></div>
     <div class="progress ${over?'over':''}"><i style="width:${pct}%"></i></div>
     <p class="small muted">${over?'Выше бюджета. Замените дорогие блюда или отметьте, что есть дома. ':''}Оценка по ценам магазина на ${PRICE_DATE}, без учёта фасовок и акций.</p></div>`:`<div class="card"><div class="row between"><h3>Покупки на неделю</h3><span class="qty">≈${rub(sh.cost)}</span></div><p class="small muted">По ценам ${STORES[S.store||'vv']} на ${PRICE_DATE}. Бюджет можно задать в «Семье и настройках».</p></div>`}
-   ${S.plan.status!=='draft'?`<button class="btn secondary block" data-act="share">${IC.share} Отправить меню семье</button>`:''}
    ${S.plan.days.map((d,di)=>`<div class="day ${di===ti?'today':''}"><header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}${KC()?'≈'+num(dayKcal(di))+' ккал':''}</span></header>${SLOTS.filter(k=>d.slots[k]).map(k=>slotRow(di,k)).join('')}</div>`).join('')}
    <p class="small muted">${KC()?'Калории дня — на одну стандартную порцию каждого блюда. ':''}Потяните за ⠿, чтобы поменять блюда местами между приёмами пищи и днями.</p>
    <div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать список</button>':''}
@@ -421,7 +420,7 @@ function scrProfile(){const p=S.profile;return `<div class="screen">
 /* ============ SHEETS ============ */
 function renderSheet(){
   const L=$('#layer'),sh=UI.sheet; if(!sh){L.innerHTML='';return}
-  const html=sh.type==='share'?sheetShare(sh):sh.type==='recipe'?sheetRecipe(sh):sh.type==='replace'?sheetReplace(sh):sh.type==='move'?sheetMove(sh):sheetRemind(sh);
+  const html=sh.type==='recipe'?sheetRecipe(sh):sh.type==='replace'?sheetReplace(sh):sh.type==='move'?sheetMove(sh):sheetRemind(sh);
   L.innerHTML=`<div class="scrim" data-act="close"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
 }
 function sheetRecipe({day,slot}){
