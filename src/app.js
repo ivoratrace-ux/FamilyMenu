@@ -669,7 +669,7 @@ document.addEventListener('change',e=>{const t=e.target; if(!t.dataset||!t.datas
 });
 function refocus(id){const i=document.getElementById(id); if(i){i.focus(); i.setSelectionRange(i.value.length,i.value.length)}}
 document.addEventListener('input',e=>{const t=e.target;
-  if(t.dataset.act==='budget'){S.profile.budget=+t.value; S.profile.budgetSet=true; const b=$('#budgetv'); if(b) b.textContent=rub(S.profile.budget); save()}
+  if(t.dataset.act==='budget'){S.profile.budget=+t.value; S.profile.budgetSet=true; const b=$('#budgetv'); if(b) b.textContent=rub(S.profile.budget); const period=$('#budgetperiodv'); if(period) period.textContent=rub(S.profile.budget*S.profile.days/7); save()}
   if(t.dataset.act==='search'){UI.q=t.value; render(); refocus('pq')}
   if(t.dataset.act==='dsearch'){UI.dq=t.value; render(); refocus('dq')}
 });
