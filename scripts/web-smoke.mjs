@@ -120,7 +120,7 @@ try {
  await click('[data-act="days8"][data-v="1"]');await wait('S.profile.days===4','Days counter');await click('[data-act="days8"][data-v="-1"]');
  await click('[data-act="qNext8"]');await wait(has('Неделя и бюджет'),'Budget step missing');await fill('#budget','12000');assert.equal(await evaluate('S.profile.budget'),12000);assert.equal(await evaluate('document.getElementById("budgetperiodv").textContent'),await evaluate('rub(12000*S.profile.days/7)'),'Budget for the selected days updates while dragging');
  await click('[data-act="build8"]');await wait('!!document.querySelector(".logo8")','Loader with logo missing');
- await wait(`S.stage==='ready'`,'First menu did not open before sign-in');await wait(has('Ваше меню готово'),'Ready text missing');assert.ok(await evaluate('!!document.querySelector(".preview8 .slot [data-act=replace]") && !document.querySelector(".preview8 .eat")'),'First menu offers «Заменить»');await shot('04-ready');
+ await wait(`S.stage==='ready'`,'First menu did not open before sign-in');await wait(has('Ваше меню готово'),'Ready text missing');assert.ok(await evaluate('!!document.querySelector(".preview8 .slot [data-act=replace]") && !document.querySelector(".preview8 .eat")'),'First menu offers «Заменить»');assert.ok(await evaluate('!document.querySelector(".preview8 [data-act=recipe], .preview8 button.open") && !!document.querySelector(".preview8 .open .dish")'),'Onboarding preview shows passive recipe rows');await shot('04-ready');
  assert.equal(privateCalls,0,'Nothing private before sign-in');
  assert.equal(await evaluate('S.plan.days.filter(d=>Object.keys(d.slots).length).length'),3,'Menu for 3 days');
  assert.ok(await evaluate('S.plan.days.some(d=>d.slots.d_pair&&d.slots.d_pair.rid)'),'Dinner has a second course');
