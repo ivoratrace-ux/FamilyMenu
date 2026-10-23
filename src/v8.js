@@ -136,7 +136,7 @@ altList=(function(orig){return function(day,slot,reason){buildHome8();
   return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r);
 }})(altList);
 const kindLabel8=k=>{const kind=kindOfKey8(k),l=KSHORT8[kind]||SLOT_NAMES[k]||'';return l.toLowerCase()===(SLOT8[baseOf8(k)]||'').toLowerCase()?'':l};
-slotRow=(function(orig){return function(di,sk,compact){let h=orig(di,sk,compact),r=slotRecipe(di,sk); h=h.replace(`<span class="small muted">${SLOT_NAMES[sk]}</span>`,kindLabel8(sk)?`<span class="small muted">${esc(kindLabel8(sk))}</span>`:''); return r?h.replace('<span class="meta">','<span class="meta meta8">'+buyTag8(r,true)+partTag8(S.plan.days[di],sk)).replace(/<span>(\d+) ккал<\/span>/,(m,n)=>`<span>${Math.round(n*partOf8(S.plan.days[di],sk))} ккал</span>`).replace(/<span>\d+ (?:порция|порции|порций)<\/span>/,''):h}})(slotRow);
+slotRow=(function(orig){return function(di,sk,compact){let h=orig(di,sk,compact),r=slotRecipe(di,sk); h=h.replace(`<span class="small muted">${SLOT_NAMES[sk]}</span>`,kindLabel8(sk)?`<span class="small muted">${esc(kindLabel8(sk))}</span>`:''); return r?h.replace('<span class="meta">','<span class="meta meta8">'+buyTag8(r,true)+partTag8(S.plan.days[di],sk)).replace(/<span>\d+ ккал<\/span>/,`<span>${Math.round(r.kcal*S.plan.days[di].slots[sk].serv/portions())} ккал в среднем</span>`).replace(/<span>\d+ (?:порция|порции|порций)<\/span>/,''):h}})(slotRow);
 sheetReplace=(function(orig){return function(o){let h=orig(o);
   // v8.11: «второе с гарниром» — keep the main, pick any other side (pasta, buckwheat, rice…)
   const cur=slotRecipe(o.day,o.slot),mm=cur&&/^c_(.+)_(g\d+)$/.exec(cur.id);
@@ -222,7 +222,7 @@ shopping=(function(orig){return function(){
 }})(shopping);
 /* ---------- menu generation: chosen kinds, 1–7 days (the stored menu keeps 7 days) ---------- */
 generate=function(){
-  const p=P8(),start=day0(NOW()),used={},por=portions(),days=[]; let prev=null; S.parts8={};
+  const p=P8(),start=day0(NOW()),used={},por=cookingScale(),days=[]; let prev=null; S.parts8={};
   for(let d=0;d<7;d++){
     const date=addDays(start,d),wd=date.getDay(),weekend=wd===0||wd===6,slots={};
     if(d<p.days) for(const k of ['b','l','s','d']) for(const kind of KOPT8[k].filter(x=>p.mealSetup[k].includes(x))){
@@ -280,7 +280,7 @@ function fit8(){
       const pool=kind==='pair'?poolFor('l_pair'):pool8(kind);
       for(const r of pool){
         if(r.kcal<=0||taken.has(baseKey8(r.id))||!fresh8(r,cur))continue;
-        const saving=(rcp8(cur)/cur.kcal-rcp8(r)/r.kcal)*cur.kcal*partOf8(day,key)*portions();
+        const saving=(rcp8(cur)/cur.kcal-rcp8(r)/r.kcal)*cur.kcal*partOf8(day,key)*cookingScale();
         if(saving>1)options.push({day,key,r,saving});
       }
     }
@@ -312,8 +312,8 @@ const KCAL_TARGET8=2200;
 /* Per-dish portions are persisted alongside the menu and used in both calories and shopping. */
 const partKey8=(day,k)=>String(day.date).slice(0,10)+':'+k;
 const partOf8=(day,k)=>(S.parts8||{})[partKey8(day,k)]||1;
-function setPart8(day,k,v){S.parts8=S.parts8||{};v=Math.max(.01,Math.min(2.5,v));if(Math.abs(v-1)<1e-8)delete S.parts8[partKey8(day,k)];else S.parts8[partKey8(day,k)]=v;day.slots[k].serv=Math.round(Math.min(100,portions()*v)*10000)/10000}
-const partTag8=(day,k)=>{const p=partOf8(day,k);return Math.abs(p-1)>.01?`<span class="pill grey">${dec(p)} порции</span>`:''};
+function setPart8(day,k,v){S.parts8=S.parts8||{};v=Math.max(.01,Math.min(2.5,v));if(Math.abs(v-1)<1e-8)delete S.parts8[partKey8(day,k)];else S.parts8[partKey8(day,k)]=v;day.slots[k].serv=Math.round(Math.min(100,cookingScale()*v)*10000)/10000}
+const partTag8=()=>`<span class="pill grey">${portions()} ${plural(portions(),'порция','порции','порций')}</span>`;
 function dayKcal8(day){return Object.entries(day.slots).reduce((a,[k,s])=>a+((s&&s.rid&&RBY[s.rid])?RBY[s.rid].kcal*partOf8(day,k):0),0)}
 dayKcal=function(di){const d=S.plan.days[di];return Object.keys(d.slots).reduce((s,k)=>{const r=slotRecipe(di,k);return s+(r?r.kcal*partOf8(d,k):0)},0)};
 eatenKcal=function(di){const d=S.plan.days[di];return Object.keys(d.slots).reduce((s,k)=>{const r=slotRecipe(di,k);return s+(r&&S.eaten[eatKey(di,k)]?r.kcal*partOf8(d,k):0)},0)};
@@ -324,7 +324,7 @@ function shrink8(day){
   ks.forEach(k=>setPart8(day,k,partOf8(day,k)>.75?.75:.5)); return true;
 }
 function topUp8(day,used,weekend){
-  const por=portions();
+  const por=cookingScale();
   for(let n=1;n<=2&&dayKcal8(day)<KCAL_TARGET8-200;n++){
     const gap=KCAL_TARGET8-dayKcal8(day),taken=new Set(Object.values(day.slots).map(s=>s.rid));
     const list=pool8('snack').filter(r=>!taken.has(r.id)&&(!S.profile.noRepeat8||!(used.cnt||{})[baseKey8(r.id)])&&r.kcal<=KCAL_TARGET8-dayKcal8(day)).map(r=>({r,s:-Math.abs(r.kcal-gap)/100+score(r,{})*.3-recentPenalty8(r)+Math.random()*4})).sort((a,b)=>b.s-a.s);
@@ -597,16 +597,16 @@ function scrToday8(){
       :`<button class="btn small ${hero?'herobtn8':''}" data-act="cook" data-v="${srcRef(ti,k)}">Готовить</button>`};
   const row=k=>{nameSlot8(k); const r=slotRecipe(ti,k),s=d.slots[k]; if(!r) return '';
     return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${ti}:${k}"><div class="thumb">${dishArt(r)}</div>
-     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}">${kindLabel8(k)?`<span class="small muted">${esc(kindLabel8(k))}</span>`:''}<span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}${partTag8(d,k)}<span>${r.t} мин</span><span>${Math.round(r.kcal*partOf8(d,k))} ккал</span></span></button>${action(k)}</div>`};
+     <button class="open" data-act="recipe" data-v="${srcRef(ti,k)}">${kindLabel8(k)?`<span class="small muted">${esc(kindLabel8(k))}</span>`:''}<span class="dish">${esc(r.n)}</span><span class="meta meta8">${buyTag8(r,true)}${partTag8(d,k)}<span>${r.t} мин</span><span>${Math.round(r.kcal*s.serv/portions())} ккал в среднем</span></span></button>${action(k)}</div>`};
   nameSlot8(mk); const hr=slotRecipe(ti,mk),hs=d.slots[mk];
   const hero=hr?`<div class="hero hero8"><button class="heroimg" data-act="recipe" data-v="${srcRef(ti,mk)}" aria-label="Рецепт: ${esc(hr.n)}">${dishArt(hr)}</button><p class="small" style="opacity:.85">${SLOT_NAMES[mk]}${hs.cooked?' · приготовлено':''}</p><p class="dish">${esc(hr.n)}</p>
-     <div class="meta">${missing8(hr)?buyTag8(hr):''}${partTag8(d,mk)}<span>${hr.t} мин</span><span>${Math.round(hr.kcal*partOf8(d,mk))} ккал на порцию</span><span>${dec(hs.serv)} ${plural(hs.serv,'порция','порции','порций')}</span></div>
+     <div class="meta">${missing8(hr)?buyTag8(hr):''}${partTag8(d,mk)}<span>${hr.t} мин</span><span>${Math.round(hr.kcal*hs.serv/portions())} ккал в среднем</span></div>
      <div class="row">${action(mk,true)}</div></div>`:'';
   const groups=groups8(d).map(g=>({...g,keys:g.keys.filter(k=>k!==mk)})).filter(g=>g.keys.length);
   return `<div class="screen"><h1 class="range8" style="text-transform:capitalize">${DOWL[date.getDay()]}, ${date.getDate()} ${MON[date.getMonth()]}</h1>
    ${ateForm8(ti)}
    ${hero}
-   ${groups.length?`<div class="day today"><header><b>Ещё сегодня</b><span class="small muted">≈${num(dayKcal(ti)*portions())} ккал за день${S.profile.members.length>1?' на семью':''}</span></header>
+   ${groups.length?`<div class="day today"><header><b>Ещё сегодня</b><span class="small muted">≈${num(dayKcal(ti)*cookingScale())} ккал за день${S.profile.members.length>1?' на семью':''}</span></header>
    ${groups.map(g=>`<div class="meal8"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(row).join('')}</div>`).join('')}</div>`:''}</div>`;
 }
 /* Favourites: heart on the recipe sheet and on the recipe page; liked recipes are offered more often. */
@@ -623,7 +623,7 @@ sheetRecipe=(function(orig){return function(o){const s0=S.plan.days[o.day].slots
     h=h.replace('<p class="small muted">Количества пересчитываются вместе со списком покупок</p>',`<input type="search" id="ia8" data-act="ia8" placeholder="+ Добавить продукт, например: варенье" value="${esc(UI.ia8||'')}" autocomplete="off" aria-label="Добавить продукт в блюдо">
       ${found.length?`<div class="chips">${found.map(k=>`<button class="chip" data-act="ingAdd8" data-v="${k}">+ ${esc(ING[k][0])}</button>`).join('')}</div>`:q?'<p class="small muted">Ничего не нашли</p>':''}
       ${diff.length?`<div class="row between"><span class="small">Изменено: ${esc(diff.join(', '))}</span><button class="linkbtn small" data-act="ingReset8">Как было</button></div>`:''}
-      <p class="small muted">Меняйте количество, убирайте продукт крестиком или добавляйте свой — калории и список покупок пересчитаются.</p>`)}
+      <p class="small muted">Готовим на всю семью; делите еду пропорционально потребности каждого в калориях. Меняйте объём продуктов — калории и список покупок пересчитаются.</p>`)}
   if(rr) h=h.replace('<div class="card"><div class="row between"><h3>Порции</h3>',buyLine8(rr)+'<div class="card"><div class="row between"><h3>Порции</h3>');
   return id?h.replace('<h1 class="dish" style="font-size:26px">',`<div class="row between" style="align-items:flex-start"><h1 class="dish grow" style="font-size:26px">`).replace(/(<h1 class="dish grow"[^>]*>[^<]*<\/h1>)/,`$1${favBtn8(id)}</div>`):h}})(sheetRecipe);
 score=(function(orig){return function(r,ctx){return orig(r,ctx)+(isFav8(r.id)?2:0)}})(score);
@@ -632,12 +632,13 @@ function recipeById8(id){
 }
 function rec8(){
   const r=recipeById8(UI.rec8); if(!r) return `<div class="screen"><p class="muted">Рецепт не найден.</p></div>`;
+  const slot=(S.plan?.days||[]).flatMap(d=>Object.values(d.slots)).find(s=>s.rid===r.id&&!s.left),scale=slot?slot.serv:cookingScale(),perPerson=scale/portions();
   return `<div class="screen"><div class="cover">${dishArt(r)}</div>
    <div class="row between" style="align-items:flex-start"><h1 class="dish grow" style="font-size:26px">${esc(r.n)}</h1>${favBtn8(r.id)}</div>
-   <div class="meta" style="font-size:14px"><span>${r.t} мин</span><span>${r.kcal} ккал на порцию</span></div>
+   <div class="meta" style="font-size:14px"><span>${r.t} мин</span><span>${Math.round(r.kcal*perPerson)} ккал в среднем на человека</span></div>
    ${buyLine8(r)}
-   <div class="macros"><div class="macro"><b>${r.P} г</b><span>белки</span></div><div class="macro"><b>${r.F} г</b><span>жиры</span></div><div class="macro"><b>${r.C} г</b><span>углеводы</span></div></div>
-   <div class="card"><h3>Продукты на 4 порции</h3>${r.i.map(([k,q])=>`<div class="ingr"><span>${esc(ING[k][0])}</span><span class="qty">${fmtQty(k,q)}</span></div>`).join('')}${(r.sp||[]).length?`<p class="small muted">По вкусу: ${esc(r.sp.join(', '))}</p>`:''}</div>
+   <div class="macros"><div class="macro"><b>${Math.round(r.P*perPerson)} г</b><span>белки</span></div><div class="macro"><b>${Math.round(r.F*perPerson)} г</b><span>жиры</span></div><div class="macro"><b>${Math.round(r.C*perPerson)} г</b><span>углеводы</span></div></div>
+   <div class="card"><h3>Продукты на ${portions()} ${plural(portions(),'порцию','порции','порций')}</h3>${r.i.map(([k,q])=>`<div class="ingr"><span>${esc(ING[k][0])}</span><span class="qty">${fmtQty(k,q*scale/4)}</span></div>`).join('')}${(r.sp||[]).length?`<p class="small muted">По вкусу: ${esc(r.sp.join(', '))}</p>`:''}</div>
    <div class="card"><h3>Как готовить</h3><ol class="steps8">${r.s.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div></div>`;
 }
 /* v8.7: proteins, fats and carbohydrates per person as donuts. */
@@ -717,9 +718,9 @@ function scrMenu8(preview){
    ${shopping().cost>budgetLimit8()+1?`<div class="note"><b>!</b><span class="grow">Для выбранной калорийности меню дороже бюджета на ≈${rub(shopping().cost-budgetLimit8())}. Увеличьте бюджет или измените блюда</span><button class="btn ghost small" data-act="cheaper8">Подобрать подешевле</button></div>`:''}
    <div class="row between" style="align-items:center"><h1 class="range8">${range8(d0,dn)}</h1>${preview?'':S.plan.status==='draft'?'<span class="pill warn">черновик</span>':'<span class="pill">утверждено</span>'}</div>
    ${vis.map(([d,di])=>{const groups=[];keysOf8(d).forEach(k=>{const b=baseOf8(k),g=groups.find(x=>x.b===b);g?g.keys.push(k):groups.push({b,keys:[k]})});
-     const low=dayKcal8(d)<KCAL_TARGET8*.9?'<div class="warn8"><span class="small">Калорийность ниже нормы: с выбранными блюдами и ограничениями не удалось подобрать достаточные порции. Добавьте приём пищи или измените ограничения.</span></div>':'',over=Math.round(dayKcal8(d)-KCAL_TARGET8),warn=!preview&&over>110?`<div class="warn8"><span class="grow small">Выше нормы на ≈${num(over)} ккал на порцию</span><button class="btn ghost small" data-act="lighter8" data-v="${di}">Подобрать полегче</button></div>`:'';
-     return `<div class="day ${di===ti?'today':''}">${low}${warn}<header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}≈${num(dayKcal(di)*portions())} ккал${S.profile.members.length>1?' на семью':''}</span></header>${groups.map(g=>`<div class="meal8"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(k=>row(di,k)).join('')}</div>`).join('')}</div>`}).join('')}
-   ${preview?'':`<p class="small muted">${KC()?(S.profile.members.length>1?'Калории дня — на всю семью. ':'Калории дня — по вашей норме. ')+'Калории блюд — на базовую порцию; размер порции каждого учитывает его норму. ':''}Потяните за ⠿, чтобы поменять блюда местами. Смахните блюдо вправо, чтобы убрать его.</p>
+     const low=dayKcal8(d)<KCAL_TARGET8*.9?'<div class="warn8"><span class="small">Калорийность ниже нормы: с выбранными блюдами и ограничениями не удалось подобрать достаточный объём еды. Добавьте приём пищи или измените ограничения.</span></div>':'',over=Math.round(dayKcal8(d)-KCAL_TARGET8),warn=!preview&&over>110?`<div class="warn8"><span class="grow small">Выше нормы на ≈${num(over*cookingScale()/portions())} ккал в среднем на человека</span><button class="btn ghost small" data-act="lighter8" data-v="${di}">Подобрать полегче</button></div>`:'';
+     return `<div class="day ${di===ti?'today':''}">${low}${warn}<header><b style="text-transform:capitalize">${dateLabel(d.date,true)}</b><span class="small muted">${di===ti?'<span class="pill">сегодня</span> ':''}≈${num(dayKcal(di)*cookingScale())} ккал${S.profile.members.length>1?' на семью':''}</span></header>${groups.map(g=>`<div class="meal8"><div class="mealhead8"><b>${SLOT8[g.b]||SLOT_NAMES[g.b]||''}</b>${g.keys.length>1?`<span class="small muted">${g.keys.length} ${plural(g.keys.length,'блюдо','блюда','блюд')}</span>`:''}</div>${g.keys.map(k=>row(di,k)).join('')}</div>`).join('')}</div>`}).join('')}
+   ${preview?'':`<p class="small muted">${KC()?(S.profile.members.length>1?'Калории дня — на всю семью. ':'Калории дня — по вашей норме. ')+'Калории блюд — в среднем на человека; делите общий объём пропорционально потребности каждого. ':''}Потяните за ⠿, чтобы поменять блюда местами. Смахните блюдо вправо, чтобы убрать его.</p>
    <div class="stack">${S.plan.status==='draft'?'<button class="btn block" data-act="approve">Утвердить меню и собрать покупки</button>':''}
     <button class="btn ghost block" data-act="regen">Пересобрать меню</button></div>`}
   </div>`;
@@ -799,7 +800,7 @@ function pFamily8(){
   return `<div class="screen">${head8('Настройки','Семья')}
    <div class="stack" style="gap:8px">${cards}</div>
    <div class="row"><button class="btn secondary small" data-act="madd" data-v="adult">+ Взрослый</button><button class="btn secondary small" data-act="madd" data-v="child">+ Ребёнок</button></div>
-   <p class="small muted">Норма на человека в день. Нажмите на человека, чтобы указать пол, возраст, вес, рост и цель. Готовим на ${dec(portions())} ${plural(portions(),'порцию','порции','порций')} за приём пищи.</p>
+   <p class="small muted">Норма на человека в день. Нажмите на человека, чтобы указать пол, возраст, вес, рост и цель. Готовим на ${portions()} ${plural(portions(),'порцию','порции','порций')} за приём пищи.</p>
    ${macNote8()}</div>`}
 function pFood8(){const p=S.profile;return `<div class="screen">${head8('Настройки','Питание и ограничения')}
   <div class="card"><h3>Цель</h3><p class="small muted">Можно выбрать несколько</p><div class="chips">${Object.entries(GOAL8).map(([k,l])=>`<button class="chip" data-act="goal8" data-v="${k}" aria-pressed="${k==='none'?!p.goals.length:p.goals.includes(k)}">${l}</button>`).join('')}</div></div>
@@ -1003,13 +1004,19 @@ function v8Act(a,v,el){
   }
   return false;
 }
+function rescaleFamilyMenu8(before){
+  const after=cookingScale();if(!S.plan||Math.abs(after-before)<1e-8||!(before>0))return false;
+  for(const day of S.plan.days)for(const slot of Object.values(day.slots))if(slot&&!slot.left&&!slot.cooked)slot.serv=Math.round(Math.min(100,slot.serv*after/before)*10000)/10000;
+  return true;
+}
 act=(function(orig){return function(a,v,el){
+  const before=cookingScale();
   if(!PAGES8[S.tab]) UI.prevTab8=S.tab;
   if(a==='tgo') askNotify8();
   const r=v8Act(a,v,el);
-  if(r){if(r===true){save(); render()} else save(); return}
+  if(r){rescaleFamilyMenu8(before);if(r===true){save(); render()} else save(); return}
   if(a==='tab'&&!PAGES8[v]&&!['today','menu','shop','home'].includes(v)) v='today';
-  return orig(a,v,el);
+  const result=orig(a,v,el);if(rescaleFamilyMenu8(before)){save();render()}return result;
 }})(act);
 
 /* ---------- inputs that should not re-render on every key ---------- */

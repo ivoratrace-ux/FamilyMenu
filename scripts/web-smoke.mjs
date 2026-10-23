@@ -149,9 +149,16 @@ try {
   await click('#layer [data-act="ingDrop8"]');await wait(`String(S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid).startsWith('v8~')`,'Crossing out a product makes an own version');
   await fill('#ia8','инжир');await click('#layer [data-act="ingAdd8"][data-v="fig_jam"]');await wait(`RBY[S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid].i.some(([k])=>k==='fig_jam')`,'Added product');
   assert.notEqual(await evaluate('RBY[S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid].kcal'),k0.kcal,'Calories recalculated');await shot('05d-edit');
+  assert.ok(await evaluate(`!document.querySelector('#layer [data-act="serv"]') && document.querySelector('#layer .card .pill.grey').textContent.trim()===portions()+' '+plural(portions(),'порция','порции','порций')`),'Family servings are fixed in the recipe');
+  const scrollBefore=await evaluate(`(()=>{const sheet=document.querySelector('#layer .sheet');sheet.scrollTop=200;return sheet.scrollTop})()`);assert.ok(scrollBefore>0);
   await evaluate(`(()=>{const i=document.querySelector('#layer .iq8');i.value='100';i.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+  assert.equal(await evaluate(`document.querySelector('#layer .sheet').scrollTop`),scrollBefore,'Editing quantities preserves recipe scroll');
+  assert.ok(await evaluate(`(()=>{const sl=S.plan.days[UI.sheet.day].slots[UI.sheet.slot],r=RBY[sl.rid];return +document.querySelector('#layer .macro b').textContent===Math.round(r.kcal*sl.serv/portions())})()`),'Recipe calories reflect the actual amount per family member');
+
   assert.ok(await evaluate(`(()=>{const sl=S.plan.days[UI.sheet.day].slots[UI.sheet.slot],r=RBY[sl.rid],k=document.querySelector('#layer .iq8').dataset.v;return Math.abs(r.i.find(([x])=>x===k)[1]*sl.serv/4-100)<1 && document.querySelector('#layer .iq8').value==='100'})()`),'Amount of a product can be changed');
   await click('#layer [data-act="ingReset8"]');await wait(`S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid===${JSON.stringify(k0.rid)}`,'Back to the original');}
+ assert.ok(await evaluate(`(()=>{const saved=JSON.stringify(S);try{for(const count of [1,3,5]){const before=cookingScale(),old=S.plan.days[UI.sheet.day].slots[UI.sheet.slot].serv;S.profile.members=Array.from({length:count},(_,i)=>({...newMember(i?'child':'adult','Test'),custom:i?'1400':'4000'}));rescaleFamilyMenu8(before);const sl=S.plan.days[UI.sheet.day].slots[UI.sheet.slot],html=sheetRecipe(UI.sheet);if(portions()!==count||Math.abs(sl.serv-old*cookingScale()/before)>.0001||html.includes('data-act="serv"')||!html.includes(count+' '+plural(count,'порция','порции','порций')))return false}return true}finally{S=JSON.parse(saved);render()}})()`),'Family size changes counts and food quantity independently of calorie needs');
+ assert.ok(await evaluate(`(()=>{const old=UI.rec8;try{UI.rec8=S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid;const html=rec8();return html.includes('Продукты на '+portions()+' '+plural(portions(),'порцию','порции','порций'))&&!html.includes('NaN')}finally{UI.rec8=old}})()`),'Standalone recipe also uses family servings and quantities');
  await click('#layer [data-act="fav8"]');assert.equal(await evaluate('S.fav8.length'),1,'Favourite from the recipe card');
  assert.equal(await evaluate(`!!document.querySelector('#layer [data-timer], #layer [data-tbtn], #layer [data-act="tgo"], #layer [data-act="treset"], #layer [data-act="step"], #layer [data-act="cooked"], #layer [data-act="fb"]')`),false,'Recipe preview has no timers, completion, rating or interactive steps');
  assert.equal(await evaluate('/Как прошло|Понравилось|Отметить: приготовила|Старт таймера|₽/.test(document.querySelector("#layer").innerText)'),false,'Preview has no cooking completion copy or prices');
@@ -208,9 +215,10 @@ try {
   try{for(const scenario of [{name:'normal',budget:8000,pantry:[]},{name:'pantry',budget:8000,pantry:[{key:'rice',qty:1500},{key:'chicken_fillet',qty:1500},{key:'eggs',qty:10},{key:'milk',qty:1000}]},{name:'tight-budget',budget:500,pantry:[]}]){
    S=JSON.parse(saved);S.profile.members=[{...newMember('adult','Adult'),custom:'4000'},{...newMember('child','Child'),custom:'1400'}];Object.assign(S.profile,{budget:scenario.budget,days:3,mealSetup:{b:['breakfast'],l:['soup'],s:[],d:['pair']},goals:[],diet:'all',allergies:['nuts'],dislikes:['pork'],noRepeat8:false});S.pantry=scenario.pantry;S.menuRecent8=[];
    const menus=[],calories=[];let valid=true,portionsValid=true;
+   if(portions()!==2)throw Error('Servings must count people regardless of calorie needs');
    for(let n=0;n<10;n++){
-    generate();const days=S.plan.days.filter(d=>Object.keys(d.slots).length);menus.push(days.flatMap(d=>Object.values(d.slots).map(s=>baseKey8(s.rid))));
-    for(const day of days){calories.push(dayKcal8(day));for(const [key,slot] of Object.entries(day.slots)){if(!allowed(RBY[slot.rid]))valid=false;if(Math.abs(slot.serv-portions()*partOf8(day,key))>.00011)portionsValid=false}}
+    generate();if(!S.plan.days.filter(d=>Object.keys(d.slots).length).every(d=>Object.keys(d.slots).every(k=>{const h=slotRow(S.plan.days.indexOf(d),k,false);return (h.match(/2 порции/g)||[]).length===1})))throw Error('Each row must show family servings exactly once');const days=S.plan.days.filter(d=>Object.keys(d.slots).length);menus.push(days.flatMap(d=>Object.values(d.slots).map(s=>baseKey8(s.rid))));
+    for(const day of days){calories.push(dayKcal8(day));for(const [key,slot] of Object.entries(day.slots)){if(!allowed(RBY[slot.rid]))valid=false;if(Math.abs(slot.serv-cookingScale()*partOf8(day,key))>.00011)portionsValid=false}}
    }
    let matches=0,total=0;for(let n=1;n<menus.length;n++)for(let k=0;k<Math.min(menus[n-1].length,menus[n].length);k++){total++;if(menus[n-1][k]===menus[n][k])matches++}
    const doc={preferences:FamilyMenuState.toPreferences(S),menu:FamilyMenuState.toMenu(S.plan)},restored=FamilyMenuState.fromDocument(doc,blank());

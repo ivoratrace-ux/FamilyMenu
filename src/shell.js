@@ -6,7 +6,7 @@ function basketBy(st){const sh=shopping();return sh.items.filter(i=>!i.covered&&
 function lavkaRegBasket(){const sh=shopping();return sh.items.filter(i=>!i.covered&&!i.bought).reduce((a,i)=>a+i.toBuy*(LAVKA[i.k]?LAVKA[i.k][1]:ING[i.k][3])*cityCoef(),0)}
 function canKeep(r){return !!r&&r.m==='m'&&!r.tags.includes('salad')}
 function fixLeftovers(){
-  if(!S.plan) return; const por=portions(); let changed=0;
+  if(!S.plan) return; const por=cookingScale(); let changed=0;
   S.plan.days.forEach((d,di)=>Object.entries(d.slots).forEach(([k,s])=>{
     if(!s||!s.left) return; const src=S.plan.days[s.from]&&S.plan.days[s.from].slots[s.of||'l']; const r=src&&src.rid&&RBY[src.rid];
     if(!canKeep(r)){ if(src&&src.serv>por) src.serv=por; const nr=pick(k,{},false); d.slots[k]={rid:nr&&nr.id,serv:por}; changed++; }
