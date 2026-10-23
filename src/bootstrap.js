@@ -13,7 +13,7 @@
       const [catalog]=await Promise.all([FamilyMenuApi.catalog(),FamilyMenuApi.restore()]);
       if(!Array.isArray(catalog.recipes) || !catalog.recipes.length || !Array.isArray(catalog.ingredients) || !catalog.ingredients.length || !Array.isArray(catalog.foods) || !Array.isArray(catalog.promos))throw new Error('Сервер вернул неполный каталог.');
       window.FamilyMenuCatalog=catalog;
-      for(const file of ['art-specs.js','extra8.js','data.js','art.js','cook.js','app.js','shell.js','v4.js','v8.js','bridge.js'])if(!loaded.has(file)){await load(file);loaded.add(file);}
+      for(const file of ['art-specs.js','extra8.js','data.js','art.js','cook.js','app.js','shell.js','v4.js','v8.js','bridge.js','stores.js'])if(!loaded.has(file)){await load(file);loaded.add(file);}
       await FamilyMenuBridge.mount();
       await wait(Math.max(0,2000-(Date.now()-started)));
       splashEl.querySelectorAll('.hat8')[2].classList.add('on');await wait(220);splashEl.remove();
