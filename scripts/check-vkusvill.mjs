@@ -14,12 +14,12 @@ const mcp=createVkusvillMcp({signal:AbortSignal.timeout(35000),fetchImpl:async(u
 try {
   const tools=await mcp.connect();
   console.log('Public MCP initialized; search and cart tools are present. OAuth is not used.');
+  const schema=tools.find(t=>t.name==='vkusvill_cart_link_create').inputSchema;
+  console.log('Cart input schema:',JSON.stringify(schema));
   const data=await mcp.call('vkusvill_products_search',{q:'Молоко',page:1,sort:'popularity'});
   console.log('Public search response sample:',JSON.stringify(data).slice(0,4000));
   const products=searchProducts(data);
-  console.log(`Search contract verified: ${products.length} products with store IDs. No cart was created.`);
-  const schema=tools.find(t=>t.name==='vkusvill_cart_link_create').inputSchema;
-  console.log('Cart input schema:',JSON.stringify(schema));
+  console.log(`Search contract verified: ${products.length} products with store IDs.`);
   if(process.env.VKUSVILL_PROBE_CART==='true' || process.argv.includes('--cart')){
     if(!products.length)throw Error('No milk candidates for the anonymous basket test');
     const result=await mcp.call('vkusvill_cart_link_create',{products:[{id:products[0].productId,q:1}]});

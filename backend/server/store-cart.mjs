@@ -12,15 +12,16 @@ export function cartIngredients(body,ingredients) {
 }
 export function searchProducts(data) {
   if(data?.ok===true && data.data)data=data.data;
-  if(!Array.isArray(data?.products))throw new StoreError(502,'ВкусВилл вернул непонятный ответ поиска. Попробуйте позже.');
+  const raw=data?.items ?? data?.products;
+  if(!Array.isArray(raw))throw new StoreError(502,'ВкусВилл вернул непонятный ответ поиска. Попробуйте позже.');
   const seen=new Set();
-  return data.products.slice(0,12).flatMap(p=>{
+  return raw.slice(0,12).flatMap(p=>{
     // The current public MCP uses positive integer `id`, not the old `xml_id`.
     const id=typeof p?.id==='string' && /^[1-9]\d*$/.test(p.id)?Number(p.id):p?.id;
     if(!Number.isSafeInteger(id) || id<=0 || typeof p.name!=='string' || !p.name.trim() || seen.has(id))return [];
     seen.add(id);
     const compact=value=>JSON.stringify(value ?? '').slice(0,500);
-    return [{productId:id,name:p.name.slice(0,250),weight:compact(p.weight),unit:compact(p.unit),price:compact(p.price)}];
+    return [{productId:id,name:p.name.replace(/&nbsp;|&#160;/g,' ').slice(0,250),weight:compact(p.weight),unit:compact(p.unit),price:compact(p.price)}];
   });
 }
 export async function selectStoreProducts({items,candidates,apiKey,fetchImpl=fetch,signal}) {

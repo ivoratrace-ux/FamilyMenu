@@ -76,6 +76,11 @@ test('current IDs and quantity limits prevent old-schema fallbacks and silently 
   assert.throws(()=>selectedProducts({selections:items.map(i=>({ingredientId:i.ingredientId,productId:10,quantity:30}))},items,candidates),e=>e.status===422);
   assert.throws(()=>selectedProducts({selections:[{ingredientId:'milk',productId:10,quantity:41}]},[items[0]],candidates),StoreError);
 });
+test('current live public search envelope uses data.items and HTML-encoded packaging in the name',()=>{
+  const payload={ok:true,data:{meta:{q:'Молоко',personalized:false},items:[{id:36296,name:'Молоко 2,5% в бутылке, 900&nbsp;мл',unit:'шт',price:{current:100,currency:'RUB'}}]}};
+  const actual=searchProducts(payload);
+  assert.equal(actual[0].productId,36296);assert.equal(actual[0].name,'Молоко 2,5% в бутылке, 900 мл');assert.equal(actual[0].unit,'"шт"');
+});
 test('cart HTTP endpoint enforces authentication, CORS, validation, method, quotas, and never writes personal data',async t=>{
   let built=0;
   const app=createApp({apiKey:'server-only',hourlyLimit:1,auth:{getUser:async token=>{assert.equal(token,'valid');return {id:'user-a'};}},catalog:{load:async()=>({ingredients})},buildStoreCart:async args=>{built++;assert.deepEqual(args.items,[items[0]]);return {store:'vkusvill',carts:[{url:'https://vkusvill.ru/?share_basket=1',productCount:1}],ingredientCount:1,productCount:1};},inventory:{load:()=>assert.fail('No inventory writes')},userState:{load:()=>assert.fail('No document writes')}});
