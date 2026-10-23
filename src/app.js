@@ -203,6 +203,7 @@ function eatenKcal(di){return Object.keys(S.plan.days[di].slots).reduce((s,k)=>{
 
 /* ============ ICONS ============ */
 const IC={
+ replace:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3"/></svg>',
  today:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 2M9 3h6"/></svg>',
  menu:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M8 13h3M8 16h6"/></svg>',
  shop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.3 11.1a1 1 0 0 1-1 .9H7.3a1 1 0 0 1-1-.9z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>',
@@ -320,7 +321,7 @@ function slotRow(di,sk,compact){
   if(s.left) return `<div class="slot" data-slot="${di}:${sk}" data-left="1">${handle}<div class="thumb">${dishArt(r)}</div><button class="open" data-act="recipe" data-v="${srcRef(di,sk)}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span class="pill grey">остатки со вчера</span>${KC()?`<span>${r.kcal} ккал</span>`:''}</span></button>${eatBtn}</div>`;
   return `<div class="slot ${s.cooked?'cooked':''}" data-slot="${di}:${sk}">${handle}<div class="thumb">${dishArt(r)}</div>
    <button class="open" data-act="recipe" data-v="${di}:${sk}"><span class="small muted">${SLOT_NAMES[sk]}</span><span class="dish">${esc(r.n)}</span><span class="meta"><span>${r.t} мин</span>${KC()?`<span>${r.kcal} ккал</span>`:''}<span>${portions()} ${plural(portions(),'порция','порции','порций')}</span>${s.cooked?'<span class="pill">приготовлено</span>':''}</span></button>
-   ${compact?eatBtn:`<button class="iconbtn" data-act="replace" data-v="${di}:${sk}" aria-label="Заменить блюдо">↻</button>`}</div>`;
+   ${compact?eatBtn:`<button class="iconbtn" data-act="replace" data-v="${di}:${sk}" aria-label="Заменить блюдо">${IC.replace}</button>`}</div>`;
 }
 function kcalCard(ti){
   const ms=S.profile.members.filter(m=>m.kind==='adult'); if(!UI.member||!ms.find(m=>m.id===UI.member)) UI.member=ms[0].id;

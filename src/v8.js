@@ -713,7 +713,7 @@ function scrMenu8(preview){
   const ti=todayIdx(),d0=new Date(vis[0][0].date),dn=new Date(vis[vis.length-1][0].date);
   const eatBtn=(di,k)=>`<button class="eat" data-act="eat" data-v="${di}:${k}" aria-pressed="${!!S.eaten[eatKey(di,k)]}">${S.eaten[eatKey(di,k)]?'Съели ✓':'Съели'}</button>`;
   const row=(di,k)=>{nameSlot8(k);let h=slotRow(di,k,!!preview).replace(partTag8(),'').replace(' ккал в среднем',' ккал');
-    if(preview)h=h.replace(/<button class="eat"[^>]*>[^<]*<\/button>/,`<button class="btn ghost small" data-act="replace" data-v="${di}:${k}">Заменить</button>`);
+    if(preview)h=h.replace(/<button class="eat"[^>]*>[^<]*<\/button>/,`<button class="iconbtn" data-act="replace" data-v="${di}:${k}" aria-label="Заменить блюдо">${IC.replace}</button>`);
     const slot=S.plan.days[di].slots[k],status=!preview&&di===ti&&slot?.cooked?`<div class="menustatus8">${eatBtn(di,k)}</div>`:'';
     return h.replace('class="slot','class="menu-slot8 slot').replace(/(<button class="open"[\s\S]*?<\/button>)/,`<div class="menucontent8">${status}$1</div>`);
   };
