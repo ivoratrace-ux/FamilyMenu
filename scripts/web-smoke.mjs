@@ -143,13 +143,15 @@ try {
  await click('[data-act="board8"]');await wait(has('Вы на 10-м месте'),'Leaderboard missing');await shot('05b-board');await click('.sheet [data-act="close"]');await wait('!UI.board','Leaderboard did not close');await click('[data-act="back8"]');await click('[data-act="tab"][data-v="menu"]');
  await click('[data-act="tab"][data-v="shop"]');await wait(has('Список покупок'),'Shopping missing');await shot('06-shop');
  assert.equal(await evaluate('document.querySelectorAll(".screen a[href*=\\"vkusvill\\"], .screen a[href*=\\"lavka\\"]").length'),0,'No store links in the list');
- // Public cart opens directly, preserves the shopping state, and offers a link when popup blocked.
- await evaluate('window.open=()=>null;window.boughtBeforeCart=JSON.stringify(S.bought)');
+ // Generation never opens a tab; the ready basket gets its own explicit link.
+ await evaluate('window.cartOpenCount=0;window.open=()=>{window.cartOpenCount++;return null};window.boughtBeforeCart=JSON.stringify(S.bought)');
  await click('[data-act="vkusvillCart"]');await wait(has('ВкусВилл отклонил подключение'),'Store connection error missing');
  await click('[data-act="vkusvillCart"]');await wait('!!document.querySelector("[data-store-cart-link]")','Ready basket link missing');
  assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").href'),'https://vkusvill.ru/mobile?basket&share=1001');
  assert.equal(await evaluate('JSON.stringify(S.bought)===window.boughtBeforeCart'),true,'Cart creation must not mark groceries as bought');
  assert.equal(await evaluate('!!UI.cart'),false,'No per-product wizard for VkusVill');
+ assert.equal(await evaluate('window.cartOpenCount'),0,'Generating must never open a tab');
+ assert.equal(await evaluate('document.querySelector("[data-store-cart-link]").textContent'),'Добавить в корзину');
  await click('.pricecard');await wait(has('Автосборка корзины'),'Auto cart opens during the 7 free days');
  await wait(has('Утвердить меню'),'Auto cart needs an approved menu');await click('[data-act="approve8"]');
  await click('[data-act="store"][data-v="lavka"]');await click('[data-act="cartStart"]');await wait('!!document.querySelector(\'[data-act="cartAdd"]\')','Cart missing');await click('[data-act="cartAdd"]');await click('[data-act="cartClose"]');
