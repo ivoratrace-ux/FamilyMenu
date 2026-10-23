@@ -16,8 +16,16 @@ export const FIRST_PARTY_ORIGIN = 'https://ivoratrace-ux.github.io';
 export const CLOUDFLARE_ORIGIN = 'https://frigo-family-menu.pages.dev';
 export function configuredOrigins(value = process.env.ALLOWED_ORIGINS || '') {
   // Keep the new first-party client working even if Render retains its previous CORS variable.
-  return [...new Set([FIRST_PARTY_ORIGIN, CLOUDFLARE_ORIGIN, 'http://localhost:8080', 'http://127.0.0.1:8080',
-    'http://localhost:8000', 'http://127.0.0.1:8000', ...value.split(',').map(s => s.trim()).filter(Boolean)])];
+  return [...new Set([
+    FIRST_PARTY_ORIGIN,
+    CLOUDFLARE_ORIGIN,
+    'https://frigo-pro.tuqo.ru',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    ...value.split(',').map(s => s.trim()).filter(Boolean)
+  ])];
 }
 export function deploymentRevision(value = process.env.RENDER_GIT_COMMIT || '') {
   return /^[0-9a-f]{40}$/i.test(value) ? value : 'local';
