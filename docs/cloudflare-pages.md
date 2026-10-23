@@ -11,12 +11,12 @@ Cloudflare Pages использует Direct Upload (без подключени
 
 - Secret `CLOUDFLARE_API_TOKEN`: Cloudflare API token с разрешением
   Account → Cloudflare Pages → Edit для нужного аккаунта.
-- Variable `CLOUDFLARE_ACCOUNT_ID`: ID аккаунта Cloudflare.
+Account ID `4a47141298893f1201ca572962ed563d` задан в workflow; это публичный идентификатор, не секрет.
 
-Пока Account ID не задан, публикация Cloudflare пропускается. GitHub Pages продолжает
-работать. После настройки запустите `Build Web` вручную или отправьте изменение Web в main.
+После настройки секрета запустите `Build Web` вручную или отправьте изменение Web в main.
 Токен можно заменить в Secrets без изменения кода. В исходниках и артефакте сайта его нет.
 
-Новый production origin необходимо добавить в разрешённые origin бэкенда Render
-(`ALLOWED_ORIGINS`, разделитель — запятая), сохранив GitHub Pages. Preview-домены
-не получают доступ к API автоматически.
+Production origin `https://frigo-family-menu.pages.dev` разрешён в бэкенде Render
+вместе с GitHub Pages. Preview-домены не получают доступ к API автоматически.
+При смене домена обновите разрешённые origin в бэкенде или `ALLOWED_ORIGINS`
+(разделитель — запятая).

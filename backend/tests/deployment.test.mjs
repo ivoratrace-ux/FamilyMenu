@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import {createApp,fetch} from './auth-fixtures.mjs';
-import { configuredOrigins, deploymentRevision, FIRST_PARTY_ORIGIN } from '../server/app.mjs';
+import { configuredOrigins, deploymentRevision, FIRST_PARTY_ORIGIN, CLOUDFLARE_ORIGIN } from '../server/app.mjs';
 
 test('FamilyMenu origin is retained when Render has an existing custom CORS variable', () => {
   const origins=configuredOrigins(' https://retained.example, https://retained.example ');
   assert.ok(origins.includes(FIRST_PARTY_ORIGIN));
+  assert.ok(origins.includes(CLOUDFLARE_ORIGIN));
   assert.ok(origins.includes('https://retained.example'));
   assert.equal(origins.filter(x=>x==='https://retained.example').length,1);
   assert.ok(!origins.includes('*'));
@@ -32,4 +33,15 @@ test('deployed API identifies its revision and handles the new scanner origin wi
   const invalid=await fetch(base+'/api/fridge/scan',{method:'POST',headers,body:'{}'});
   assert.equal(invalid.status,400);assert.equal(invalid.headers.get('Access-Control-Allow-Origin'),FIRST_PARTY_ORIGIN);
   assert.equal((await fetch(base+'/api/fridge/scan',{method:'OPTIONS',headers:{Origin:'https://unrelated.example'}})).status,403);
+});
+
+test('Cloudflare production origin can call API, preview and unrelated sites cannot', async t => {
+  const app=createApp({apiKey:'test-only-key',allowedOrigins:configuredOrigins()});
+  app.listen(0,'127.0.0.1');await once(app,'listening');
+  t.after(()=>new Promise(resolve=>{app.close(resolve);app.closeAllConnections();}));
+  const url=`http://127.0.0.1:${app.address().port}/api/fridge/scan`;
+  const production=await fetch(url,{method:'OPTIONS',headers:{Origin:CLOUDFLARE_ORIGIN}});
+  assert.equal(production.status,204);
+  assert.equal(production.headers.get('access-control-allow-origin'),CLOUDFLARE_ORIGIN);
+  assert.equal((await fetch(url,{method:'OPTIONS',headers:{Origin:'https://untrusted.frigo-family-menu.pages.dev'}})).status,403);
 });
