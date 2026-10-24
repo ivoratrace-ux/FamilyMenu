@@ -65,7 +65,7 @@
       if(cached && (busy || payloadText()!==beforeState || stockText()!==beforeStock))return;
       if(cached && bundle.document.revision===documentRevision && bundle.inventory.revision===stockRevision)return;
       applyStartup(bundle,{keepTab:!!cached});
-    }catch(error){if(generation!==version || api.session?.user?.id!==user)return;if(error.status===401){await logout();return;}if(cached){UI.syncError=error.message;renderStatus();return;}UI.accountLoading=false;throw error;}
+    }catch(error){if(generation!==version)return;if(error.status===401&&(!api.session||api.session.user.id===user)){await logout();return;}if(api.session?.user?.id!==user)return;if(cached){UI.syncError=error.message;renderStatus();return;}UI.accountLoading=false;throw error;}
   }
   function showError(error) {
     if(error.status===401){logout();return;}
