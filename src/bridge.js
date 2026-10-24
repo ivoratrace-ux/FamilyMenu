@@ -54,6 +54,9 @@
   }
   async function hydrate(cached=null) {
     const version=generation,user=api.session?.user?.id;
+    // Prepare the pantry picker alongside the account request, without blocking the menu.
+    // Opening the tab shares this request; a failed prefetch can be retried there.
+    FamilyMenuData.ingredients().catch(()=>{});
     if(cached?.userId===user){applyStartup(cached);}
     else {ready=false;UI.accountLoading=true;render();}
     const beforeState=payloadText(),beforeStock=stockText();
