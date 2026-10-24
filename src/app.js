@@ -70,13 +70,13 @@ function cookingScale(){return Math.round(S.profile.members.reduce((s,m)=>s+pfac
 function fmtQty(k,q,buy){
   const u=ING[k][2];
   if(buy&&['g','ml'].includes(u)){const amount=Math.ceil(q-1e-9);return amount>=1000?(amount/1000).toLocaleString('ru-RU',{maximumFractionDigits:3})+(u==='g'?' кг':' л'):amount+(u==='g'?' г':' мл')}
-  if(u==='g'){ if(q>=1000) return dec(q/1000)+' кг'; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+' г'}
-  if(u==='ml'){ if(q>=1000) return dec(q/1000)+' л'; return (q<50?Math.round(q/5)*5:Math.round(q/10)*10)+' мл'}
+  if(['g','ml'].includes(u)){const amount=recipeQuantity(k,q);return amount>=1000?(amount/1000).toLocaleString('ru-RU',{maximumFractionDigits:2})+(u==='g'?' кг':' л'):amount+(u==='g'?' г':' мл')}
   let v= buy? Math.ceil(q-0.001) : Math.round(q*2)/2; if(v===0) v=0.5;
   const t=v===0.5?'½':(v%1?(Math.floor(v)+'½'):String(v));
   const F={'пучок':['пучок','пучка','пучков'],'банка':['банка','банки','банок']}[u];
   return t+' '+(F&&v%1===0?plural(v,...F):(F&&v<1?F[1]:u));
 }
+function recipeQuantity(k,q){return ['g','ml'].includes(ING[k][2])?(q>0?Math.max(10,Math.round(q/10)*10):0):q}
 const unitLabel=k=>{const u=ING[k][2];return u==='g'?'г':u==='ml'?'мл':u};
 
 /* ============ RULES ============ */
@@ -428,7 +428,6 @@ function scrProfile(){const p=S.profile;return `<div class="screen">
    ${kcalToggle()}
    <button class="btn block" data-act="regen">Сохранить и пересобрать меню</button>
    ${S.history.blocked.length?`<div class="card"><h3>Скрытые блюда</h3>${S.history.blocked.map(id=>`<div class="row between"><span>${esc(RBY[id].n)}</span><button class="iconbtn" data-act="unblock" data-v="${id}">вернуть</button></div>`).join('')}</div>`:''}
-   <button class="btn ghost block" data-act="reset">Сбросить все данные прототипа</button>
   </div>`}
 
 /* ============ SHEETS ============ */
@@ -623,7 +622,6 @@ function act(a,v,el){
    case 'remOpen': document.querySelectorAll('.push').forEach(x=>x.remove()); UI.sheet={type:'remind',day:todayIdx()+1}; break;
    case 'remHave': if(el.checked) markHave(v,needMap(S.plan).m[v].qty); else unmarkHave(v); break;
    case 'close': UI.sheet=null; break;
-   case 'reset': S=blank(); try{history.replaceState(null,'',location.pathname+location.search)}catch(e){} UI={sheet:null,open:{},q:'',dq:'',member:null}; try{localStorage.removeItem(KEY)}catch(e){} break;
    default: if(!shellAct(a,v,el)) return;
   }
   save(); render();

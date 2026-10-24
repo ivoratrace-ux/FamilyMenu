@@ -144,7 +144,7 @@
     if(action==='dataRetry'){UI.dataRetry?.();return;}
     const run=()=>act(action,value,element);
     if(action==='introNext8' && (S.introIdx||0)===SLIDES8.length-1 && !FamilyMenuData.complete){FamilyMenuData.gate(()=>FamilyMenuData.full(),run);return;}
-    if(['reset','regen','build8'].includes(action) && !FamilyMenuData.complete){FamilyMenuData.gate(()=>FamilyMenuData.full(),run);return;}
+    if(['regen','build8'].includes(action) && !FamilyMenuData.complete){FamilyMenuData.gate(()=>FamilyMenuData.full(),run);return;}
     if(action==='replace' && !FamilyMenuData.complete){
       const [day,slot]=value.split(':'),kind=replacementKind8(+day,slot);
       if(!FamilyMenuData.hasCategory(kind)){FamilyMenuData.gate(()=>FamilyMenuData.recipes(kind),run);return;}
@@ -157,7 +157,6 @@
     if(action==='telegramStart' || action==='telegramRetry'){startLogin();return;}
     if(action==='accountRetry'){hydrate().catch(error=>{UI.authError=error.message;render();});return;}
     if(action==='guest' || action==='demo')return;
-    if(action==='reset'){clearLayers();S={...blank(),user:S.user,stage:'quiz',qStep:0,myRecipes:S.myRecipes || [],pantry:S.pantry,v4:{...blank().v4,sub:S.v4?.sub || null,ev:S.v4?.ev || []},theme:S.theme};changed();render();return;}
     originalAct(action,value,element);
   };
   // Preserve the original search markup but use the authenticated dictionary endpoint (minimum 3 characters).

@@ -1,20 +1,17 @@
 /* ============ v8 «Frigo»: v4 look with the v6 flow ============
    splash → 4 feature slides → 5-step getting to know → 2 s loader → first menu → Telegram sign-in
-   tabs: Меню · Покупки · Дома · Профиль; per-meal kinds, 1–7 days, main+side pairs, own recipes, Premium as a subscription */
+   tabs: Меню · Покупки · Дома · Профиль; per-meal kinds, 1–7 days, main+side pairs, own recipes */
 
 const SLOT8={b:'Завтрак',l:'Обед',s:'Перекус',d:'Ужин'};
 const KIND8={breakfast:'Завтрак: каши, яйца, сырники',soup:'Суп',pair:'Второе с гарниром',dish:'Целое блюдо',salad:'Салат',dessert:'Десерт',drink:'Напиток',snack:'Перекус',none:'Не нужен'};
 const KOPT8={b:['breakfast','drink'],l:['salad','soup','pair','drink','dessert'],s:['snack','salad','dessert','drink'],d:['salad','pair','soup','drink','dessert']};
 const KSHORT8={breakfast:'Завтрак',soup:'Суп',pair:'Второе с гарниром',dish:'Целое блюдо',salad:'Салат',drink:'Напиток',dessert:'Десерт',snack:'Перекус'};
 const KTAG8={soup:'суп',pair:'второе',dish:'блюдо',salad:'салат',drink:'напиток',dessert:'десерт',snack:'перекус',breakfast:''};
-/* Snacks, desserts and drinks open with the subscription. */
+/* Available meal categories. */
 const kopt8=k=>KOPT8[k];
 const MYK8={breakfast:['Завтрак','b'],soup:['Суп','m'],main:['Основное: мясо, рыба','p'],side:['Гарнир','g'],dish:['Целое блюдо','m'],salad:['Салат','m'],dessert:['Десерт','z'],drink:['Напиток','k'],snack:['Перекус','s']};
 const GOAL8={lose:'Похудение',mass:'Набор массы',pp:'Правильное питание',protein:'Больше белка',lowcarb:'Меньше углеводов',none:'Просто вкусно и разнообразно'};
-const PAGES8={pNotify:'Уведомления',rec8:'Рецепт',diary:'Дневник',pBudget:'Бюджет и цены',pFamily:'Семья',pFood:'Питание и ограничения',pRecipes:'Мои рецепты',pRecipe:'Рецепт',pDays:'Дни и приёмы пищи',promo:'Подборка акций',kcal:'Калории и КБЖУ',sub:'Premium',metrics:'Метрики пилота'};
-const trialOn8=()=>!!V().trialStart&&!subscribed()&&dayN()<7;
-const premium8=()=>subscribed()||trialOn8();
-const premiumNote8=()=>subscribed()?'Подписка подключена':trialOn8()?`Открыто бесплатно ещё ${daysW(7-dayN())}`:V().trialStart?'Пробные 7 дней закончились':'Откроется на 7 дней с первым меню';
+const PAGES8={pNotify:'Уведомления',rec8:'Рецепт',diary:'Дневник',pBudget:'Бюджет и цены',pFamily:'Семья',pFood:'Питание и ограничения',pRecipes:'Мои рецепты',pRecipe:'Рецепт',pDays:'Дни и приёмы пищи',promo:'Подборка акций',kcal:'Калории и КБЖУ'};
 
 /* ---------- profile defaults & compatibility with the stored model ---------- */
 function P8(){
@@ -226,7 +223,7 @@ const PACK8={chicken_fillet:500,chicken_thigh:700,chicken_liver:500,beef:400,por
 shopping=(function(orig){return function(){
   const sh=orig(); let cost=0;
   sh.items.forEach(i=>{const pk=PACK8[i.k];
-    if(pk&&!i.covered&&i.toBuy>0&&['g','ml'].includes(ING[i.k][2])){const n=Math.ceil(i.toBuy/pk),b=n*pk; i.packs=n; i.pack=pk; i.left=b-i.toBuy; i.toBuy=b; i.cost=b*price(i.k)}
+    if(!i.covered&&i.toBuy>0&&['g','ml'].includes(ING[i.k][2])){const needed=i.toBuy,b=pk?Math.ceil(needed/pk)*pk:Math.ceil(needed/50)*50;if(pk){i.packs=b/pk;i.pack=pk;i.left=b-needed;}i.toBuy=b;i.cost=b*price(i.k)}
     if(!i.covered) cost+=i.cost});
   sh.cost=cost; return sh;
 }})(shopping);
@@ -512,7 +509,7 @@ function intro8(){
   return `<div class="screen onbscreen">
    <div class="row between">${i?'<button class="iconbtn" data-act="introBack8" aria-label="Назад">←</button>':'<span style="width:36px"></span>'}<div class="progress grow" style="margin:0 12px"><i style="width:${Math.round((i+1)/SLIDES8.length*100)}%"></i></div><span style="width:36px"></span></div>
    <div class="stack introart">${s.art()}</div>
-   <div class="stack qhead"><div class="row" style="align-items:center;flex-wrap:wrap;gap:6px"><h1 class="h18">${s.t}</h1>${s.premium?'<span class="pill warn">Premium</span>':''}</div><p class="muted">${s.d}</p></div>
+   <div class="stack qhead"><div class="row" style="align-items:center;flex-wrap:wrap;gap:6px"><h1 class="h18">${s.t}</h1></div><p class="muted">${s.d}</p></div>
    <div style="flex:1"></div>
    <button class="btn block" data-act="introNext8">${s.btn}</button>
    <button class="linkbtn" style="align-self:center" data-act="toAuth8">Уже есть аккаунт? Войти</button></div>`;
@@ -628,7 +625,7 @@ sheetRecipe=(function(orig){return function(o){const s0=S.plan.days[o.day].slots
   const rr=slotRecipe(o.day,o.slot),own=s0&&!s0.left;
   if(rr&&own){let n=0; const f=s0.serv/4;
     // v8.14: every product can be crossed out or get its own amount (for the portions of this dish)
-    h=h.replace(/<div class="ingr"><span>[^<]*<\/span><span class="qty">[^<]*<\/span><\/div>/g,m=>{if(n>=rr.i.length) return m; const [k,q]=rr.i[n++],u=ING[k][2],per=u==='g'||u==='ml',v=per?Math.round(q*f):Math.round(q*f*2)/2;
+    h=h.replace(/<div class="ingr"><span>[^<]*<\/span><span class="qty">[^<]*<\/span><\/div>/g,m=>{if(n>=rr.i.length) return m; const [k,q]=rr.i[n++],u=ING[k][2],per=u==='g'||u==='ml',v=per?recipeQuantity(k,q*f):Math.round(q*f*2)/2;
       return `<div class="ingr"><button class="iconbtn xs8" data-act="ingDrop8" data-v="${k}" aria-label="Убрать ${esc(ING[k][0])}">✕</button><span class="grow">${esc(ING[k][0])}</span><input type="number" class="iq8" inputmode="decimal" min="0" step="${per?10:0.5}" value="${v}" data-act="iq8" data-v="${k}" aria-label="Количество: ${esc(ING[k][0])}"><span class="small muted iu8">${esc(unitLabel(k))}</span></div>`});
     const q=(UI.ia8||'').trim().toLowerCase(),found=q?Object.keys(ING).filter(k=>ING[k][0].toLowerCase().includes(q)&&!rr.i.some(([x])=>x===k)).slice(0,8):[],base=rr.base8&&RBY[rr.base8];
     const diff=base?[...base.i.filter(([k])=>!rr.i.some(([x])=>x===k)).map(([k])=>'без: '+ING[k][0].toLowerCase()),...rr.i.filter(([k])=>!base.i.some(([x])=>x===k)).map(([k])=>'+ '+ING[k][0].toLowerCase())]:[];
@@ -788,7 +785,7 @@ function scrShop8(){
   const cats=CAT_ORDER.filter(c=>need_.some(i=>i.cat===c));
   const row=i=>`<div class="item ${i.bought?'done':''}"><input type="checkbox" class="chk" id="b_${i.k}" data-act="bought" data-v="${i.k}" ${i.bought?'checked':''} aria-label="Куплено: ${esc(i.name)}">
     <label class="grow" for="b_${i.k}" style="min-width:0;cursor:pointer"><div class="row between" style="align-items:flex-start"><span class="nm">${esc(i.name)}</span><span class="qty">${fmtQty(i.k,i.toBuy,true)}</span></div>
-    <div class="for8">${i.packs?`${i.packs} уп. × ${fmtQty(i.k,i.pack)}${i.left>=1?` · останется ${fmtQty(i.k,i.left)} после готовки`:''} · `:''}${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
+    <div class="for8">${i.packs?`${i.packs} уп. × ${fmtQty(i.k,i.pack,true)}${i.left>=1?` · останется ${fmtQty(i.k,i.left)} после готовки`:''} · `:''}${i.pq>0?`дома ${fmtQty(i.k,i.pq,true)} · `:''}для: ${esc(i.dishes.join(', '))}</div></label>
     </div>`;
   return `<div class="screen">
    <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — продукты добавятся в «Запасы»</p><button class="iconbtn" data-act="share8" aria-label="Поделиться списком покупок" title="Поделиться списком">${IC.share}</button></div>
@@ -864,23 +861,9 @@ function pRecipe8(){
    ${valid?'':'<p class="small muted">Нужны название, хотя бы один продукт и один шаг.</p>'}
    ${e.id?'<button class="btn ghost block" data-act="recDel" style="color:var(--danger)">Удалить рецепт</button>':''}</div>`;
 }
-function offer8(title,text){
-  const sel=UI.tariff||'year';
-  return `<div class="screen">${head8('Premium',title)}<p class="muted">${text}</p>
-   <div class="card"><h3>Что входит в Premium</h3><ul class="plain8">${['Сравнение цен: где купить дешевле','Подборка акций ВкусВилла и Лавки','Перекусы, десерты и напитки в меню'].map(x=>`<li>${x}</li>`).join('')}</ul></div>
-   <div class="stack" style="gap:8px">${[['year','На год','1 990 ₽','≈166 ₽ в месяц — на 45% выгоднее'],['month','На месяц','299 ₽','отмена в любой момент']].map(([k,l,pp,d])=>`<button class="optcard tariff" data-act="tariff" data-v="${k}" aria-pressed="${sel===k}"><span class="row between"><b>${l}</b><b>${pp}</b></span><span class="small muted">${d}</span></button>`).join('')}</div>
-   <button class="btn block" data-act="subscribe8">Подключить за ${sel==='year'?'1 990 ₽':'299 ₽'} — оплата по СБП</button>
-   <p class="small muted">${premiumNote8()}. Прототип: деньги не списываются. Меню, список покупок и калории — бесплатно.</p></div>`;
-}
-function scrSub8(){
-  if(!subscribed()) return offer8('Premium','Меню, список покупок и калории — бесплатно. Premium экономит время и деньги на покупках.');
-  const v=V();
-  return `<div class="screen">${head8('Premium','Подписка подключена')}<div class="card"><p>${v.sub.plan==='year'?'На год — 1 990 ₽':'На месяц — 299 ₽'}, с ${dateLabel(v.sub.since,true)}.</p>
-   <p class="small muted">Напомним за 3 дня до продления. Отменить можно в любой момент — меню, рецепты и настройки сохранятся.</p><button class="btn ghost block" data-act="unsub8">Отменить подписку (прототип)</button></div></div>`;
-}
 const SCR8={pNotify:pNotify8,rec8:rec8,today:scrToday8,menu:()=>scrMenu8(false),shop:scrShop8,home:scrHome8,pFamily:pFamily8,pFood:pFood8,pRecipes:pRecipes8,pRecipe:pRecipe8,pDays:pDays8,
-  promo:()=>premium8()?`${trialOn8()?`<div class="trialbar8">${premiumNote8()}</div>`:''}`+scrPromo():offer8('Акции и сравнение цен','Каждую неделю — скидки ВкусВилла и Лавки на продукты из вашего меню и сравнение корзины.'),
-  kcal:()=>`<div class="screen">${head8('Настройки','Подсчёт калорий')}${kcalToggle()}</div>`,sub:scrSub8,metrics:scrMetrics,diary:diary8,pBudget:pBudget8};
+  promo:scrPromo,
+  kcal:()=>`<div class="screen">${head8('Настройки','Подсчёт калорий')}${kcalToggle()}</div>`,diary:diary8,pBudget:pBudget8};
 kcalToggle=(function(orig){return function(){const was=V().ul.kcal; V().ul.kcal=V().ul.kcal||'v8'; const h=orig(); if(!was) delete V().ul.kcal; return h}})(kcalToggle);
 
 /* v8.7: cooking timers keep running on every screen — a pill at the top centre; a notification when one ends. */
@@ -987,9 +970,6 @@ function v8Act(a,v,el){
    case 'norep8': p.noRepeat8=!!el.checked; return true;
    case 'tpill8': openTimer8(v); return true;
    case 'swipeDel8': {const [d,k]=v.split(':'),day=S.plan.days[+d]; if(day&&day.slots[k]){const r=slotRecipe(+d,k); UI.undo8={d:+d,k,slot:day.slots[k]}; delete day.slots[k]; toast(`Убрали «${r?r.n:'блюдо'}» из меню`)} return true}
-   case 'resetAll8': if(!UI.resetAsk8){UI.resetAsk8=true; setTimeout(()=>{UI.resetAsk8=false},4000); return true}
-     UI.resetAsk8=false; {const b=blank(); S.profile={...b.profile,members:S.profile.members.map(m=>({...m,custom:''}))}; S.profile.mealSetup={b:['breakfast'],l:['soup'],s:[],d:['pair']}; S.profile.days=7; S.profile.kcalOn=true; S.store='vv'; S.theme='system'; S.history.blocked=[]; S.ans={}}
-     toast('Настройки сброшены. Меню пересоберётся с настройками по умолчанию'); return true;
    case 'extrasSeen8': V().seen.extras8=1; return true;
    case 'extrasGo8': V().seen.extras8=1; S.tab='pDays'; UI.fromDrawer8=false; window.scrollTo(0,0); return true;
    case 'board8': UI.board=true; track('leaderboard_opened'); return true;
@@ -1009,8 +989,6 @@ function v8Act(a,v,el){
    case 'mday8': UI.mday=+v; return true;
    case 'back8': if(S.tab==='pRecipe'){S.tab='pRecipes'; return true} if(S.tab==='rec8'){S.tab=UI.recFrom8||'diary'; return true} S.tab=UI.prevTab8||'today'; UI.sheet=null; if(UI.fromDrawer8){UI.drawer=true; UI.fromDrawer8=false} window.scrollTo(0,0); return true;
    case 'approve8': S.plan.status='approved'; track('menu_approved'); return true;
-   case 'subscribe8': {const pl=UI.tariff||'year'; V().sub={plan:pl,since:NOW().toISOString()}; delete V().seen.extras8; track('subscribed',{plan:pl}); toast('Premium подключён. Открылись перекусы, десерты и напитки'); if(S.tab==='sub') S.tab='menu'; return true}
-   case 'unsub8': V().sub=null; track('unsubscribed'); toast('Подписка отменена'); return true;
    case 'theme8': S.theme=el.value; document.documentElement.dataset.theme=S.theme==='system'?'':S.theme; return true;
    case 'recNew': UI.edit=null; UI.rq=''; S.tab='pRecipe'; window.scrollTo(0,0); return true;
    case 'recEdit': {const r=S.myRecipes.find(x=>x.id===v); if(!r) return true; UI.edit={id:r.id,n:r.n,kind:kindOfMine(r),t:r.t,serv:4,i:r.i.map(x=>[...x]),s:[...r.s]}; UI.rq=''; S.tab='pRecipe'; window.scrollTo(0,0); return true}
@@ -1024,7 +1002,6 @@ function v8Act(a,v,el){
      S.myRecipes=S.myRecipes.filter(x=>x.id!==r.id).concat([r]); if(RBY[r.id]){delete RBY[r.id]; const i=R.findIndex(x=>x.id===r.id); if(i>=0) R.splice(i,1)}
      registerMine(r); track(e.id?'recipe_edited':'recipe_added',{kind:e.kind}); toast('Рецепт сохранён — он попадёт в меню'); UI.edit=null; S.tab='pRecipes'; return true}
    case 'recDel': {const id=UI.edit.id; S.myRecipes=S.myRecipes.filter(x=>x.id!==id); UI.edit=null; S.tab='pRecipes'; toast('Рецепт удалён'); return true}
-   case 'reset': S.stage='quiz'; S.qStep=0; S.ans={}; UI.sheet=null; window.scrollTo(0,0); return true;
   }
   return false;
 }

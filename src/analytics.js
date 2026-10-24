@@ -60,7 +60,6 @@
   const actionOriginal=act;act=function(action,value,element){
     const before=safe(()=>({stage:S.stage,step:S.qStep,tab:S.tab,status:S.plan?.status,stock:JSON.stringify(S.pantry),rid:UI.sheet?.type==='replace'?S.plan.days[UI.sheet.day].slots[UI.sheet.slot].rid:null,sheet:UI.sheet?{...UI.sheet}:null,cook:UI.cook,scan:UI.scan}));
     if(action==='telegramStart'||action==='telegramRetry'){loginAttempt=true;}
-    if(action==='reset')onboarding=false;
     const result=actionOriginal(action,value,element);
     safe(()=>{
       if(!before)return;

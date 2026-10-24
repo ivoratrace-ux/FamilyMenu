@@ -254,12 +254,6 @@ html.cooking body{overflow:hidden}
 .newic svg{width:22px;height:22px}
 .lockcard{background:transparent;border-style:dashed}
 .lockcard svg{color:var(--muted);flex:none}
-.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.statgrid>div{display:flex;flex-direction:column;gap:2px;background:var(--bg);border-radius:10px;padding:8px 10px}
-.statgrid b{font-size:24px;font-variant-numeric:tabular-nums}
-.statgrid span{font-size:12px;color:var(--muted)}
-.tariff[aria-pressed="true"] b{color:var(--accent)}
-.protobox{margin:8px 12px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;display:flex;flex-direction:column;gap:8px}
 .btn svg{width:18px;height:18px;flex:none}
 a.btn{text-decoration:none}
 
@@ -328,7 +322,6 @@ textarea{border:1px solid var(--line);background:var(--card);border-radius:10px;
 .dseg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:0 16px 8px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
 .dseg button{border:0;background:transparent;border-radius:8px;padding:6px 4px;font-size:13px;font-weight:600;color:var(--muted)}
 .dseg button[aria-selected="true"]{background:var(--card);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.trialbar8{background:var(--saffron-soft);color:var(--saffron);font-size:13px;font-weight:600;padding:8px 16px}
 .cat .item{min-height:78px}
 .for8{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .item .nm{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
