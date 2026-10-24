@@ -780,6 +780,7 @@ function diary8(){
 }
 function pBudget8(){return `<div class="screen">${head8('Настройки','Бюджет и цены')}${budget8()}<button class="btn block" data-act="regen">Сохранить и пересобрать меню</button></div>`}
 function scrShop8(){
+  if(S.plan&&S.plan.status!=='approved')return `<div class="screen"><div class="empty"><h2>Утвердите меню</h2><p class="muted">Проверьте блюда во вкладке «Меню» и утвердите план, чтобы получить список покупок.</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   if(!S.plan) return `<div class="screen"><div class="empty"><h2>Список пуст</h2><p>Он соберётся сам, когда вы утвердите меню.</p><button class="btn" data-act="tab" data-v="menu">Открыть меню</button></div></div>`;
   const sh=shopping(),need_=sh.items.filter(i=>!i.covered),home=sh.items.filter(i=>i.covered),left=need_.filter(i=>!i.bought);
   const cats=CAT_ORDER.filter(c=>need_.some(i=>i.cat===c));
@@ -789,7 +790,6 @@ function scrShop8(){
     </div>`;
   return `<div class="screen">
    <div class="row between" style="align-items:center"><p class="small muted grow">Отмечайте, что купили, — продукты добавятся в «Запасы»</p><button class="iconbtn" data-act="share8" aria-label="Поделиться списком покупок" title="Поделиться списком">${IC.share}</button></div>
-   ${S.plan.status==='draft'?`<div class="note"><b>!</b><span>Меню ещё не утверждено: список может измениться после замен. <button class="btn ghost small" style="margin-top:6px" data-act="approve">Утвердить меню</button></span></div>`:''}
    <div class="card pricecard"><span class="row between"><span>Осталось купить: <b>${left.length}</b> ${plural(left.length,'позиция','позиции','позиций')}</span><span class="qty" style="font-size:18px">≈${rub(left.reduce((a,i)=>a+i.cost,0))}</span></span>
     <div class="progress"><i style="width:${sh.items.length?Math.round((sh.items.length-left.length)/sh.items.length*100):100}%"></i></div>
     <span class="small ${left.reduce((a,i)=>a+i.cost,0)>budgetLimit8()+1?'over8':'muted'}">Бюджет на ${S.profile.days} ${plural(S.profile.days,'день','дня','дней')}: ${rub(budgetLimit8())}. Цены средние, примерные.</span></div>
