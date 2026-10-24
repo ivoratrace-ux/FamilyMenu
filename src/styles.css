@@ -202,6 +202,8 @@ html.cooking body{overflow:hidden}
 .chk2{width:20px;height:20px;accent-color:var(--accent)}
 
 .appbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:15;display:flex;align-items:center;gap:12px;background:var(--bg);padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}
+/* Cover the inset above the sticky header in iOS in-app browsers without shifting layout. */
+.appbar::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:env(safe-area-inset-top,0px);background:var(--bg);pointer-events:none}
 .appbar b{font-size:17px}
 .burger{border:0;background:transparent;color:var(--fg);padding:0;min-width:32px}
 .avatar{width:34px;height:34px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-fg);font-weight:700;display:grid;place-items:center;flex:none}
