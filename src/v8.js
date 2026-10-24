@@ -132,11 +132,13 @@ pick=function(slot,used,weekend,ctx){
   const r=variedPick8(list,r=>score(r,ctx)-recentPenalty8(r));
   used.cnt=used.cnt||{};const key=baseKey8(r.id);used.cnt[key]=(used.cnt[key]||0)+1;return r;
 };
-function replacementPool8(day,slot){
+function replacementKind8(day,slot){
   const cur=slotRecipe(day,slot);if(!cur)return [];
   let kind=cur.m==='c'||cur.m==='p'?'pair':cur.m==='m'?(isSoup(cur)?'soup':isSalad8(cur)?'salad':'dish'):({b:'breakfast',g:'side',z:'dessert',k:'drink',s:'snack'})[cur.m];
   if(kind==='dish'&&kindOfKey8(slot)==='pair')kind='pair';
-  return kind==='pair'?poolFor('l_pair'):pool8(kind);
+  return kind;
+}
+function replacementPool8(day,slot){const kind=replacementKind8(day,slot);return kind==='pair'?poolFor('l_pair'):pool8(kind);
 }
 altList=(function(orig){return function(day,slot,reason){buildHome8();
   return orig(day,slot,reason).map((r,i)=>({r,i,m:missing8(r)})).sort((a,b)=>a.m-b.m||a.i-b.i).map(x=>x.r);
@@ -179,6 +181,7 @@ function homeRecipe8(pk,bk,sk,vk){
 function homeFromPlan8(){if(S.plan) S.plan.days.forEach(d=>Object.values(d.slots).forEach(s=>{if(s&&s.rid&&!RBY[s.rid]&&s.rid.startsWith('h8~')){const [,p,b,sa,v]=s.rid.split('~'); homeRecipe8(p,b,sa||null,v||null)}}))}
 /* All protein × grain pairs from «Дома», each with a sauce and a vegetable from «Дома» when there are any. */
 function buildHome8(){
+  if(!ING.oil)return [];
   const ps=Object.keys(HP8).filter(inPantry8),bs=Object.keys(HB8).filter(inPantry8),ss=Object.keys(HS8).filter(inPantry8),vs=Object.keys(HV8).filter(k=>inPantry8(k)&&k!=='onion');
   const out=[]; ps.forEach((p,pi)=>bs.forEach((b,bi)=>{const r=homeRecipe8(p,b,ss.length?ss[(pi+bi)%ss.length]:null,vs.length?vs[(pi+bi)%vs.length]:null); if(r) out.push(r)})); return out.slice(0,16);
 }
@@ -497,12 +500,12 @@ async function scan8(){
 
 /* ---------- screens before the app ---------- */
 const SLIDES8=[
- {t:'Меню для всей семьи',d:'Составим рацион, который оценят все: учтём предпочтения, аллергии и стоп-продукты.',btn:'А что ещё?',art:()=>`<div class="collage">${['m5','m3','b1','m66'].filter(id=>RBY[id]).map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
- {t:'Из того, что есть',d:'Отметьте продукты, которые уже есть, — подберём блюда с минимальной дозакупкой.',btn:'Дальше',art:()=>`<div class="heroimg tbox8">${stepArt(RBY.m2,3)}<span class="timerover8">4:59</span></div>`},
- {t:'Соберём список продуктов',d:'Можно смело идти с ним в магазин или заказать доставку.',btn:'Ух ты, понял',art:()=>`<div class="card introlist">${[['potato',1.4],['chicken_fillet',700],['buckwheat',300],['tomato',400]].filter(([k])=>ING[k]).map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(ING[k][0])}</span><span class="qty">${q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="muted">Итого</span><b>≈ 1 240 ₽</b></div></div>`},
+ {t:'Меню для всей семьи',d:'Составим рацион, который оценят все: учтём предпочтения, аллергии и стоп-продукты.',btn:'А что ещё?',art:()=>`<div class="collage">${['m5','m3','b1','m66'].map(id=>`<div class="heroimg">${dishArt(RBY[id] || {id,n:'Блюдо',art:window.FamilyMenuArtwork[id] || 'plate:rice'})}</div>`).join('')}</div>`},
+ {t:'Из того, что есть',d:'Отметьте продукты, которые уже есть, — подберём блюда с минимальной дозакупкой.',btn:'Дальше',art:()=>`<div class="heroimg tbox8">${stepArt(RBY.m2 || {id:'intro-m2',s:['','','','Обжарьте овощи на сковороде.'],i:[]},3)}<span class="timerover8">4:59</span></div>`},
+ {t:'Соберём список продуктов',d:'Можно смело идти с ним в магазин или заказать доставку.',btn:'Ух ты, понял',art:()=>`<div class="card introlist">${[['potato',1.4],['chicken_fillet',700],['buckwheat',300],['tomato',400]].map(([k,q])=>`<div class="row between"><span class="row"><span class="chkfake"></span>${esc(({potato:'Картофель',chicken_fillet:'Куриное филе',buckwheat:'Гречка',tomato:'Помидоры'})[k])}</span><span class="qty">${q<10?dec(q)+' кг':q+' г'}</span></div>`).join('')}<div class="row between small"><span class="muted">Итого</span><b>≈ 1 240 ₽</b></div></div>`},
  {t:'В рамках бюджета',d:'Подберём меню на нужную сумму — без лишних трат.',btn:'Интересно',art:()=>`<div class="card"><h3>Покупки на неделю</h3><p><b style="font-size:30px">3 480 ₽</b> <span class="muted">из 4 000 ₽</span></p><div class="progress"><i style="width:87%"></i></div><p class="small muted">На каждый день ≈ ${rub(4000/7)}</p></div>`},
  {t:'Калории и БЖУ',d:'Норма для каждого в семье, дневник питания и меню под вашу цель.',btn:'Здорово',art:()=>`<div class="card"><h3>Сегодня</h3><p><b style="font-size:30px">1 640</b> <span class="muted">из 2 100 ккал</span></p><div class="kbar"><i style="width:78%"></i></div><div class="macros">${[['82','белки'],['54','жиры'],['190','углеводы']].map(([v,l])=>`<div class="macro"><b>${v}</b><span>${l}, г</span></div>`).join('')}</div><div class="row"><span class="pill">Похудение</span><span class="pill">Без свинины</span></div></div>`},
- {t:'Сотни рецептов',d:`Более ${Math.floor(R.filter(r=>r.m!=='c').length/10)*10} блюд с пошаговыми фото и таймером. Новые — каждую неделю.`,btn:'Начать',art:()=>`<div class="collage">${['x80','x76','x71','x63'].filter(id=>RBY[id]).map(id=>`<div class="heroimg">${dishArt(RBY[id])}</div>`).join('')}</div>`},
+ {t:'Сотни рецептов',d:'Сотни блюд с пошаговыми фото и таймером. Новые — каждую неделю.',btn:'Начать',art:()=>`<div class="collage">${['x80','x76','x71','x63'].map(id=>`<div class="heroimg">${dishArt(RBY[id] || {id,n:'Блюдо',art:window.FamilyMenuArtwork[id] || 'plate:rice'})}</div>`).join('')}</div>`},
 ];
 function intro8(){
   const i=Math.min(S.introIdx||0,SLIDES8.length-1),s=SLIDES8[i];
@@ -906,7 +909,7 @@ render=function(){
   else if(st==='gen') app.innerHTML=loader8();
   else if(st==='ready'&&!signed) app.innerHTML=ready8();
   else if(!signed) app.innerHTML=auth8();
-  else {if(S.plan&&pantrySig8()!==S.hfSig8){S.hfSig8=pantrySig8(); const n=homeFit8(); if(n){save(); setTimeout(()=>toast(`Подобрали ${n} ${plural(n,'блюдо','блюда','блюд')} из ваших запасов`),50)}}
+  else {if(S.plan&&window.FamilyMenuData?.complete&&pantrySig8()!==S.hfSig8){S.hfSig8=pantrySig8(); const n=homeFit8(); if(n){save(); setTimeout(()=>toast(`Подобрали ${n} ${plural(n,'блюдо','блюда','блюд')} из ваших запасов`),50)}}
    if(S.plan) snapDiary8(); app.innerHTML=appbar8()+SCR8[S.tab]()+tabs8()+drawer8()+(UI.board?board8():'')}
   renderSheet(); renderCook(); paintTimers(); clampChips();
   const hs=document.getElementById('hscroll8'); if(hs){const on=hs.querySelector('.sel8'); if(on&&!hs.dataset.done){hs.scrollLeft=on.offsetLeft-hs.clientWidth/2+on.clientWidth/2; hs.dataset.done=1}}

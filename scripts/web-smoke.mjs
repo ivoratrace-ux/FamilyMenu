@@ -6,6 +6,7 @@ import {readFile,mkdir,mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {resolve,sep,extname} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateUserState} from '../backend/server/user-state.mjs';
+import {catalogView,recipeCatalog} from '../backend/server/catalog-view.mjs';
 const root=resolve(process.argv[2] || '_site'),reference=resolve('legacy'),report=resolve('build/reports/web-smoke');
 await mkdir(report,{recursive:true});
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml'};
@@ -22,8 +23,9 @@ const port=9333,chrome=spawn(process.env.CHROME_BIN || 'google-chrome',['--headl
 const browserLog=[],networkLog=[],errors=[];chrome.stderr.on('data',x=>browserLog.push(x.toString()));
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 let ws,send,chromeError;chrome.on('error',e=>chromeError=e);
-const catalog=JSON.parse(await readFile('backend/data/catalog.seed.json','utf8'));
+const catalog=catalogView(JSON.parse(await readFile('backend/data/catalog.seed.json','utf8')));
 const documents=new Map(),stocks=new Map(['a','b'].map(id=>[id,{revision:0,userLogin:'@'+id,userApplication:'telegram',items:[]}]))
+let startupDelayMs=0,startupCalls=0,recipeCalls=0,ingredientCalls=0;
 let approved=false,user='a',scanCalls=0,catalogCalls=0,searchCalls=0,privateCalls=0,refreshCalls=0,failSave=false;
 const bundle=(id=user)=>({user:{id,application:'telegram',providerUserId:id,login:'@'+id,displayName:id},session:{accessToken:id+'-access',refreshToken:id+'-refresh',expiresAt:Math.floor(Date.now()/1000)+3600}});
 const bodyText=`(document.body?.innerText || '')`;
@@ -40,12 +42,14 @@ try {
   if(m.method==='Runtime.exceptionThrown')errors.push(JSON.stringify(m.params.exceptionDetails));
   if(m.method!=='Fetch.requestPaused')return;
   const {request,requestId}=m.params;
-  const respond=(body,status=200)=>send('Fetch.fulfillRequest',{requestId,responseCode:status,responseHeaders:[{name:'Access-Control-Allow-Origin',value:base},{name:'Access-Control-Allow-Methods',value:'GET,POST,PUT,DELETE,OPTIONS'},{name:'Access-Control-Allow-Headers',value:'content-type,authorization'},{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(body)).toString('base64')});
+  const respond=(body,status=200)=>send('Fetch.fulfillRequest',{requestId,responseCode:status,responseHeaders:[{name:'Access-Control-Allow-Origin',value:base},{name:'Access-Control-Allow-Methods',value:'GET,POST,PUT,DELETE,OPTIONS'},{name:'Access-Control-Allow-Headers',value:'content-type,authorization'},{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(body)).toString('base64')}).catch(error=>{if(!error.message.includes('Invalid InterceptionId'))throw error;});
   try {
    const url=new URL(request.url),path=url.pathname;
    if(url.hostname==='fonts.googleapis.com' || url.hostname==='fonts.gstatic.com'){await send('Fetch.fulfillRequest',{requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'text/css'}],body:''});return;}
    if(request.method==='OPTIONS'){await respond(null,204);return;}
-   if(path==='/api/catalog'){catalogCalls++;await respond(catalogCalls===1?{error:'Catalog retry test'}:catalog,catalogCalls===1?503:200);return;}
+   if(path==='/api/catalog'){catalogCalls++;await respond(catalogCalls<=2?{error:'Catalog retry test'}:catalog,catalogCalls<=2?503:200);return;}
+   if(path==='/api/catalog/ingredients'){ingredientCalls++;await respond({ingredients:catalog.ingredients});return;}
+   if(path==='/api/recipes'){recipeCalls++;await respond(recipeCatalog(catalog,{kind:url.searchParams.get('kind'),ids:(url.searchParams.get('ids')||'').split(',')}));return;}
    const data=request.postData?JSON.parse(request.postData):{};
    if(path==='/api/auth/telegram/start'){assert.deepEqual(data,{});await respond({challengeId:'challenge',pollToken:'poll-secret',code:'4826',expiresIn:300,botUrl:'https://t.me/familymenu_test_bot?start=login_mock'});return;}
    if(path==='/api/auth/telegram/poll'){assert.equal(data.pollToken,'poll-secret');await respond(approved?{status:'authenticated',...bundle()}:{status:'pending'});return;}
@@ -58,6 +62,7 @@ try {
    privateCalls++;
    if(path.startsWith('/api/stores/'))assert.fail('Store integrations are disabled in V1');
    if(path==='/api/ingredients'){searchCalls++;const q=url.searchParams.get('q');assert.ok(q.length>=3);await respond({ingredients:catalog.ingredients.filter(i=>i.name.toLowerCase().includes(q.toLowerCase())).map(({id,name,unit})=>({id,name,unit}))});return;}
+   if(path==='/api/startup'){startupCalls++;await delay(startupDelayMs);const document=documents.get(owner)||{revision:0,preferences:null,menu:null},inventory=stocks.get(owner);await respond({userId:owner,document,inventory,catalog:recipeCatalog(catalog,{document,inventory})});return;}
    if(path==='/api/user-state'){
     let document=documents.get(owner) || {revision:0,preferences:null,menu:null};
     if(request.method==='PUT'){
@@ -89,13 +94,12 @@ try {
  await send('Page.addScriptToEvaluateOnNewDocument',{source:`window.frigoTelemetry=[];window.frigoIdentities=[];window.__FRIGO_POSTHOG_TEST_CLIENT__={capture:(event,properties)=>window.frigoTelemetry.push({event,properties}),identify:id=>window.frigoIdentities.push(id),reset:()=>window.frigoIdentities.push('reset')};`});
  await send('Page.navigate',{url:base+'/FamilyMenu/'});
  await wait('document.querySelectorAll(".splash8 .hat8").length===3','Splash with three hats missing');
- await wait(has('Не удалось загрузить приложение'),'Catalog failure must be visible');
- await click('#app button');await wait('!document.querySelector(".splash8")','Splash must go away');await wait(has('Меню для всей семьи'),'Feature slides missing');await shot('01-slide');
+ await wait('!document.querySelector(".splash8")','Splash must go away despite catalog failure');await wait(has('Меню для всей семьи'),'Feature slides missing');await shot('01-slide');
  assert.equal(await evaluate('!!document.querySelector(\'[data-act="introSkip8"]\')'),false,'No skip on slides');
  await wait(has('Меню для всей семьи'),'Slide 1');for(const [label,next] of [['А что ещё?','Из того, что есть'],['Дальше','Соберём список продуктов'],['Ух ты, понял','В рамках бюджета'],['Интересно','Калории и БЖУ'],['Здорово','Сотни рецептов']]){await wait(has(label),'Button '+label);await click('[data-act="introNext8"]');await wait(has(next),'Slide '+next);}
  assert.ok(await evaluate('[...document.querySelectorAll(".qhead h1")].every(h=>h.scrollWidth<=h.clientWidth+1)'),'Slide title fits');
  await click('[data-act="introBack8"]');await wait(has('Калории и БЖУ'),'Back arrow on slides');await click('[data-act="introNext8"]');
- await wait(has('Начать'),'Last slide says Начать');await click('[data-act="introNext8"]');await wait(has('Чем может помочь Frigo?'),'Why step missing');
+ await wait(has('Начать'),'Last slide says Начать');await click('[data-act="introNext8"]');await wait(has('Не удалось загрузить данные'),'Catalog error belongs after slides');await click('[data-act="dataRetry"]');await wait(has('Чем может помочь Frigo?'),'Why step missing');
  assert.equal(await evaluate('document.querySelector(\'[data-act="qNext8"]\').disabled'),true,'Every step needs an answer');
  await click('[data-act="why8"][data-v="tired"]');await click('[data-act="why8"][data-v="diet"]');assert.deepEqual(await evaluate('S.why8'),['tired','diet'],'Several reasons');await click('[data-act="qNext8"]');
  await wait(has('Какая у вас цель?'),'Goal step missing');assert.ok(await evaluate('V().ev.some(e=>e.n==="why_answered")'),'Reason tracked');
@@ -309,7 +313,8 @@ try {
  assert.equal(stocks.get('a').items.find(p=>p.ingredientId==='eggs').quantity,await evaluate('window.eggsBeforeScan8+6'));
  assert.equal(stocks.get('a').items.find(p=>p.ingredientId==='cucumber').quantity,await evaluate('window.cucumberBeforeScan8+350'));
  const scannedStock=await evaluate(`JSON.stringify(S.pantry.filter(p=>['eggs','cucumber'].includes(p.key)).map(p=>({key:p.key,qty:p.qty})).sort((a,b)=>a.key.localeCompare(b.key)))`);
- await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Scanned stock reload failed');assert.equal(await evaluate(`JSON.stringify(S.pantry.filter(p=>['eggs','cucumber'].includes(p.key)).map(p=>({key:p.key,qty:p.qty})).sort((a,b)=>a.key.localeCompare(b.key)))`),scannedStock,'Saved sums survive a real reload');
+ const beforeCachedCatalogCalls=catalogCalls;startupDelayMs=1800;
+ await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Scanned stock reload failed');assert.equal(catalogCalls,beforeCachedCatalogCalls,'Cached account must not fetch the full catalog');assert.equal(await evaluate('FamilyMenuData.complete'),false);startupDelayMs=0;await delay(1900);assert.equal(await evaluate(`JSON.stringify(S.pantry.filter(p=>['eggs','cucumber'].includes(p.key)).map(p=>({key:p.key,qty:p.qty})).sort((a,b)=>a.key.localeCompare(b.key)))`),scannedStock,'Saved sums survive a real reload');
 
 
  for(let n=0;n<100 && !stocks.get('a').items.some(i=>i.ingredientId==='cucumber');n++)await delay(100);
@@ -326,12 +331,21 @@ try {
  assert.ok(await evaluate(`pool8('dish').some(r=>r.id===${JSON.stringify(own)})`),'Own recipe joins menu selection');
  await click('[data-act="drawer"]');await click('[data-act="nav8"][data-v="pBudget"]');await wait('!!document.querySelector("#budget")','Budget settings');
  failSave=true;await fill('#budget','10000');await wait(has('Данные изменились на другом устройстве'),'Conflict was not shown');await click('#sync-error button');await wait('S.profile.budget===9000','Conflict reload ignored canonical server fields');
- await evaluate('S.tab="menu",render()');await click('[data-act="drawer"]');await click('.drawer [data-act="logout"]');await wait(has('Войти через Telegram'),'Logout failed');
- assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
+ await wait('!FamilyMenuBridge.pending','Final saves before cold start');
+ const beforeColdCatalogCalls=catalogCalls;await evaluate('localStorage.removeItem("frigo-startup-v2")');
+ await send('Page.reload');await wait('window.FamilyMenuBridge?.ready','Cold account startup');
+ assert.equal(catalogCalls,beforeColdCatalogCalls,'Cold account must only load its menu, not the full catalog');
+ assert.ok(await evaluate('R.length>0&&R.length<100'),'Startup recipes are restricted to the current menu');
+ await evaluate('S.tab="menu",render()');
+ const replacementsBefore=recipeCalls;await click('[data-act="replace"]');await wait('!!document.querySelector("#layer .sheet")','Lazy replacement recipes');
+ assert.ok(recipeCalls>replacementsBefore,'Replacement fetches its category');assert.equal(catalogCalls,beforeColdCatalogCalls,'Replacement must not download all recipes');
+ await evaluate('UI.sheet=null;render()');
+ await click('[data-act="drawer"]');await click('.drawer [data-act="logout"]');await wait(has('Войти через Telegram'),'Logout failed');
+ assert.equal(await evaluate('localStorage.getItem("frigo-startup-v2")'),null,'Logout clears cached menu');assert.equal(await evaluate('R.length'),0,'Logout clears recipe memory');assert.equal(await evaluate('S.plan'),null);assert.equal(await evaluate('S.pantry.length'),0);assert.equal(await evaluate(`!!RBY[${JSON.stringify(own)}]`),false,'Private recipe leaked after logout');
  approved=false;user='b';await click('[data-act="telegramStart"]');await wait(has('4826'),'Second challenge missing');approved=true;
  await wait(has('Чем может помочь Frigo?'),'Second user inherited a plan');assert.equal(stocks.get('b').items.length,0);assert.equal(await evaluate('S.pantry.length'),0);
  assert.ok(await evaluate(`window.frigoTelemetry.every(e=>!('audience' in e.properties)&&!('email' in e.properties)&&!('login' in e.properties)&&!('providerUserId' in e.properties))`),'Telemetry excludes identity details and audience labels');
- assert.equal(errors.length,0);console.log('PASS v8.15.1: splash; catalog retry; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; store baskets absent; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
+ assert.equal(errors.length,0);console.log('PASS: nonblocking splash/onboarding; delayed catalog retry; cached and cold menu-only startup; lazy category recipes; full logout cache reset; 4 slides; 5 answered steps with 4-row chips; loader; first menu before sign-in (3 days, main+side); Telegram contract; menu, answers and products adopted by the new account; cooking; Premium offer; store baskets absent; photo recognition; own recipe in the pool; refresh; conflict reload; isolation. No backend writes or paid calls.');
 }catch(error){
  console.error(error);if(send)try{const r2=await send('Runtime.evaluate',{expression:'document.body?.innerText',returnByValue:true});console.error('Screen:',r2.result.value);const info=await send('Runtime.evaluate',{expression:'JSON.stringify({url:location.href,ready:document.readyState,scripts:[...document.scripts].map(s=>s.src)})',returnByValue:true});console.error('Page:',info.result.value);const r=await send('Page.captureScreenshot',{format:'png'});await writeFile(resolve(report,'failure.png'),Buffer.from(r.data,'base64'));}catch{}
  console.log('::error title=web-smoke::'+String(error.message).replace(/\n/g,'%0A'));process.exitCode=1;

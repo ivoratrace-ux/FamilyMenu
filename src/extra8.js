@@ -2,8 +2,8 @@
    Ingredients: more products in every category (pasta kinds, grains, canned and frozen variants…). They exist only on the client:
    the server inventory references its own ingredient table, so the bridge keeps these products in preferences.
    Recipes: filling snacks (v8.4) and dishes inspired by popular home recipes (v8.7), written in our own words; 4 servings like every recipe. */
-(() => {
-  const C=window.FamilyMenuCatalog,ids=new Set(C.recipes.map(r=>r.id));
+export function extendCatalog(C) {
+  const ids=new Set(C.recipes.map(r=>r.id));
   const I=(id,name,category,unit,price,allergens,flags,nutrition)=>({id,name,category,unit,price,allergens,flags,nutrition,client:true});
   const V='Овощи и зелень',F='Фрукты и ягоды',M='Мясо и рыба',D='Молочное и яйца',B='Бакалея',H='Хлеб',G=['gluten'],ML=['milk'],MLL=['milk','lactose'];
   const ingredients=[
@@ -64,7 +64,7 @@
    I('tortilla','Тортилья пшеничная',H,'шт',25,G,[],[150,4,3.5,26]),I('pita','Пита',H,'шт',25,G,[],[165,5.5,.7,33]),I('buns','Булочки для бургеров',H,'шт',25,G,[],[200,7,3,38]),I('crispbread','Хлебцы',H,'g',1,G,[],[330,10,2,67]),
   ];
   const have=new Set(C.ingredients.map(i=>i.id)),added=ingredients.filter(i=>!have.has(i.id));
-  C.ingredients.push(...added); window.CLIENT_ING8=new Set(added.map(i=>i.id));
+  C.ingredients.push(...added);
   const known=new Set(C.ingredients.map(i=>i.id));
   const R=(id,name,meal,minutes,tags,ingredients,steps,art)=>({id,name,meal,minutes,tags,ingredients:Object.entries(ingredients).map(([id,quantity])=>({id,quantity})),spices:[],steps,stepSeconds:steps.map(()=>0),stepTips:steps.map(()=>''),art});
   const extra=[
@@ -191,5 +191,6 @@
    R('p8703','Горбуша в сметане','p',30,['baked'],{pink_salmon:800,sour_cream:200,onion:100},['Выложите горбушу в форму на кольца лука.','Залейте сметаной и запекайте 20 минут при 190°.'],'tray:salmon,sauce_cream'),
    R('p8704','Котлеты из говяжьего фарша','p',35,['ru','kids'],{minced_beef:800,eggs:1,bread:0.25,onion:100,oil:40},['Замочите хлеб в воде, отожмите и смешайте с фаршем, яйцом и тёртым луком.','Сформуйте котлеты и обжарьте по 4 минуты с каждой стороны.','Доведите под крышкой на слабом огне 10 минут.'],'pan:cutlet'),
   ];
-  for(const r of extra) if(!ids.has(r.id) && r.ingredients.every(q=>known.has(q.id))) {window.FamilyMenuArtwork[r.id]=r.art;const {art,...recipe}=r;C.recipes.push(recipe);}
-})();
+  for(const r of extra) if(!ids.has(r.id) && r.ingredients.every(q=>known.has(q.id))) {C.recipes.push(r);}
+  return C;
+}

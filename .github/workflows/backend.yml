@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'src/extra8.js'
       - 'supabase/**'
       - 'scripts/catalog-seed.mjs'
       - 'scripts/supabase-migrate.mjs'
@@ -17,6 +18,7 @@ on:
   pull_request:
     paths:
       - 'backend/**'
+      - 'src/extra8.js'
       - 'supabase/**'
       - 'scripts/catalog-seed.mjs'
       - 'scripts/supabase-migrate.mjs'

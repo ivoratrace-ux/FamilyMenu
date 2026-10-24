@@ -44,14 +44,15 @@
   }
   window.FamilyMenuApi={
     ApiError,get session(){return session;},get epoch(){return epoch;},
-    async restore(){
+    async restore({verify=true}={}){
       try {session=JSON.parse(localStorage.getItem(key));}catch{}
       if(session?.user?.application!=='telegram' || typeof session.user.id!=='string' || typeof session.session?.accessToken!=='string' || typeof session.session?.refreshToken!=='string' || !Number.isFinite(session.session?.expiresAt)){install(null);return null;}
+      if(!verify)return session;
       const owner=session.user.id;
       try {const result=await request('/api/auth/me');if(session?.user?.id!==owner || result.user.id!==owner)throw new ApiError(401,'Аккаунт изменился.');session.user=result.user;return session;}
       catch(error){if(error.status===401){if(session?.user?.id===owner)install(null);return null;}throw error;}
     },
-    catalog:()=>send('/api/catalog'),request,
+    catalog:()=>send('/api/catalog?view=web'),request,
     start:()=>send('/api/auth/telegram/start',{method:'POST',body:{}}),
     async poll(challenge){return send('/api/auth/telegram/poll',{method:'POST',body:{challengeId:challenge.challengeId,pollToken:challenge.pollToken}});},
     accept(result){install({user:result.user,session:result.session});},

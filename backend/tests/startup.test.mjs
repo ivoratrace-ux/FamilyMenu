@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {once} from 'node:events';
+import {catalogView,recipeCatalog} from '../server/catalog-view.mjs';
+import {createApp,FIRST_PARTY_ORIGIN} from '../server/app.mjs';
+const source=JSON.parse(await readFile(new URL('../data/catalog.seed.json',import.meta.url)));
+const document={revision:3,preferences:{profile:{members:[{name:'Я'}]},webPrototype:{var8:{'v8~c_p1_g1~abc':{b:'c_p1_g1',i:[['chicken_fillet',400],['fig_jam',50]]}},myRecipes:[{id:'umenu',n:'Домашний рецепт',m:'m',t:20,tags:['mine'],i:[['rice',100]],s:['Сварить рис.']}]}},menu:{days:[{date:'2026-10-24',slots:[{recipeId:'b1'},{recipeId:'v8~c_p1_g1~abc'},{recipeId:'h8~eggs~rice~~carrot'},{recipeId:'umenu'},{recipeId:'x80'}]}]}};
+const inventory={revision:2,userLogin:'@a',items:[{ingredientId:'banana',quantity:2}]};
+test('startup catalog contains menu dependencies, variants, own recipes and stock, without unrelated recipes or dictionaries',()=>{
+ const result=recipeCatalog(source,{document,inventory});
+ const ids=result.recipes.map(r=>r.id);
+ for(const id of ['b1','p1','g1','umenu','x80'])assert.ok(ids.includes(id),id);
+ assert.equal(ids.length,5);assert.deepEqual(result.foods,[]);assert.deepEqual(result.promos,[]);
+ const ingredients=new Set(result.ingredients.map(i=>i.id));
+ for(const key of ['fig_jam','eggs','rice','carrot','oil','banana'])assert.ok(ingredients.has(key),key);
+ for(const r of result.recipes)for(const i of r.ingredients)assert.ok(ingredients.has(i.id));
+ assert.equal(source.ingredients.some(i=>i.id==='fig_jam'),false,'Canonical catalog stays unchanged');
+});
+test('recipe queries select their category and only its required ingredients',()=>{
+ const soup=recipeCatalog(source,{kind:'soup'});
+ assert.ok(soup.recipes.length>0);assert.ok(soup.recipes.length<source.recipes.length);
+ assert.ok(soup.recipes.every(r=>r.meal==='m'&&r.tags.includes('soup')));
+ const needed=new Set(soup.recipes.flatMap(r=>r.ingredients.map(i=>i.id)));
+ assert.ok(soup.ingredients.every(i=>needed.has(i.id)));
+ assert.equal(recipeCatalog(source,{ids:['b1']}).recipes.length,1);
+ assert.throws(()=>recipeCatalog(source,{kind:'arbitrary'}));
+});
+test('one authenticated startup request loads only that user and never trusts a client owner',async t=>{
+ let calls=0,catalogCalls=0;
+ const app=createApp({catalog:{load:async()=>{catalogCalls++;return source;}},auth:{getUser:async token=>{calls++;return {id:token};}},userState:{load:async token=>token==='a'?document:{revision:0,preferences:null,menu:null}},inventory:{load:async token=>token==='a'?inventory:{...inventory,items:[]}}});
+ app.listen(0,'127.0.0.1');await once(app,'listening');t.after(()=>{app.closeAllConnections();app.close();});
+ const base=`http://127.0.0.1:${app.address().port}`;
+ assert.equal((await fetch(base+'/api/startup')).status,401);
+ const r=await fetch(base+'/api/startup?userId=b',{headers:{Authorization:'Bearer a',Origin:FIRST_PARTY_ORIGIN}});
+ assert.equal(r.status,200);assert.equal(r.headers.get('access-control-allow-origin'),FIRST_PARTY_ORIGIN);
+ const b=await r.json();assert.equal(b.userId,'a');assert.deepEqual(b.document,document);assert.deepEqual(b.inventory,inventory);assert.equal(calls,1);
+ const catalogBefore=catalogCalls;const unchanged=await (await fetch(base+'/api/startup?revision=3&inventoryRevision=2',{headers:{Authorization:'Bearer a'}})).json();assert.deepEqual(unchanged,{userId:'a',unchanged:true});assert.equal(catalogCalls,catalogBefore,'Matching cache does not read or send any catalog');
+ const other=await (await fetch(base+'/api/startup',{headers:{Authorization:'Bearer b'}})).json();
+ assert.equal(other.document.menu,null);assert.deepEqual(other.catalog.recipes,[]);assert.deepEqual(other.catalog.ingredients,[]);
+ for(const path of ['/api/recipes?kind=soup','/api/recipes?ids=b1','/api/catalog/ingredients'])assert.equal((await fetch(base+path)).status,200);
+ const ingredients=await (await fetch(base+'/api/catalog/ingredients')).json();assert.ok(!('recipes' in ingredients));
+ assert.equal((await fetch(base+'/api/recipes')).status,400);
+ assert.equal((await fetch(base+'/api/startup',{method:'POST',headers:{Authorization:'Bearer a'}})).status,405);
+ const all=await (await fetch(base+'/api/catalog?view=web')).json();assert.deepEqual(all,catalogView(source));
+});

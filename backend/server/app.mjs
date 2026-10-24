@@ -1,3 +1,4 @@
+import {catalogView,recipeCatalog} from './catalog-view.mjs';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import {createSupabaseAuth,AuthError} from './auth.mjs';
@@ -44,7 +45,7 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.end(req.method === 'HEAD' ? undefined : JSON.stringify(body));
     };
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
+    if (['/api/startup','/api/recipes','/api/catalog/ingredients'].includes(path) || path === '/api/user-state' || path === '/api/preferences' || path === '/api/menu' || path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients' || path === '/api/catalog' || path === '/api/fridge/scan' || path === '/api/meals' || path === '/health' || path === '/health/supabase' || path === '/health/auth' || path.startsWith('/api/auth/')) {
       const origin = req.headers.origin;
       if (origin && !allowedOrigins.includes(origin) && origin !== `http://${req.headers.host}` && origin !== `https://${req.headers.host}`) return send(403, { error: 'Этот сайт не подключён к API.' });
       if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); }
@@ -52,15 +53,40 @@ export function createApp({ apiKey = process.env.OPENAI_API_KEY, allowedOrigins 
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Expose-Headers', 'Retry-After');
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-      if(['/api/user-state','/api/preferences','/api/menu','/api/inventory','/api/inventory/item','/api/ingredients','/api/fridge/scan','/api/meals'].includes(path)) {
+      if(['/api/startup','/api/user-state','/api/preferences','/api/menu','/api/inventory','/api/inventory/item','/api/ingredients','/api/fridge/scan','/api/meals'].includes(path)) {
         try {req.accessToken=bearer(req);req.user=await auth.getUser(req.accessToken);}
         catch(error) {return send(error instanceof AuthError?error.status:503,{error:error instanceof AuthError?error.message:'Сервис входа временно недоступен.'});}
+      }
+      if(['/api/startup','/api/recipes','/api/catalog/ingredients'].includes(path)) {
+        if(req.method!=='GET'){res.setHeader('Allow','GET, OPTIONS');return send(405,{error:'Метод не поддерживается.'});}
+        try {
+          if(path==='/api/startup') {
+            const query=new URL(req.url,'http://localhost').searchParams;
+            const conditional=query.has('revision')&&query.has('inventoryRevision');
+            const [document,stock,source]=await Promise.all([userState.load(req.accessToken),inventory.load(req.accessToken),conditional?null:catalog.load()]);
+            if(conditional&&String(document.revision)===query.get('revision')&&String(stock.revision)===query.get('inventoryRevision'))return send(200,{userId:req.user.id,unchanged:true});
+            return send(200,{userId:req.user.id,document,inventory:stock,catalog:recipeCatalog(source || await catalog.load(),{document,inventory:stock})});
+          }
+          const source=await catalog.load();
+          if(path==='/api/catalog/ingredients')return send(200,{ingredients:catalogView(source).ingredients});
+          const query=new URL(req.url,'http://localhost').searchParams,kind=query.get('kind'),ids=(query.get('ids') || '').split(',').filter(Boolean);
+          if(query.has('q')) {
+            const q=query.get('q').trim().toLocaleLowerCase('ru');if(q.length<2||q.length>80)return send(400,{error:'Введите от 2 до 80 символов.'});
+            const all=catalogView(source),matches=all.recipes.filter(r=>r.name.toLocaleLowerCase('ru').includes(q)).slice(0,20);
+            const result=recipeCatalog(source,{ids:matches.map(r=>r.id)}),seen=new Set(result.ingredients.map(i=>i.id));
+            for(const i of all.ingredients.filter(i=>i.name.toLocaleLowerCase('ru').includes(q)).slice(0,20))if(!seen.has(i.id))result.ingredients.push(i);
+            return send(200,result);
+          }
+          if(kind&&!['breakfast','soup','salad','pair','dish','side','dessert','drink','snack'].includes(kind))return send(400,{error:'Неизвестная категория рецептов.'});
+          if((!kind&&!ids.length)||ids.length>200||ids.some(id=>id.length>300))return send(400,{error:'Укажите рецепты или категорию.'});
+          return send(200,recipeCatalog(source,{kind,ids}));
+        }catch {return send(503,{error:'Не удалось загрузить данные. Попробуйте ещё раз.'});}
       }
       if(['/api/user-state','/api/preferences','/api/menu'].includes(path)) return userStateRouter(req,path,send,res);
       if (path === '/api/inventory' || path === '/api/inventory/item' || path === '/api/ingredients') return inventoryRouter(req,path,send,res);
       if (path === '/api/catalog') {
         if (req.method !== 'GET') {res.setHeader('Allow','GET, OPTIONS');return send(405,{error:'Метод не поддерживается.'});}
-        try {return send(200,await catalog.load());}
+        try {const source=await catalog.load();return send(200,new URL(req.url,'http://localhost').searchParams.get('view')==='web'?catalogView(source):source);}
         catch {return send(503,{error:'Каталог временно недоступен. Попробуйте ещё раз.'});}
       }
       if (path === '/api/fridge/scan') return fridgeRouter(req, res, send);

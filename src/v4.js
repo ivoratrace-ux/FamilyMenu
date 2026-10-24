@@ -191,4 +191,4 @@ function v4Act(a,v,el){
 
 /* ---------- boot ---------- */
 V(); checkUnlocks();
-render();
+// Rendering starts centrally in bootstrap.js.

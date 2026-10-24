@@ -1,9 +1,9 @@
-/* Catalog content comes exclusively from GET /api/catalog, before the original UI starts. */
+/* Public data can arrive incrementally: current menu first, other recipes on demand. */
 const CATALOG=window.FamilyMenuCatalog;
 const ING=Object.fromEntries(CATALOG.ingredients.map(i=>[i.id,[i.name,i.category,i.unit,i.price,i.allergens,i.flags,i.nutrition]]));
 const LAVKA=Object.fromEntries(CATALOG.ingredients.filter(i=>i.lavkaPrice!=null).map(i=>[i.id,[i.lavkaPrice,i.lavkaPrice,i.name,i.lavkaPath || '']]));
 const VV_PROMO=CATALOG.promos.map(p=>[p.name,p.price,p.regularPrice,p.condition,p.until]);
-const legacyRecipe=r=>({id:r.id,art:window.FamilyMenuArtwork[r.id],n:r.name,imageUrl:r.imageUrl,m:r.meal,t:r.minutes,tags:[...r.tags],i:r.ingredients.map(i=>[i.id,i.quantity]),sp:r.spices || [],s:r.steps,stepSeconds:r.stepSeconds,stepTips:r.stepTips});
+const legacyRecipe=r=>({id:r.id,art:r.art || window.FamilyMenuArtwork[r.id],base8:r.base8,n:r.name,imageUrl:r.imageUrl,m:r.meal,t:r.minutes,tags:[...r.tags],i:r.ingredients.map(i=>[i.id,i.quantity]),sp:r.spices || [],s:r.steps,stepSeconds:r.stepSeconds,stepTips:r.stepTips});
 const R=CATALOG.recipes.map(legacyRecipe);
 const PRICE_SOURCE='ВкусВилл, Москва, 20.10.2026';
 const CITIES={msk:['Москва',1],mo:['Московская область',0.92],spb:['Санкт-Петербург',0.97],kgd:['Калининград',0.985],kzn:['Казань',0.74],khv:['Хабаровск',1.12],oms:['Омск',0.725],sar:['Саратов',0.71],other:['Другой город',0.845]};
